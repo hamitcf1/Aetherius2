@@ -1,0 +1,957 @@
+﻿Line 1 -> 0 import React, { useState, useEffect, useCallback } from 'react';
+Line 2 -> 1 import {
+Line 5 -> 0 } from './types';
+Line 6 -> 0 import { CharacterSheet } from './components/CharacterSheet';
+Line 7 -> 0 import ActionBar, { ActionBarToggle } from './components/ActionBar';
+Line 8 -> 0 import { AppContext } from './AppContext';
+Line 9 -> 0 import { QuestLog } from './components/QuestLog';
+Line 10 -> 0 import { Journal } from './components/Journal';
+Line 11 -> 0 import { Inventory } from './components/Inventory';
+Line 12 -> 0 import { StoryLog } from './components/StoryLog';
+Line 13 -> 0 import { AIScribe } from './components/AIScribe';
+Line 14 -> 0 import { AdventureChat } from './components/AdventureChat';
+Line 15 -> 0 import { CharacterSelect } from './components/CharacterSelect';
+Line 16 -> 0 import { OnboardingModal } from './components/OnboardingModal';
+Line 17 -> 0 import { CombatModal } from './components/CombatModal';
+Line 18 -> 0 import { ConsoleOverlay } from './components/ConsoleOverlay';
+Line 19 -> 0 import { Changelog } from './components/Changelog';
+Line 21 -> 0 import { ToastNotification } from './components/ToastNotification';
+Line 22 -> 1 import {
+Line 30 -> 0 } from './components/StatusIndicators';
+Line 31 -> 0 import { COLOR_THEMES, getEasterEggName } from './components/GameFeatures';
+Line 32 -> 1 import {
+Line 44 -> 0 } from './components/GameFeatures';
+Line 45 -> 0 import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords } from 'lucide-react';
+Line 46 -> 0 import { v4 as uuidv4 } from 'uuid';
+Line 47 -> 0 import { setCurrentUser as setFeatureFlagUser } from './featureFlags';
+Line 48 -> 1 import {
+Line 51 -> 0 } from './services/combatService';
+Line 52 -> 1 import {
+Line 60 -> 0 } from './services/firebase';
+Line 61 -> 1 import {
+Line 84 -> 0 } from './services/firestore';
+Line 85 -> 1 import {
+Line 90 -> 0 } from './services/realtime';
+Line 91 -> 0 import { getFoodNutrition, getDrinkNutrition } from './services/nutritionData';
+Line 92 -> 0 import { getItemStats, shouldHaveStats } from './services/itemStats';
+Line 93 -> 0 import { updateMusicForContext, AmbientContext, audioService, playMusic } from './services/audioService';
+Line 94 -> 0 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
+Line 95 -> 0 import { getRateLimitStats } from './services/geminiService';
+Line 96 -> 0 import type { PreferredAIModel } from './services/geminiService';
+Line 97 -> 0 import type { UserSettings } from './services/firestore';
+Line 105 -> 1 const NEED_RATES = {
+Line 109 -> 0 } as const;
+Line 111 -> 1 const calcNeedFromTime = (minutes: number, perMinute: number) => {
+Line 116 -> 0 };
+Line 118 -> 1 const addMinutesToTime = (time: { day: number; hour: number; minute: number }, minutesToAdd: number) => {
+Line 119 -> 2 const safe = {
+Line 123 -> 1 };
+Line 127 -> 2 if (remainder < 0) {
+Line 130 -> 1 }
+Line 133 -> 2 return {
+Line 137 -> 1 };
+Line 138 -> 0 };
+Line 141 -> 1 const sanitizeInventoryItem = (item: Partial<InventoryItem>): Partial<InventoryItem> => {
+Line 142 -> 1 const clean: any = { ...item };
+Line 155 -> 0 };
+Line 157 -> 1 const formatTime = (time: { day: number; hour: number; minute: number }) => {
+Line 161 -> 1 return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+Line 162 -> 0 };
+Line 164 -> 1 const TABS = {
+Line 171 -> 0 };
+Line 173 -> 1 interface AppGameState {
+Line 180 -> 0 }
+Line 182 -> 1 const App: React.FC = () => {
+Line 226 -> 1 const [weather, setWeather] = useState<WeatherState>({ type: 'clear', intensity: 0, temperature: 10 });
+Line 238 -> 1 const [toastMessages, setToastMessages] = useState<Array<{ id: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }>>([]);
+Line 239 -> 2 const handleToastClose = useCallback((id: string) => {
+Line 241 -> 1 }, []);
+Line 244 -> 2 const calculateCarryWeight = useCallback((characterItems: InventoryItem[]) => {
+Line 245 -> 3 return characterItems.reduce((total, item) => {
+Line 248 -> 2 }, 0);
+Line 249 -> 1 }, []);
+Line 251 -> 2 const getMaxCarryWeight = useCallback((character: Character | null) => {
+Line 256 -> 1 }, []);
+Line 259 -> 2 const getDefaultItemWeight = (type: string): number => {
+Line 260 -> 3 switch (type) {
+Line 271 -> 2 }
+Line 272 -> 1 };
+Line 275 -> 2 const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+Line 278 -> 2 setToastMessages(prev => [...prev.slice(-4), { id, message, type }]);
+Line 279 -> 3 setTimeout(() => {
+Line 281 -> 2 }, 4000);
+Line 282 -> 1 }, []);
+Line 285 -> 2 useEffect(() => {
+Line 286 -> 3 if (currentUser?.uid && currentCharacterId) {
+Line 287 -> 4 try {
+Line 288 -> 4 localStorage.setItem(`aetherius:lastCharacter:${currentUser.uid}`, currentCharacterId);
+Line 289 -> 3 } catch { /* ignore */ }
+Line 290 -> 2 }
+Line 291 -> 1 }, [currentUser?.uid, currentCharacterId]);
+Line 294 -> 2 useEffect(() => {
+Line 295 -> 3 if (currentUser?.uid && currentCharacterId) {
+Line 296 -> 4 try {
+Line 297 -> 4 localStorage.setItem(`aetherius:lastTab:${currentUser.uid}`, activeTab);
+Line 298 -> 3 } catch { /* ignore */ }
+Line 299 -> 2 }
+Line 300 -> 1 }, [currentUser?.uid, currentCharacterId, activeTab]);
+Line 303 -> 2 useEffect(() => {
+Line 304 -> 3 const handleOnline = () => {
+Line 307 -> 4 if (currentUser?.uid) {
+Line 308 -> 5 processOfflineQueue({
+Line 314 -> 4 });
+Line 315 -> 3 }
+Line 316 -> 2 };
+Line 322 -> 3 return () => {
+Line 325 -> 2 };
+Line 326 -> 1 }, [currentUser?.uid]);
+Line 329 -> 2 useEffect(() => {
+Line 330 -> 3 const interval = setInterval(() => {
+Line 332 -> 2 }, 5000);
+Line 334 -> 1 }, []);
+Line 337 -> 2 useEffect(() => {
+Line 338 -> 3 const handleKeyPress = (e: KeyboardEvent) => {
+Line 340 -> 4 if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+Line 342 -> 3 }
+Line 345 -> 4 setConsoleKeyBuffer(prev => {
+Line 347 -> 5 if (newBuffer.includes('console')) {
+Line 349 -> 5 try { e.preventDefault(); } catch (err) {}
+Line 352 -> 4 }
+Line 354 -> 3 });
+Line 355 -> 2 };
+Line 359 -> 1 }, []);
+Line 362 -> 2 useEffect(() => {
+Line 363 -> 3 const handleBackquote = (e: KeyboardEvent) => {
+Line 377 -> 3 try { e.preventDefault(); } catch { /* ignore */ }
+Line 379 -> 2 };
+Line 383 -> 1 }, []);
+Line 388 -> 2 useEffect(() => {
+Line 389 -> 2 const key = currentUser?.uid ? `aetherius:aiModel:${currentUser.uid}` : 'aetherius:aiModel';
+Line 390 -> 3 try {
+Line 393 -> 3 } catch {
+Line 395 -> 2 }
+Line 396 -> 1 }, [currentUser?.uid]);
+Line 398 -> 2 useEffect(() => {
+Line 399 -> 2 const key = currentUser?.uid ? `aetherius:aiModel:${currentUser.uid}` : 'aetherius:aiModel';
+Line 400 -> 3 try {
+Line 402 -> 3 } catch {
+Line 404 -> 2 }
+Line 405 -> 1 }, [aiModel, currentUser?.uid]);
+Line 408 -> 2 useEffect(() => {
+Line 420 -> 1 }, [colorTheme]);
+Line 423 -> 2 useEffect(() => {
+Line 424 -> 2 const key = currentUser?.uid ? `aetherius:theme:${currentUser.uid}` : 'aetherius:theme';
+Line 425 -> 3 try {
+Line 427 -> 4 if (savedTheme && COLOR_THEMES.find(t => t.id === savedTheme)) {
+Line 429 -> 3 }
+Line 430 -> 3 } catch {
+Line 432 -> 2 }
+Line 433 -> 1 }, [currentUser?.uid]);
+Line 435 -> 2 useEffect(() => {
+Line 436 -> 2 const key = currentUser?.uid ? `aetherius:theme:${currentUser.uid}` : 'aetherius:theme';
+Line 437 -> 3 try {
+Line 439 -> 3 } catch {
+Line 441 -> 2 }
+Line 442 -> 1 }, [colorTheme, currentUser?.uid]);
+Line 446 -> 2 useEffect(() => {
+Line 447 -> 3 if (currentUser?.uid) {
+Line 448 -> 4 (window as any).aetheriusUtils = {
+Line 452 -> 5 reloadItems: async () => {
+Line 456 -> 4 }
+Line 457 -> 3 };
+Line 463 -> 2 }
+Line 464 -> 1 }, [currentUser?.uid, currentCharacterId]);
+Line 467 -> 2 useEffect(() => {
+Line 468 -> 3 const unsubscribe = onAuthChange(async (user) => {
+Line 473 -> 4 if (user) {
+Line 474 -> 5 try {
+Line 494 -> 5 console.log('Data loaded successfully:', { userProfiles, userCharacters, userItems });
+Line 498 -> 6 if (nextProfiles.length === 0) {
+Line 500 -> 6 const defaultProfile: UserProfile = { id: uniqueId(), username: derivedName, created: Date.now() };
+Line 502 -> 7 try {
+Line 504 -> 7 } catch (e) {
+Line 507 -> 6 }
+Line 508 -> 5 }
+Line 513 -> 6 try {
+Line 514 -> 6 const key = `aetherius:onboardingCompleted:${user.uid}`;
+Line 520 -> 6 } catch {
+Line 525 -> 5 }
+Line 528 -> 6 const normalizedCharacters = (userCharacters || []).map((c: any) => {
+Line 531 -> 7 const next: Character = {
+Line 533 -> 8 time: {
+Line 537 -> 7 },
+Line 538 -> 8 needs: {
+Line 542 -> 7 },
+Line 543 -> 6 };
+Line 544 -> 7 if (!c?.time || !c?.needs) {
+Line 546 -> 6 }
+Line 548 -> 5 });
+Line 557 -> 6 try {
+Line 561 -> 7 if (isFreshLogin) {
+Line 563 -> 6 }
+Line 566 -> 7 if (!isFreshLogin) {
+Line 567 -> 7 const lastCharId = localStorage.getItem(`aetherius:lastCharacter:${user.uid}`);
+Line 568 -> 7 const lastTab = localStorage.getItem(`aetherius:lastTab:${user.uid}`);
+Line 571 -> 8 if (lastCharId && normalizedCharacters.some((c: Character) => c.id === lastCharId)) {
+Line 573 -> 9 if (lastTab && Object.values(TABS).includes(lastTab)) {
+Line 575 -> 8 }
+Line 576 -> 7 }
+Line 577 -> 6 }
+Line 578 -> 5 } catch { /* ignore localStorage errors */ }
+Line 579 -> 5 } catch (error) {
+Line 582 -> 5 } finally {
+Line 584 -> 4 }
+Line 585 -> 4 } else {
+Line 587 -> 5 if (currentUser?.uid) {
+Line 588 -> 6 try {
+Line 591 -> 6 } catch (error) {
+Line 593 -> 5 }
+Line 594 -> 4 }
+Line 607 -> 3 }
+Line 608 -> 2 });
+Line 611 -> 1 }, []);
+Line 614 -> 2 useEffect(() => {
+Line 615 -> 3 const initAudio = () => {
+Line 620 -> 2 };
+Line 623 -> 3 return () => {
+Line 626 -> 2 };
+Line 627 -> 1 }, []);
+Line 634 -> 2 useEffect(() => {
+Line 636 -> 3 if (currentCharacterId && char) {
+Line 645 -> 3 console.log(`­şÄÁ Requested ${initialTrack} music for ${char.name} (hour: ${hour})`);
+Line 646 -> 3 } else if (!currentCharacterId) {
+Line 650 -> 2 }
+Line 651 -> 1 }, [currentCharacterId, characters]);
+Line 653 -> 2 const completeOnboarding = async () => {
+Line 654 -> 3 if (!currentUser?.uid) {
+Line 657 -> 2 }
+Line 662 -> 3 try {
+Line 663 -> 3 localStorage.setItem(`aetherius:onboardingCompleted:${uid}`, '1');
+Line 664 -> 3 } catch {
+Line 666 -> 2 }
+Line 668 -> 3 const next: UserSettings = {
+Line 669 -> 3 ...(userSettings || {}),
+Line 673 -> 2 };
+Line 675 -> 3 try {
+Line 677 -> 3 } catch (e) {
+Line 679 -> 2 }
+Line 680 -> 1 };
+Line 683 -> 2 useEffect(() => {
+Line 686 -> 3 const timer = setTimeout(async () => {
+Line 689 -> 4 try {
+Line 691 -> 5 for (const entityId of dirtyEntities) {
+Line 694 -> 6 if (char) {
+Line 697 -> 5 }
+Line 700 -> 6 if (item) {
+Line 703 -> 5 }
+Line 706 -> 6 if (quest) {
+Line 709 -> 5 }
+Line 712 -> 6 if (entry) {
+Line 715 -> 5 }
+Line 718 -> 6 if (chapter) {
+Line 721 -> 5 }
+Line 724 -> 6 if (profile) {
+Line 726 -> 5 }
+Line 727 -> 4 }
+Line 731 -> 4 } catch (error) {
+Line 733 -> 3 }
+Line 734 -> 2 }, 2000); // 2 second debounce
+Line 737 -> 1 }, [dirtyEntities, currentUser, characters, items, quests, journalEntries, storyChapters, profiles]);
+Line 740 -> 2 const handleUpdateCharacter = (characterId: string, newName: string) => {
+Line 741 -> 2 setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, name: newName } : c));
+Line 743 -> 1 };
+Line 746 -> 2 const handleDeleteCharacter = async (characterId: string) => {
+Line 749 -> 3 try {
+Line 761 -> 4 if (currentCharacterId === characterId) {
+Line 763 -> 3 }
+Line 764 -> 3 } catch (error) {
+Line 766 -> 2 }
+Line 767 -> 1 };
+Line 770 -> 2 const handleMarkCharacterDead = async (characterId: string, deathCause: string | null) => {
+Line 774 -> 3 const updates: Partial<Character> = {
+Line 778 -> 2 };
+Line 783 -> 2 ? { ...c, ...updates }
+Line 789 -> 3 try {
+Line 791 -> 4 if (char) {
+Line 792 -> 4 await saveCharacter(currentUser.uid, { ...char, ...updates });
+Line 793 -> 3 }
+Line 794 -> 3 } catch (error) {
+Line 796 -> 2 }
+Line 797 -> 1 };
+Line 800 -> 2 const handleManualSave = async () => {
+Line 804 -> 3 if (!navigator.onLine) {
+Line 807 -> 4 characters.forEach(char => {
+Line 808 -> 4 queueOfflineChange({ type: 'character', action: 'save', data: char });
+Line 809 -> 3 });
+Line 813 -> 2 }
+Line 817 -> 3 try {
+Line 834 -> 3 } catch (error) {
+Line 839 -> 3 } finally {
+Line 841 -> 2 }
+Line 842 -> 1 };
+Line 845 -> 2 const handleConsoleCommand = (command: string) => {
+Line 846 -> 3 try {
+Line 850 -> 3 } catch (error) {
+Line 852 -> 2 }
+Line 853 -> 1 };
+Line 855 -> 2 const handleRegister = async (email: string, password: string, username: string) => {
+Line 857 -> 3 try {
+Line 858 -> 4 if (!email || !password || !username) {
+Line 861 -> 3 }
+Line 862 -> 4 if (password.length < 6) {
+Line 865 -> 3 }
+Line 869 -> 4 try {
+Line 871 -> 4 const defaultProfile: UserProfile = { id: uniqueId(), username, created: Date.now() };
+Line 875 -> 4 } catch (e) {
+Line 877 -> 3 }
+Line 880 -> 4 saveUserMetadata({
+Line 886 -> 4 }).catch(err => {
+Line 888 -> 3 });
+Line 893 -> 3 } catch (error: any) {
+Line 894 -> 4 if (error.code === 'auth/email-already-in-use') {
+Line 896 -> 4 } else if (error.code === 'auth/invalid-email') {
+Line 898 -> 4 } else {
+Line 900 -> 3 }
+Line 901 -> 2 }
+Line 902 -> 1 };
+Line 904 -> 2 const handleLogin = async (email: string, password: string) => {
+Line 906 -> 3 try {
+Line 907 -> 4 if (!email || !password) {
+Line 910 -> 3 }
+Line 917 -> 3 } catch (error: any) {
+Line 920 -> 4 if (error.code === 'auth/user-not-found') {
+Line 922 -> 4 } else if (error.code === 'auth/wrong-password') {
+Line 924 -> 4 } else {
+Line 926 -> 3 }
+Line 927 -> 2 }
+Line 928 -> 1 };
+Line 930 -> 2 const handleGuestLogin = async () => {
+Line 932 -> 3 try {
+Line 937 -> 3 } catch (error: any) {
+Line 940 -> 2 }
+Line 941 -> 1 };
+Line 943 -> 2 const handleForgotPassword = async (email: string) => {
+Line 946 -> 3 try {
+Line 947 -> 4 if (!email) {
+Line 950 -> 3 }
+Line 952 -> 4 if (result.success) {
+Line 954 -> 4 } else {
+Line 956 -> 3 }
+Line 957 -> 3 } catch (error: any) {
+Line 959 -> 2 }
+Line 960 -> 1 };
+Line 962 -> 2 const handleLogout = async () => {
+Line 963 -> 3 try {
+Line 964 -> 4 if (currentUser) {
+Line 967 -> 3 }
+Line 971 -> 3 } catch (error) {
+Line 973 -> 2 }
+Line 974 -> 1 };
+Line 975 -> 2 if (loading) {
+Line 979 -> 2 <Loader className="animate-spin text-skyrim-gold" size={48} />
+Line 984 -> 1 }
+Line 987 -> 2 if (!currentUser) {
+Line 994 -> 3 {authError && (
+Line 996 -> 3 {authError}
+Line 998 -> 2 )}
+Line 1000 -> 3 {authMode === 'login' ? (
+Line 1007 -> 3 value={loginEmail}
+Line 1008 -> 3 onChange={(e) => setLoginEmail(e.target.value)}
+Line 1009 -> 3 onKeyDown={(e) => e.key === 'Enter' && handleLogin(loginEmail, loginPassword)}
+Line 1015 -> 3 value={loginPassword}
+Line 1016 -> 3 onChange={(e) => setLoginPassword(e.target.value)}
+Line 1017 -> 3 onKeyDown={(e) => e.key === 'Enter' && handleLogin(loginEmail, loginPassword)}
+Line 1021 -> 3 onClick={() => handleLogin(loginEmail, loginPassword)}
+Line 1034 -> 3 onClick={handleGuestLogin}
+Line 1045 -> 3 onClick={() => { setAuthMode('forgot'); setAuthError(null); setResetEmailSent(false); }}
+Line 1052 -> 3 onClick={() => { setAuthMode('register'); setAuthError(null); }}
+Line 1067 -> 3 value={loginUsername}
+Line 1068 -> 3 onChange={(e) => setLoginUsername(e.target.value)}
+Line 1074 -> 3 value={loginEmail}
+Line 1075 -> 3 onChange={(e) => setLoginEmail(e.target.value)}
+Line 1081 -> 3 value={loginPassword}
+Line 1082 -> 3 onChange={(e) => setLoginPassword(e.target.value)}
+Line 1086 -> 3 onClick={() => handleRegister(loginEmail, loginPassword, loginUsername)}
+Line 1094 -> 3 onClick={() => { setAuthMode('login'); setAuthError(null); }}
+Line 1104 -> 4 {resetEmailSent ? (
+Line 1111 -> 4 onClick={() => { setAuthMode('login'); setResetEmailSent(false); setAuthError(null); }}
+Line 1126 -> 4 value={loginEmail}
+Line 1127 -> 4 onChange={(e) => setLoginEmail(e.target.value)}
+Line 1128 -> 4 onKeyDown={(e) => e.key === 'Enter' && handleForgotPassword(loginEmail)}
+Line 1132 -> 4 onClick={() => handleForgotPassword(loginEmail)}
+Line 1140 -> 4 onClick={() => { setAuthMode('login'); setAuthError(null); }}
+Line 1147 -> 3 )}
+Line 1149 -> 2 )}
+Line 1153 -> 1 }
+Line 1155 -> 2 const handleCreateCharacter = (profileId: string, name: string, archetype: string, race: string, gender: string, fullDetails?: GeneratedCharacterData) => {
+Line 1159 -> 3 const newChar: Character = {
+Line 1170 -> 2 };
+Line 1175 -> 3 if (fullDetails?.inventory) {
+Line 1176 -> 4 const itemsWithId = fullDetails.inventory.map(i => ({
+Line 1184 -> 3 }));
+Line 1186 -> 4 itemsWithId.forEach(item => {
+Line 1188 -> 3 });
+Line 1189 -> 2 }
+Line 1192 -> 3 if (fullDetails?.quests) {
+Line 1193 -> 4 const newQuests: CustomQuest[] = fullDetails.quests.map(q => ({
+Line 1203 -> 3 }));
+Line 1205 -> 4 newQuests.forEach(quest => {
+Line 1207 -> 3 });
+Line 1208 -> 2 }
+Line 1211 -> 3 if (fullDetails?.journalEntries) {
+Line 1212 -> 4 const newEntries = fullDetails.journalEntries.map(e => ({
+Line 1218 -> 3 }));
+Line 1220 -> 4 newEntries.forEach(entry => {
+Line 1222 -> 3 });
+Line 1223 -> 2 }
+Line 1226 -> 3 if (fullDetails?.openingStory) {
+Line 1227 -> 4 const chapter: StoryChapter = {
+Line 1235 -> 3 };
+Line 1238 -> 2 }
+Line 1239 -> 1 };
+Line 1241 -> 2 const updateCharacter = (field: keyof Character, value: any) => {
+Line 1242 -> 2 setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
+Line 1243 -> 3 if (currentCharacterId) {
+Line 1245 -> 2 }
+Line 1246 -> 1 };
+Line 1248 -> 2 const updateStoryChapter = (updatedChapter: StoryChapter) => {
+Line 1251 -> 1 };
+Line 1254 -> 2 const handleDeleteStoryChapter = async (chapterId: string) => {
+Line 1256 -> 3 try {
+Line 1259 -> 3 console.log(`Story chapter ${chapterId} deleted from Firestore`);
+Line 1260 -> 3 } catch (error) {
+Line 1262 -> 2 }
+Line 1263 -> 1 };
+Line 1266 -> 2 const handleDeleteJournalEntry = async (entryId: string) => {
+Line 1268 -> 3 try {
+Line 1271 -> 3 console.log(`Journal entry ${entryId} deleted from Firestore`);
+Line 1272 -> 3 } catch (error) {
+Line 1274 -> 2 }
+Line 1275 -> 1 };
+Line 1293 -> 2 const handleRestWithOptions = (options: { type: 'outside' | 'camp' | 'inn'; hours: number; innCost?: number }) => {
+Line 1298 -> 3 if (item.type === 'potion') {
+Line 1302 -> 3 const { inferPotionStat } = require('./services/effects');
+Line 1305 -> 4 if (!inferred) {
+Line 1306 -> 4 console.error('[potion] ambiguous potion, inference failed', { id: item.id, name: item.name });
+Line 1307 -> 4 showToast(`The potion ${item.name} appears to be misconfigured and has no effect.`, 'warning');
+Line 1309 -> 3 }
+Line 1311 -> 3 const effect = { type: 'modifyStat' as const, stat: inferred, value: potency, source: { id: item.id, name: item.name } };
+Line 1313 -> 3 handleGameUpdate({ effects: [effect], removedItems: [{ name: item.name, quantity: 1 }] });
+Line 1314 -> 2 }
+Line 1315 -> 3 const handleDrinkItem = (item: InventoryItem) => {
+Line 1318 -> 4 handleGameUpdate({
+Line 1320 -> 5 needsChange: {
+Line 1323 -> 5 ...(nutrition.fatigueReduction ? { fatigue: -nutrition.fatigueReduction } : {})
+Line 1324 -> 4 },
+Line 1325 -> 4 removedItems: [{ name: item.name, quantity: 1 }]
+Line 1326 -> 3 });
+Line 1327 -> 2 };
+Line 1330 -> 3 const handleUseItem = (item: InventoryItem) => {
+Line 1333 -> 4 if (item.type === 'potion') {
+Line 1338 -> 5 if (!subtype || !['health', 'magicka', 'stamina'].includes(subtype)) {
+Line 1339 -> 5 console.error('[potion] misconfigured potion, missing or invalid subtype', { id: item.id, name: item.name, subtype });
+Line 1340 -> 5 showToast(`The potion ${item.name} appears to be misconfigured and has no effect.`, 'warning');
+Line 1341 -> 5 } else {
+Line 1343 -> 6 const before = {
+Line 1347 -> 5 };
+Line 1349 -> 5 const { newVitals, actual } = applyStatToVitals(activeCharacter.currentVitals, activeCharacter.stats, subtype, potency);
+Line 1352 -> 5 console.debug('[potion] apply', { id: item.id, name: item.name, subtype, potency, before, after: newVitals, applied: actual });
+Line 1354 -> 6 if (actual > 0) {
+Line 1355 -> 6 const vitalsChange: any = {};
+Line 1360 -> 7 handleGameUpdate({
+Line 1362 -> 7 removedItems: [{ name: item.name, quantity: 1 }]
+Line 1363 -> 6 });
+Line 1364 -> 6 showToast(`Restored ${actual} ${subtype}!`, 'success');
+Line 1365 -> 6 } else {
+Line 1366 -> 6 showToast(`No effect from ${item.name}.`, 'warning');
+Line 1367 -> 5 }
+Line 1368 -> 4 }
+Line 1370 -> 4 } else if (item.type === 'food') {
+Line 1372 -> 4 showToast(`Ate ${item.name}`, 'info');
+Line 1373 -> 4 } else if (item.type === 'drink') {
+Line 1375 -> 4 showToast(`Drank ${item.name}`, 'info');
+Line 1376 -> 4 } else if (item.type === 'ingredient') {
+Line 1378 -> 5 handleGameUpdate({
+Line 1379 -> 5 removedItems: [{ name: item.name, quantity: 1 }]
+Line 1380 -> 4 });
+Line 1381 -> 4 showToast(`Used ${item.name}`, 'info');
+Line 1382 -> 3 }
+Line 1383 -> 2 };
+Line 1386 -> 3 const handleShopPurchase = (shopItem: { name: string; type: string; description: string; price: number }, quantity: number) => {
+Line 1389 -> 4 if ((activeCharacter.gold || 0) < totalCost) {
+Line 1392 -> 3 }
+Line 1395 -> 3 const stats = shouldHaveStats(shopItem.type) ? getItemStats(shopItem.name, shopItem.type) : {};
+Line 1397 -> 4 handleGameUpdate({
+Line 1399 -> 5 newItems: [{
+Line 1406 -> 4 }]
+Line 1407 -> 3 });
+Line 1408 -> 2 };
+Line 1411 -> 3 const handleShopSell = (item: InventoryItem, quantity: number, totalGold: number) => {
+Line 1418 -> 4 if (newQty <= 0) {
+Line 1421 -> 5 if (currentUser) {
+Line 1422 -> 6 void deleteInventoryItem(currentUser.uid, item.id).catch(err => {
+Line 1424 -> 5 });
+Line 1425 -> 4 }
+Line 1426 -> 4 } else {
+Line 1428 -> 4 const updatedItem = { ...item, quantity: newQty };
+Line 1430 -> 5 if (currentUser) {
+Line 1431 -> 6 void saveInventoryItem(currentUser.uid, updatedItem).catch(err => {
+Line 1433 -> 5 });
+Line 1434 -> 4 }
+Line 1435 -> 3 }
+Line 1438 -> 4 handleGameUpdate({
+Line 1440 -> 3 });
+Line 1441 -> 2 };
+Line 1447 -> 3 const handleExportJSON = () => {
+Line 1450 -> 2 };
+Line 1452 -> 3 const handleImportJSON = () => {
+Line 1454 -> 2 };
+Line 1456 -> 3 const handleImportComplete = async (data: {
+Line 1462 -> 3 }) => {
+Line 1467 -> 4 const importedCharacter: Character = {
+Line 1472 -> 3 };
+Line 1479 -> 4 for (const item of data.inventory) {
+Line 1480 -> 5 const newItem: InventoryItem = {
+Line 1484 -> 4 };
+Line 1487 -> 3 }
+Line 1490 -> 4 for (const quest of data.quests) {
+Line 1491 -> 5 const newQuest: CustomQuest = {
+Line 1495 -> 4 };
+Line 1498 -> 3 }
+Line 1501 -> 4 for (const entry of data.journal) {
+Line 1502 -> 5 const newEntry: JournalEntry = {
+Line 1506 -> 4 };
+Line 1509 -> 3 }
+Line 1512 -> 4 for (const chapter of data.story) {
+Line 1513 -> 5 const newChapter: StoryChapter = {
+Line 1517 -> 4 };
+Line 1520 -> 3 }
+Line 1525 -> 2 };
+Line 1528 -> 2 const handleRest = () => handleRestWithOptions({ type: 'outside', hours: 8 });
+Line 1529 -> 3 const handleEat = () => {
+Line 1532 -> 2 };
+Line 1533 -> 3 const handleDrink = () => {
+Line 1536 -> 2 };
+Line 1538 -> 3 const pickConsumable = (kind: 'food' | 'drink'): InventoryItem | null => {
+Line 1554 -> 4 const score = (it: InventoryItem) => {
+Line 1564 -> 5 for (const k of keywords) {
+Line 1566 -> 4 }
+Line 1569 -> 5 if (kind === 'drink' && name.includes('potion')) {
+Line 1571 -> 4 }
+Line 1573 -> 3 };
+Line 1577 -> 4 for (const it of inv) {
+Line 1579 -> 5 if (s > bestScore) {
+Line 1582 -> 4 }
+Line 1583 -> 3 }
+Line 1585 -> 2 };
+Line 1592 -> 3 const setCharacterItems = (newCharItems: InventoryItem[]) => {
+Line 1595 -> 3 const taggedItems = newCharItems.map(i => ({ ...i, characterId: currentCharacterId }));
+Line 1602 -> 4 if (currentUser && deletedItems.length > 0) {
+Line 1603 -> 5 deletedItems.forEach(item => {
+Line 1604 -> 6 void deleteInventoryItem(currentUser.uid, item.id).catch(err => {
+Line 1606 -> 5 });
+Line 1607 -> 4 });
+Line 1608 -> 3 }
+Line 1611 -> 4 taggedItems.forEach(item => {
+Line 1613 -> 3 });
+Line 1614 -> 2 };
+Line 1617 -> 3 const setCharacterQuests = (newQuests: CustomQuest[]) => {
+Line 1619 -> 3 const tagged = newQuests.map(q => ({ ...q, characterId: currentCharacterId }));
+Line 1621 -> 4 tagged.forEach(quest => {
+Line 1623 -> 3 });
+Line 1624 -> 2 };
+Line 1629 -> 3 const setCharacterJournal = (newEntries: JournalEntry[]) => {
+Line 1631 -> 3 const tagged = newEntries.map(e => ({ ...e, characterId: currentCharacterId }));
+Line 1633 -> 4 tagged.forEach(entry => {
+Line 1635 -> 3 });
+Line 1636 -> 2 };
+Line 1639 -> 3 const handleGameUpdate = (updates: GameStateUpdate) => {
+Line 1659 -> 4 if (updates.characterUpdates && Object.keys(updates.characterUpdates).length) {
+Line 1660 -> 5 setCharacters(prev => prev.map(c => {
+Line 1662 -> 5 const updatedChar = { ...c };
+Line 1682 -> 4 }));
+Line 1683 -> 3 }
+Line 1687 -> 3 const explicitNeedsChange = updates.needsChange || {};
+Line 1689 -> 4 if (timeAdvance !== 0 || (explicitNeedsChange && Object.keys(explicitNeedsChange).length)) {
+Line 1690 -> 5 setCharacters(prev => prev.map(c => {
+Line 1703 -> 6 const nextNeeds = {
+Line 1719 -> 5 };
+Line 1722 -> 5 return { ...c, time: nextTime, needs: nextNeeds };
+Line 1723 -> 4 }));
+Line 1724 -> 3 }
+Line 1727 -> 4 if (updates.narrative) {
+Line 1728 -> 5 const chapter: StoryChapter = {
+Line 1736 -> 4 };
+Line 1739 -> 3 }
+Line 1742 -> 4 if (updates.newQuests) {
+Line 1743 -> 5 const addedQuests = updates.newQuests.map(q => ({
+Line 1750 -> 6 objectives: (q.objectives || []).map(o => ({
+Line 1754 -> 5 })),
+Line 1757 -> 4 }));
+Line 1759 -> 5 addedQuests.forEach(quest => {
+Line 1761 -> 4 });
+Line 1762 -> 3 }
+Line 1765 -> 4 if (updates.updateQuests) {
+Line 1766 -> 5 setQuests(prev => prev.map(q => {
+Line 1769 -> 6 if (update) {
+Line 1771 -> 6 return { ...q, status: update.status };
+Line 1772 -> 5 }
+Line 1774 -> 4 }));
+Line 1775 -> 3 }
+Line 1778 -> 4 if (updates.newItems) {
+Line 1779 -> 5 setItems(prev => {
+Line 1781 -> 6 for (const i of updates.newItems || []) {
+Line 1793 -> 7 if (idx >= 0) {
+Line 1795 -> 8 const updated = sanitizeInventoryItem({
+Line 1805 -> 7 }) as InventoryItem;
+Line 1808 -> 7 } else {
+Line 1809 -> 8 const added = sanitizeInventoryItem({
+Line 1822 -> 7 }) as InventoryItem;
+Line 1825 -> 6 }
+Line 1826 -> 5 }
+Line 1828 -> 4 });
+Line 1829 -> 3 }
+Line 1832 -> 4 if (updates.removedItems) {
+Line 1833 -> 5 setItems(prev => {
+Line 1835 -> 6 for (const r of updates.removedItems || []) {
+Line 1849 -> 7 if (newQty > 0) {
+Line 1850 -> 7 const updated = { ...existing, quantity: newQty };
+Line 1853 -> 7 } else {
+Line 1855 -> 8 if (currentUser?.uid) {
+Line 1856 -> 9 void deleteInventoryItem(currentUser.uid, removed.id).catch(err => {
+Line 1858 -> 8 });
+Line 1859 -> 7 }
+Line 1860 -> 6 }
+Line 1861 -> 5 }
+Line 1863 -> 4 });
+Line 1864 -> 3 }
+Line 1867 -> 4 if (updates.statUpdates) {
+Line 1868 -> 5 setCharacters(prev => prev.map(c => {
+Line 1871 -> 6 return {
+Line 1873 -> 6 stats: { ...c.stats, ...updates.statUpdates }
+Line 1874 -> 5 };
+Line 1875 -> 4 }));
+Line 1876 -> 3 }
+Line 1879 -> 4 if (updates.effects && updates.effects.length) {
+Line 1881 -> 5 setCharacters(prev => prev.map(c => {
+Line 1883 -> 5 let currentVitals = c.currentVitals || { currentHealth: c.stats.health, currentMagicka: c.stats.magicka, currentStamina: c.stats.stamina };
+Line 1886 -> 6 for (const eff of updates.effects || []) {
+Line 1887 -> 7 if (eff.type !== 'modifyStat') {
+Line 1890 -> 6 }
+Line 1893 -> 7 if (!['health', 'magicka', 'stamina'].includes(stat)) {
+Line 1896 -> 6 }
+Line 1898 -> 6 const { newVitals, actual } = via.modifyPlayerStat(currentVitals, c.stats, stat, amount);
+Line 1899 -> 7 if (actual && actual > 0) {
+Line 1903 -> 7 console.debug('[effects] applied', { id: c.id, stat, amount, actual, source: eff.source });
+Line 1904 -> 7 showToast(`${label} increased by ${actual}`, 'success');
+Line 1905 -> 6 }
+Line 1907 -> 5 }
+Line 1910 -> 5 return { ...c, currentVitals };
+Line 1911 -> 4 }));
+Line 1912 -> 3 }
+Line 1916 -> 4 if (updates.vitalsChange && Object.keys(updates.vitalsChange).length) {
+Line 1918 -> 5 setCharacters(prev => prev.map(c => {
+Line 1922 -> 6 let currentVitals = c.currentVitals || {
+Line 1926 -> 5 };
+Line 1929 -> 5 const changes: Array<{ stat: 'health'|'magicka'|'stamina'; delta: number }> = [];
+Line 1930 -> 5 if (typeof updates.vitalsChange!.currentHealth === 'number') changes.push({ stat: 'health', delta: updates.vitalsChange!.currentHealth! });
+Line 1931 -> 5 if (typeof updates.vitalsChange!.currentMagicka === 'number') changes.push({ stat: 'magicka', delta: updates.vitalsChange!.currentMagicka! });
+Line 1932 -> 5 if (typeof updates.vitalsChange!.currentStamina === 'number') changes.push({ stat: 'stamina', delta: updates.vitalsChange!.currentStamina! });
+Line 1935 -> 6 for (const ch of changes) {
+Line 1936 -> 6 const { newVitals, actual } = via.modifyPlayerStat(currentVitals, c.stats, ch.stat, ch.delta);
+Line 1937 -> 7 if (actual && actual !== 0) {
+Line 1940 -> 7 console.debug('[vitals] applied change', { id: c.id, stat: ch.stat, requested: ch.delta, actual });
+Line 1941 -> 7 showToast(`${label} ${actual > 0 ? 'increased' : 'changed by'} ${Math.abs(actual)}`, 'success');
+Line 1942 -> 6 }
+Line 1944 -> 5 }
+Line 1948 -> 5 return { ...c, currentVitals };
+Line 1949 -> 4 }));
+Line 1950 -> 3 }
+Line 1953 -> 4 if (updates.combatStart && updates.combatStart.enemies?.length) {
+Line 1965 -> 4 updateMusicForContext({ inCombat: true, mood: 'tense' });
+Line 1966 -> 3 }
+Line 1969 -> 4 if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
+Line 1970 -> 5 setCharacters(prev => prev.map(c => {
+Line 1973 -> 5 return { ...c, gold: (c.gold || 0) + (updates.goldChange || 0) };
+Line 1974 -> 4 }));
+Line 1975 -> 3 }
+Line 1979 -> 3 let levelUpInfo: { newLevel: number; charName: string; statBonus: { health: number; magicka: number; stamina: number } } | null = null;
+Line 1981 -> 4 if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
+Line 1982 -> 5 setCharacters(prev => prev.map(c => {
+Line 1991 -> 6 if (newXP >= xpForNextLevel) {
+Line 1996 -> 6 const statBonus = { health: 0, magicka: 0, stamina: 0 };
+Line 1998 -> 7 if (archetype.includes('mage') || archetype.includes('wizard') || archetype.includes('sorcerer')) {
+Line 2001 -> 7 } else if (archetype.includes('thief') || archetype.includes('rogue') || archetype.includes('assassin')) {
+Line 2004 -> 7 } else {
+Line 2007 -> 6 }
+Line 2010 -> 6 levelUpInfo = { newLevel, charName: c.name, statBonus };
+Line 2013 -> 6 setSaveMessage(`­şÄë LEVEL UP! ${c.name} is now level ${newLevel}!`);
+Line 2016 -> 7 return {
+Line 2020 -> 8 stats: {
+Line 2024 -> 7 }
+Line 2025 -> 6 };
+Line 2026 -> 5 }
+Line 2028 -> 5 return { ...c, experience: newXP };
+Line 2029 -> 4 }));
+Line 2030 -> 3 }
+Line 2047 -> 4 if (updates.narrative?.content) {
+Line 2048 -> 4 lines.push(`I remember it like this:\n${updates.narrative.content.trim()}`);
+Line 2049 -> 3 }
+Line 2053 -> 4 if (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0) {
+Line 2057 -> 4 const dur = hrs > 0 ? `${hrs}h${rem ? ` ${rem}m` : ''}` : `${rem}m`;
+Line 2058 -> 4 changes.push(`Time passed: ${dur}.`);
+Line 2062 -> 4 changes.push(`It is now ${formatTime(nextTime)}.`);
+Line 2068 -> 4 if (hungerInc) parts.push(`hunger +${hungerInc}`);
+Line 2069 -> 4 if (thirstInc) parts.push(`thirst +${thirstInc}`);
+Line 2070 -> 4 if (fatigueInc) parts.push(`fatigue +${fatigueInc}`);
+Line 2071 -> 4 if (parts.length) changes.push(`As the minutes wore on, I felt it: ${parts.join(', ')}.`);
+Line 2072 -> 3 }
+Line 2074 -> 4 if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
+Line 2075 -> 4 if (updates.goldChange > 0) changes.push(`I gained ${updates.goldChange} gold.`);
+Line 2076 -> 4 else changes.push(`I spent ${Math.abs(updates.goldChange)} gold.`);
+Line 2077 -> 3 }
+Line 2078 -> 4 if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
+Line 2079 -> 4 if (updates.xpChange > 0) changes.push(`I gained ${updates.xpChange} experience.`);
+Line 2080 -> 4 else changes.push(`I lost ${Math.abs(updates.xpChange)} experience.`);
+Line 2083 -> 5 if (levelUpInfo) {
+Line 2084 -> 5 changes.push(`­şÄë I LEVELED UP! I am now level ${levelUpInfo.newLevel}!`);
+Line 2086 -> 5 if (levelUpInfo.statBonus.health > 0) bonusParts.push(`+${levelUpInfo.statBonus.health} Health`);
+Line 2087 -> 5 if (levelUpInfo.statBonus.magicka > 0) bonusParts.push(`+${levelUpInfo.statBonus.magicka} Magicka`);
+Line 2088 -> 5 if (levelUpInfo.statBonus.stamina > 0) bonusParts.push(`+${levelUpInfo.statBonus.stamina} Stamina`);
+Line 2089 -> 5 if (bonusParts.length) changes.push(`My training has paid off: ${bonusParts.join(', ')}.`);
+Line 2090 -> 4 }
+Line 2091 -> 3 }
+Line 2093 -> 4 if (updates.needsChange && Object.keys(updates.needsChange).length) {
+Line 2098 -> 4 if (h) parts.push(`hunger ${h > 0 ? `+${h}` : `${h}`}`);
+Line 2099 -> 4 if (t) parts.push(`thirst ${t > 0 ? `+${t}` : `${t}`}`);
+Line 2100 -> 4 if (f) parts.push(`fatigue ${f > 0 ? `+${f}` : `${f}`}`);
+Line 2101 -> 4 if (parts.length) changes.push(`My body felt it: ${parts.join(', ')}.`);
+Line 2102 -> 3 }
+Line 2104 -> 4 if (updates.statUpdates && Object.keys(updates.statUpdates).length) {
+Line 2106 -> 4 if (typeof updates.statUpdates.health === 'number') statParts.push(`health is now ${updates.statUpdates.health}`);
+Line 2107 -> 4 if (typeof updates.statUpdates.magicka === 'number') statParts.push(`magicka is now ${updates.statUpdates.magicka}`);
+Line 2108 -> 4 if (typeof updates.statUpdates.stamina === 'number') statParts.push(`stamina is now ${updates.statUpdates.stamina}`);
+Line 2109 -> 4 if (statParts.length) changes.push(`My ${statParts.join(', ')}.`);
+Line 2110 -> 3 }
+Line 2112 -> 4 if (updates.newItems?.length) {
+Line 2114 -> 5 .map(i => {
+Line 2116 -> 5 return `${qty}├ù ${String(i.name || '').trim()}`.trim();
+Line 2117 -> 4 })
+Line 2119 -> 4 if (items.length) changes.push(`I gained ${items.join(', ')}.`);
+Line 2120 -> 3 }
+Line 2122 -> 4 if (updates.removedItems?.length) {
+Line 2124 -> 5 .map(i => {
+Line 2126 -> 5 return `${qty}├ù ${String(i.name || '').trim()}`.trim();
+Line 2127 -> 4 })
+Line 2129 -> 4 if (items.length) changes.push(`I used or lost ${items.join(', ')}.`);
+Line 2130 -> 3 }
+Line 2132 -> 4 if (updates.newQuests?.length) {
+Line 2134 -> 5 .map(q => {
+Line 2135 -> 5 const loc = q.location ? ` (${q.location})` : '';
+Line 2136 -> 5 const due = q.dueDate ? ` ÔÇö Due: ${q.dueDate}` : '';
+Line 2137 -> 5 const objectives = (q.objectives || []).map(o => `- ${o.description}`).join('\n');
+Line 2138 -> 5 const objBlock = objectives ? `\nMy objectives:\n${objectives}` : '';
+Line 2140 -> 5 return `I accepted a new quest: ${q.title}${loc}${due}.${desc ? `\n${desc}` : ''}${objBlock}`.trim();
+Line 2141 -> 4 })
+Line 2144 -> 3 }
+Line 2146 -> 4 if (updates.updateQuests?.length) {
+Line 2148 -> 5 .map(q => {
+Line 2149 -> 5 if (q.status === 'completed') return `I completed the quest: ${q.title}.`;
+Line 2150 -> 5 if (q.status === 'failed') return `I failed the quest: ${q.title}.`;
+Line 2151 -> 5 return `I updated my quest: ${q.title}.`;
+Line 2152 -> 4 })
+Line 2155 -> 3 }
+Line 2157 -> 4 if (changes.length) {
+Line 2158 -> 4 lines.push(`\nMy notes:\n- ${changes.join('\n- ')}`);
+Line 2159 -> 3 }
+Line 2161 -> 4 const entry: JournalEntry = {
+Line 2167 -> 3 };
+Line 2173 -> 4 if (updates.ambientContext && !updates.combatStart) {
+Line 2179 -> 5 const ambientCtx: AmbientContext = {
+Line 2184 -> 4 };
+Line 2186 -> 3 }
+Line 2187 -> 2 };
+Line 2190 -> 3 if (currentUser?.uid) {
+Line 2191 -> 4 (window as any).app = {
+Line 2209 -> 3 };
+Line 2210 -> 2 }
+Line 2212 -> 3 const getAIContext = () => {
+Line 2214 -> 4 return JSON.stringify({
+Line 2219 -> 3 });
+Line 2220 -> 2 };
+Line 2223 -> 3 if (!currentCharacterId) {
+Line 2227 -> 3 profileId={currentProfileId}
+Line 2228 -> 3 characters={characters}
+Line 2229 -> 3 onCreateCharacter={handleCreateCharacter}
+Line 2230 -> 5 onSelectCharacter={async (cid) => {
+Line 2232 -> 6 if (currentUser) {
+Line 2234 -> 5 }
+Line 2235 -> 3 }}
+Line 2236 -> 3 onLogout={handleLogout}
+Line 2237 -> 3 onUpdateCharacter={handleUpdateCharacter}
+Line 2238 -> 3 onDeleteCharacter={handleDeleteCharacter}
+Line 2239 -> 3 onMarkCharacterDead={handleMarkCharacterDead}
+Line 2241 -> 3 <OnboardingModal open={onboardingOpen} onComplete={completeOnboarding} />
+Line 2244 -> 2 }
+Line 2247 -> 4 <AppContext.Provider value={{
+Line 2255 -> 4 handleExportPDF: () => {}, // TODO: Implement export
+Line 2257 -> 5 handleGenerateProfileImage: async () => {
+Line 2260 -> 6 try {
+Line 2269 -> 6 } catch (e) {
+Line 2271 -> 5 }
+Line 2272 -> 4 },
+Line 2274 -> 5 handleCreateImagePrompt: () => {
+Line 2276 -> 5 const prompt = `${getEasterEggName(activeCharacter.name)}, a ${activeCharacter.gender} ${activeCharacter.race} ${activeCharacter.archetype}. ${activeCharacter.identity} ${activeCharacter.psychology} $
+Line 2278 -> 4 },
+Line 2279 -> 4 handleUploadPhoto: () => {}, // TODO: Implement upload
+Line 2301 -> 2 }}>
+Line 2303 -> 2 {/* Status Indicators */}
+Line 2305 -> 2 <AutoSaveIndicator status={saveStatus} lastSaved={lastSaved} />
+Line 2307 -> 2 <OnboardingModal open={onboardingOpen} onComplete={completeOnboarding} />
+Line 2308 -> 2 {/* Navigation Header */}
+Line 2312 -> 2 <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer" onClick={() => setCurrentCharacterId(null)}>
+Line 2313 -> 2 <Skull size={24} />
+Line 2317 -> 3 {[
+Line 2318 -> 3 { id: TABS.CHARACTER, icon: User, label: 'Hero' },
+Line 2319 -> 3 { id: TABS.INVENTORY, icon: Package, label: 'Items' },
+Line 2320 -> 3 { id: TABS.QUESTS, icon: Scroll, label: 'Quests' },
+Line 2321 -> 3 { id: TABS.STORY, icon: Feather, label: 'Story' },
+Line 2322 -> 3 { id: TABS.JOURNAL, icon: BookOpen, label: 'Journal' },
+Line 2323 -> 3 { id: TABS.ADVENTURE, icon: Swords, label: 'Adventure' },
+Line 2326 -> 3 key={tab.id}
+Line 2327 -> 3 onClick={() => setActiveTab(tab.id)}
+Line 2328 -> 5 className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-all duration-300 text-sm md:text-base ${
+Line 2332 -> 3 }`}
+Line 2334 -> 3 <tab.icon size={16} />
+Line 2335 -> 3 <span className="hidden md:inline">{tab.label}</span>
+Line 2337 -> 2 ))}
+Line 2338 -> 2 {/* Actions button inline with tabs */}
+Line 2343 -> 2 {/* Only one Actions button: ActionBarToggle is inline with tabs, remove default ActionBar here */}
+Line 2346 -> 2 {/* Save Message */}
+Line 2347 -> 3 {saveMessage && (
+Line 2348 -> 5 <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-bold z-50 transition-all ${
+Line 2352 -> 3 }`}>
+Line 2353 -> 3 {saveMessage}
+Line 2355 -> 2 )}
+Line 2357 -> 2 {/* Main Content Area */}
+Line 2358 -> 2 <main className={`pt-24 px-2 sm:px-4 ${activeTab === TABS.ADVENTURE ? 'h-screen overflow-hidden' : 'min-h-screen pb-20'}`}>
+Line 2359 -> 2 <div className={`max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+Line 2360 -> 3 {activeTab === TABS.CHARACTER && activeCharacter && (
+Line 2362 -> 3 character={activeCharacter}
+Line 2363 -> 3 updateCharacter={updateCharacter}
+Line 2364 -> 3 inventory={getCharacterItems()}
+Line 2365 -> 3 quests={getCharacterQuests()}
+Line 2366 -> 3 journal={getCharacterJournal()}
+Line 2367 -> 3 story={getCharacterStory()}
+Line 2368 -> 3 onRest={handleRestWithOptions}
+Line 2369 -> 3 onEat={handleEatItem}
+Line 2370 -> 3 onDrink={handleDrinkItem}
+Line 2371 -> 3 hasCampingGear={hasCampingGear}
+Line 2372 -> 3 hasBedroll={hasBedroll}
+Line 2374 -> 2 )}
+Line 2375 -> 3 {activeTab === TABS.INVENTORY && activeCharacter && (
+Line 2377 -> 3 items={getCharacterItems()}
+Line 2378 -> 3 setItems={setCharacterItems}
+Line 2379 -> 3 gold={activeCharacter.gold || 0}
+Line 2380 -> 3 setGold={(amt) => updateCharacter('gold', amt)}
+Line 2381 -> 3 maxCarryWeight={getMaxCarryWeight(activeCharacter)}
+Line 2382 -> 3 onUseItem={handleUseItem}
+Line 2384 -> 2 )}
+Line 2385 -> 3 {activeTab === TABS.QUESTS && (
+Line 2386 -> 3 <QuestLog quests={getCharacterQuests()} setQuests={setCharacterQuests} />
+Line 2387 -> 2 )}
+Line 2388 -> 3 {activeTab === TABS.STORY && (
+Line 2390 -> 3 chapters={getCharacterStory()}
+Line 2391 -> 3 onUpdateChapter={updateStoryChapter}
+Line 2392 -> 3 onDeleteChapter={handleDeleteStoryChapter}
+Line 2393 -> 3 onAddChapter={(chapter) => setStoryChapters(prev => [...prev, chapter])}
+Line 2394 -> 3 onGameUpdate={handleGameUpdate}
+Line 2395 -> 3 character={activeCharacter}
+Line 2396 -> 3 quests={getCharacterQuests()}
+Line 2397 -> 3 journal={getCharacterJournal()}
+Line 2398 -> 3 items={getCharacterItems()}
+Line 2399 -> 3 userId={currentUser?.uid}
+Line 2401 -> 2 )}
+Line 2402 -> 3 {activeTab === TABS.JOURNAL && (
+Line 2403 -> 3 <Journal entries={getCharacterJournal()} setEntries={setCharacterJournal} onDeleteEntry={handleDeleteJournalEntry} />
+Line 2404 -> 2 )}
+Line 2405 -> 3 {activeTab === TABS.ADVENTURE && (
+Line 2407 -> 3 userId={currentUser?.uid}
+Line 2408 -> 3 model={aiModel}
+Line 2409 -> 3 character={activeCharacter}
+Line 2410 -> 3 inventory={getCharacterItems()}
+Line 2411 -> 3 quests={getCharacterQuests()}
+Line 2412 -> 3 journal={getCharacterJournal()}
+Line 2413 -> 3 story={getCharacterStory()}
+Line 2414 -> 3 onUpdateState={handleGameUpdate}
+Line 2416 -> 2 )}
+Line 2420 -> 2 {/* AI Game Master */}
+Line 2421 -> 2 <AIScribe contextData={getAIContext()} onUpdateState={handleGameUpdate} model={aiModel} />
+Line 2423 -> 2 {/* Character Export/Import Modals */}
+Line 2424 -> 3 {activeCharacter && (
+Line 2426 -> 3 isOpen={showExportModal}
+Line 2427 -> 3 onClose={() => setShowExportModal(false)}
+Line 2428 -> 3 character={activeCharacter}
+Line 2429 -> 3 inventory={getCharacterItems()}
+Line 2430 -> 3 quests={quests.filter(q => q.characterId === currentCharacterId)}
+Line 2431 -> 3 journal={journalEntries.filter(j => j.characterId === currentCharacterId)}
+Line 2432 -> 3 story={storyChapters.filter(s => s.characterId === currentCharacterId)}
+Line 2434 -> 2 )}
+Line 2437 -> 2 isOpen={showImportModal}
+Line 2438 -> 2 onClose={() => setShowImportModal(false)}
+Line 2439 -> 2 onImport={handleImportComplete}
+Line 2442 -> 2 {/* Combat Modal - Full screen overlay when combat is active */}
+Line 2443 -> 3 {combatState && activeCharacter && (
+Line 2445 -> 3 character={activeCharacter}
+Line 2446 -> 3 inventory={getCharacterItems()}
+Line 2447 -> 3 initialCombatState={combatState}
+Line 2448 -> 5 onCombatEnd={(result, rewards, finalVitals) => {
+Line 2450 -> 5 updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
+Line 2451 -> 6 if (result === 'victory' && rewards) {
+Line 2452 -> 7 handleGameUpdate({
+Line 2453 -> 8 narrative: {
+Line 2455 -> 8 content: `You have emerged victorious from combat! Gained ${rewards.xp} experience${rewards.gold > 0 ? ` and ${rewards.gold} gold` : ''}.`
+Line 2456 -> 7 },
+Line 2460 -> 8 vitalsChange: finalVitals ? {
+Line 2464 -> 7 } : undefined
+Line 2465 -> 6 });
+Line 2466 -> 6 } else if (result === 'defeat') {
+Line 2467 -> 7 handleGameUpdate({
+Line 2468 -> 8 narrative: {
+Line 2471 -> 7 },
+Line 2472 -> 8 vitalsChange: {
+Line 2474 -> 7 }
+Line 2475 -> 6 });
+Line 2476 -> 6 } else if (result === 'fled') {
+Line 2477 -> 7 handleGameUpdate({
+Line 2478 -> 8 narrative: {
+Line 2481 -> 7 },
+Line 2482 -> 8 vitalsChange: finalVitals ? {
+Line 2486 -> 7 } : undefined
+Line 2487 -> 6 });
+Line 2488 -> 6 } else if (result === 'surrendered') {
+Line 2489 -> 7 handleGameUpdate({
+Line 2490 -> 8 narrative: {
+Line 2493 -> 7 },
+Line 2494 -> 8 vitalsChange: finalVitals ? {
+Line 2498 -> 7 } : undefined
+Line 2499 -> 6 });
+Line 2500 -> 5 }
+Line 2501 -> 3 }}
+Line 2502 -> 5 onNarrativeUpdate={(narrative) => {
+Line 2504 -> 3 }}
+Line 2505 -> 5 onInventoryUpdate={(removedItems) => {
+Line 2506 -> 5 handleGameUpdate({ removedItems });
+Line 2507 -> 3 }}
+Line 2508 -> 3 showToast={showToast}
+Line 2510 -> 2 )}
+Line 2512 -> 2 {/* Toast Notifications */}
+Line 2513 -> 2 <ToastNotification messages={toastMessages} onClose={handleToastClose} />
+Line 2514 -> 2 {/* Update Notification */}
+Line 2517 -> 2 {/* Changelog - subtle bottom left */}
+Line 2520 -> 2 {/* Console Overlay */}
+Line 2522 -> 2 isOpen={showConsole}
+Line 2523 -> 2 onClose={() => setShowConsole(false)}
+Line 2524 -> 2 onExecuteCommand={handleConsoleCommand}
+Line 2530 -> 1 };
+FINAL BRACES: 1

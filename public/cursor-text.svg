@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Text cursor - Nordic quill/rune style -->
+  <path d="M 12 4 L 20 4 M 16 4 L 16 28 M 12 28 L 20 28" 
+        fill="none" 
+        stroke="#c0a062" 
+        stroke-width="2"
+        stroke-linecap="round"
+        filter="url(#glow)"/>
+  <!-- Decorative rune marks -->
+  <path d="M 14 8 L 18 8 M 14 24 L 18 24" 
+        stroke="#c0a062" 
+        stroke-width="1" 
+        opacity="0.6"/>
+</svg>

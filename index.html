@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skyrim Aetherius</title>
+    <link rel="icon" type="image/svg+xml" href="/skyrim-favicon.svg" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              serif: ['Cinzel', 'serif'],
+              sans: ['Lato', 'sans-serif'],
+            },
+            colors: {
+              skyrim: {
+                dark: 'var(--skyrim-dark)',
+                paper: 'var(--skyrim-paper)',
+                border: 'var(--skyrim-border)',
+                gold: 'var(--skyrim-gold)',
+                goldHover: 'var(--skyrim-gold-hover)',
+                text: 'var(--skyrim-text)',
+                accent: 'var(--skyrim-accent)'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --skyrim-dark: #0f0f0f;
+        --skyrim-paper: #1a1a1a;
+        --skyrim-border: #4a4a4a;
+        --skyrim-gold: #c0a062;
+        --skyrim-gold-hover: #d4b475;
+        --skyrim-text: #d1d1d1;
+        --skyrim-accent: #2a3b4c;
+      }
+      
+      /* Use native system cursors (prefer OS defaults instead of custom PNGs) */
+      /* Skyrim-style custom cursors - PNG must be 32x32 max */
+      *, *::before, *::after {
+        cursor: url('/cursor-default.png') 0 0, auto;
+      }
+      
+      a, button, [role="button"], 
+      input[type="submit"], input[type="button"], input[type="reset"],
+      select, .cursor-pointer, [onclick], label, summary,
+      [tabindex]:not([tabindex="-1"]) {
+        cursor: url('/cursor-pointer.png') 6 0, pointer !important;
+      }
+      
+      input[type="text"], input[type="password"], input[type="email"], 
+      input[type="number"], input[type="search"], input[type="tel"], 
+      input[type="url"], textarea, [contenteditable="true"] {
+        cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23c0a062' stroke-width='2'/%3E%3C/svg%3E") 16 16, text;
+      }
+
+      body {
+        background-color: var(--skyrim-dark);
+        background-image: url('https://www.transparenttextures.com/patterns/dark-leather.png');
+        color: var(--skyrim-text);
+        overflow-x: hidden;
+      }
+      html {
+        overflow-x: hidden;
+      }
+      /* Custom Scrollbar (theme-aware) */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--skyrim-paper); 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--skyrim-border); 
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--skyrim-gold); 
+      }
+      /* Theme the browser focus outline and Tailwind ring color (with fallbacks) */
+      :root {
+        --tw-ring-color: color-mix(in srgb, var(--skyrim-gold, #c0a062) 50%, transparent);
+      }
+      :focus {
+        outline: 1px solid var(--skyrim-gold, #c0a062);
+        outline-offset: 2px;
+      }
+      :focus:not(:focus-visible) {
+        outline: none;
+      }
+      /* Strongly override Tailwind preflight pseudo-element border color which defaults to a light gray (#e5e7eb).
+         Use the theme variable with a fallback so undefined vars won't produce the bright color. */
+      *, *::before, *::after {
+        border-color: var(--skyrim-border, #4a4a4a) !important;
+      }
+
+      /* Ensure form controls follow the project theme (fix white backgrounds) */
+      input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], textarea, select, [contenteditable="true"] {
+        background-color: var(--skyrim-paper) !important;
+        color: var(--skyrim-text) !important;
+        border-color: var(--skyrim-border) !important;
+        -webkit-text-fill-color: var(--skyrim-text) !important;
+      }
+      input::placeholder, textarea::placeholder {
+        color: rgba(209,209,209,0.55) !important;
+      }
+      textarea { resize: vertical; }
+      input[disabled], textarea[disabled], [contenteditable="false"] { opacity: 0.6; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "uuid": "https://esm.sh/uuid@^13.0.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "jspdf": "https://esm.sh/jspdf@2.5.1"
+  }
+}
+</script>
+<!-- Removed unused index.css link -->
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+  <script type="module" src="/console-demo.js"></script>
+</body>
+</html>
