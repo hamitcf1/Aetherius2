@@ -125,6 +125,34 @@ export const StoryLog: React.FC<StoryLogProps> = ({
       }
   };
 
+  const extractSkillGains = (text: string) => {
+    const mapping: Array<{ skill: string; patterns: string[] }> = [
+      { skill: 'One-Handed', patterns: ['one-handed','one handed','sword','blade','slash'] },
+      { skill: 'Block', patterns: ['block','shield'] },
+      { skill: 'Light Armor', patterns: ['light armor'] },
+      { skill: 'Athletics', patterns: ['run','sprint','climb','athletic'] },
+      { skill: 'Speech', patterns: ['speech','persuad','barter','haggle'] },
+      { skill: 'Sneak', patterns: ['sneak','stealth','hidden','hide'] },
+      { skill: 'Lockpicking', patterns: ['lockpick','picklock','pick lock'] },
+      { skill: 'Archery', patterns: ['bow','arrow','archer','archery'] },
+      { skill: 'Destruction', patterns: ['destruction','fireball','ice spike','flames','magic'] },
+      { skill: 'Restoration', patterns: ['healing','heal','restoration'] },
+    ];
+
+    const results: Array<{ skill: string; amount: number }> = [];
+    if (!text || !text.length) return results;
+    for (const m of mapping) {
+      let count = 0;
+      for (const p of m.patterns) {
+        const re = new RegExp(`\\b${p.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'gi');
+        const matches = text.match(re);
+        if (matches) count += matches.length;
+      }
+      if (count > 0) results.push({ skill: m.skill, amount: Math.min(3, Math.max(1, Math.floor(count))) });
+    }
+    return results;
+  };
+
   const handleCreateChapter = async () => {
       if (chapterTitle.trim() && chapterContent.trim()) {
           const newChapter: StoryChapter = {
@@ -137,6 +165,13 @@ export const StoryLog: React.FC<StoryLogProps> = ({
               createdAt: Date.now()
           };
           onAddChapter?.(newChapter);
+
+          // Grant skill gains based on chapter content
+          if (typeof onGameUpdate === 'function') {
+            const gains = extractSkillGains(`${newChapter.title} ${newChapter.content}`);
+            if (gains.length) onGameUpdate({ skillGains: gains });
+          }
+
           setChapterTitle('');
           setChapterContent('');
           setCreatingChapter(false);
@@ -159,6 +194,11 @@ export const StoryLog: React.FC<StoryLogProps> = ({
 
           if (typeof onGameUpdate === 'function') {
               onGameUpdate(update);
+              // If the AI provided a narrative, also infer skill gains from it
+              if (update.narrative && update.narrative.content) {
+                const gains = extractSkillGains(`${update.narrative.title} ${update.narrative.content}`);
+                if (gains.length) onGameUpdate({ skillGains: gains });
+              }
               setChapterPrompt('');
               return;
           }
@@ -174,6 +214,11 @@ export const StoryLog: React.FC<StoryLogProps> = ({
                 createdAt: Date.now()
             };
             onAddChapter?.(newChapter);
+            // Also infer skill gains for the internal add path
+            if (typeof onGameUpdate === 'function') {
+              const gains = extractSkillGains(`${newChapter.title} ${newChapter.content}`);
+              if (gains.length) onGameUpdate({ skillGains: gains });
+            }
             setChapterPrompt('');
           }
       } catch (error) {

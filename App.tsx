@@ -2259,6 +2259,21 @@ const App: React.FC = () => {
           }));
       }
 
+      // 5b. Skill gains from narrative or events (e.g., story chapters contributing to skills)
+      if (updates.skillGains && updates.skillGains.length) {
+        setCharacters(prev => prev.map(c => {
+          if (c.id !== currentCharacterId) return c;
+          const updatedSkills = (c.skills || []).map(s => {
+            const gain = updates.skillGains?.find(g => (g.skill || '').toLowerCase() === (s.name || '').toLowerCase());
+            if (!gain) return s;
+            const nextLevel = clamp(Number(s.level || 0) + Number(gain.amount || 0), 0, 100);
+            return { ...s, level: nextLevel };
+          });
+          setDirtyEntities(d => new Set([...d, c.id]));
+          return { ...c, skills: updatedSkills };
+        }));
+      }
+
       // 5b. Vitals (currentHealth, currentMagicka, currentStamina) changes from adventure
       if (updates.vitalsChange && Object.keys(updates.vitalsChange).length) {
           setCharacters(prev => prev.map(c => {

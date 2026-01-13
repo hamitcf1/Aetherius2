@@ -298,6 +298,9 @@ export interface GameStateUpdate {
   goldChange?: number;
   xpChange?: number;
 
+  // Skill gains from story/activities (skill name and integer amount to add)
+  skillGains?: Array<{ skill: string; amount: number }>;
+
   // Progression / survival
   timeAdvanceMinutes?: number;
   needsChange?: Partial<SurvivalNeeds>;

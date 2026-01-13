@@ -7,6 +7,7 @@ import { formatSkyrimDateShort } from '../utils/skyrimCalendar';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { DropdownSelector, getEasterEggName } from './GameFeatures';
 import SpellsModal from './SpellsModal';
+import { getSpellById } from '../services/spells';
 
 interface CharacterSheetProps {
   character: Character;
@@ -946,7 +947,12 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             <TextAreaField label="Breaking Point" value={character.breakingPoint} onChange={(v) => updateCharacter('breakingPoint', v)} placeholder="What finally makes them snap?" rows={2} />
           </Section>
           {spellsOpen && (
-            <SpellsModal character={character} onClose={() => setSpellsOpen(false)} onLearn={() => {}} />
+            <SpellsModal character={character} onClose={() => setSpellsOpen(false)} onLearn={(id: string) => {
+                // Deduct perk points when a spell is learned
+                const s = getSpellById(id);
+                const cost = s?.perkCost || 1;
+                updateCharacter('perkPoints', Math.max(0, (character.perkPoints || 0) - cost));
+            }} />
           )}
           
           <Section title="Talents & Skills" icon={<Sparkles />}>
@@ -1066,7 +1072,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                                <div className="col-span-8">
                                     <label className="text-[10px] uppercase text-gray-500 font-bold">Perk Name</label>
                                     <input 
-                                        className="w-full bg-skyrim-paper/40 border border-skyrim-border p-2 rounded text-sm text-skyrim-text focus:border-skyrim-gold focus:outline-none"
+                                        className="w-full bg-skyrim-paper/40 border border-skyrim-border/60 rounded p-3 text-skyrim-text focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 outline-none transition-all placeholder-gray-600 font-sans"
                                         placeholder="e.g. Juggernaut"
                                         value={newPerkName}
                                         onChange={(e) => setNewPerkName(e.target.value)}

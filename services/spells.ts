@@ -5,6 +5,8 @@ export type Spell = {
   name: string;
   description: string;
   cost: number; // magicka cost
+  // Cost in perk points required to learn this spell (optional; default 1)
+  perkCost?: number;
   type: 'damage' | 'heal' | 'buff' | 'debuff' | 'utility';
   damage?: number;
   heal?: number;
@@ -18,6 +20,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     name: 'Flames',
     description: 'A small jet of fire that deals ongoing damage.',
     cost: 15,
+    perkCost: 1,
     type: 'damage',
     damage: 15,
     effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2 }]
@@ -27,6 +30,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     name: 'Ice Spike',
     description: 'A focused spike of ice that deals cold damage and may slow.',
     cost: 25,
+    perkCost: 2,
     type: 'damage',
     damage: 25,
     effects: [{ type: 'slow', amount: 20, duration: 2 }],
@@ -37,6 +41,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     name: 'Healing',
     description: 'Restore a moderate amount of health.',
     cost: 20,
+    perkCost: 1,
     type: 'heal',
     heal: 25
   }

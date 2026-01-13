@@ -19,6 +19,14 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
   }, [character.id]);
 
   const handleLearn = (id: string) => {
+    const spell = getSpellById(id);
+    const perkCost = spell?.perkCost || 1;
+    if ((character.perkPoints || 0) < perkCost) {
+      // Minimal feedback — parent can also prevent this
+      alert(`You need ${perkCost} perk point(s) to learn ${spell?.name || 'this spell'}.`);
+      return;
+    }
+
     const ok = learnSpell(character.id, id);
     if (ok) {
       setLearned(getLearnedSpellIds(character.id));
@@ -37,6 +45,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
         <div className="grid grid-cols-2 gap-4">
           {all.map(s => {
             const learnedFlag = learned.includes(s.id);
+            const perkCost = s.perkCost || 1;
+            const canAfford = (character.perkPoints || 0) >= perkCost;
             return (
               <div key={s.id} className={`p-3 rounded border ${learnedFlag ? 'border-skyrim-gold bg-skyrim-paper/40' : 'border-skyrim-border bg-skyrim-paper/30'}`}>
                 <div className="flex items-center justify-between">
@@ -45,9 +55,12 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                     <div className="text-xs text-skyrim-text">{s.description}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-blue-300">Cost: {s.cost}</div>
+                    <div className="text-sm text-blue-300">Magicka: {s.cost}</div>
+                    <div className="text-sm text-yellow-200">Perk cost: {perkCost}</div>
                     {learnedFlag ? <div className="text-green-400 flex items-center gap-1"><Check size={12} /> Learned</div> : (
-                      <button onClick={() => handleLearn(s.id)} className="mt-2 px-2 py-1 bg-skyrim-gold text-skyrim-dark rounded text-xs">Learn</button>
+                      <button disabled={!canAfford} onClick={() => handleLearn(s.id)} className={`mt-2 px-2 py-1 ${canAfford ? 'bg-skyrim-gold text-skyrim-dark' : 'bg-gray-700 text-gray-300'} rounded text-xs`}>
+                        Learn
+                      </button>
                     )}
                   </div>
                 </div>
