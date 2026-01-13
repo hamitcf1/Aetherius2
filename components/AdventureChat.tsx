@@ -1450,21 +1450,60 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     const unsub = subscribeToCombatResolved((payload) => {
       // Build a strictly narrative description (no mechanical deltas, per policy)
       const outcomeText = payload.result === 'victory' ? 'You were victorious.' : payload.result === 'defeat' ? 'You were defeated.' : payload.result === 'fled' ? 'You fled the battle.' : payload.result === 'surrendered' ? 'You surrendered.' : 'Combat concluded.';
-      const narrative = `*Combat Resolved* — ${outcomeText} The engine has already applied loot and rewards where appropriate. ${payload.finalVitals ? 'Your vitals have been updated accordingly.' : ''} What do you do next?`;
-      const gmMessage: ChatMessage = {
+
+      // Show a brief GM line while we request an AI continuation
+      const interim = `*Combat Resolved* — ${outcomeText} The engine applied rewards. Preparing the next scene...`;
+      const interimMsg: ChatMessage = {
         id: Math.random().toString(36).substr(2, 9),
         role: 'gm',
-        content: narrative,
+        content: interim,
         timestamp: Date.now(),
-        updates: { narrative: { title: 'Combat Update', content: narrative }, isPreview: true }
+        updates: { narrative: { title: 'Combat Update', content: interim }, isPreview: true }
       };
-      setMessages(prev => [...prev, gmMessage]);
+      setMessages(prev => [...prev, interimMsg]);
 
-      if (userId && character) {
-        void import('../services/firestore')
-          .then(m => m.saveAdventureMessage(userId, character.id, gmMessage))
-          .catch(e => console.warn('Failed to save combat GM message to Firestore', e));
-      }
+      // Trigger the adventure AI to continue the narrative taking combat result & brief context into account
+      (async () => {
+        try {
+          const { generateAdventureResponse } = await import('../services/geminiService');
+          // Build a small context with the combat result and recent scene summary
+          const contextObj = {
+            combatResult: payload.result,
+            rewards: payload.rewards || null,
+            finalVitals: payload.finalVitals || null,
+            location: payload.location || null
+          };
+          const systemPrompt = `You are the adventure game master. Continue the story from the player's perspective after a combat. Do not perform mechanical state changes; focus on narrative and plausible next choices.`;
+          const playerInput = `Combat ended: ${payload.result}. Continue the story.`;
+          const resp = await generateAdventureResponse(playerInput, JSON.stringify(contextObj), systemPrompt, { model: 'gemini-2.5-flash' });
+
+          const gmMessage: ChatMessage = {
+            id: Math.random().toString(36).substr(2, 9),
+            role: 'gm',
+            content: resp.narrative?.content || 'The world continues...',
+            timestamp: Date.now(),
+            updates: { narrative: resp.narrative || { title: 'After Combat', content: 'The world continues...' }, isPreview: false }
+          };
+          setMessages(prev => [...prev, gmMessage]);
+
+          if (userId && character) {
+            void import('../services/firestore')
+            .then(m => m.saveAdventureMessage(userId, character.id, gmMessage))
+            .catch(e => console.warn('Failed to save combat GM message to Firestore', e));
+          }
+        } catch (e) {
+          // Fallback to the terse message if AI fails
+          const fallback = `*Combat Resolved* — ${outcomeText} The engine has already applied loot and rewards where appropriate. ${payload.finalVitals ? 'Your vitals have been updated accordingly.' : ''}`;
+          const gmMessage: ChatMessage = {
+            id: Math.random().toString(36).substr(2, 9),
+            role: 'gm',
+            content: fallback,
+            timestamp: Date.now(),
+            updates: { narrative: { title: 'Combat Update', content: fallback }, isPreview: true }
+          };
+          setMessages(prev => [...prev, gmMessage]);
+        }
+      })();
 
       // Also surface a short UI warning so players see we applied an engine action
       setSimulationWarnings(prev => [...prev, `Combat resolved: ${payload.result}. Engine-applied rewards verified.`]);

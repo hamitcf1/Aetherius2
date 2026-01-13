@@ -3156,6 +3156,9 @@ const App: React.FC = () => {
             return { ...c, equipment: newEq };
           }));
 
+          // Also update local items immediately so UI reflects the change without waiting for debounced persistence
+          setItems(prev => prev.map(it => it.id === updated.id ? updated : it));
+
           showToast('Removed item from companion', 'success');
         }}
       />

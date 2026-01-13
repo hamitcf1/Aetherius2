@@ -1169,7 +1169,8 @@ export const executeCompanionAction = (
   allyId: string,
   abilityId: string,
   targetId?: string,
-  natRoll?: number
+  natRoll?: number,
+  isAuto?: boolean
 ): { newState: CombatState; narrative: string } => {
   let newState = { ...state };
   const ally = (newState.allies || []).find(a => a.id === allyId);
@@ -1187,7 +1188,7 @@ export const executeCompanionAction = (
   const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: target.armor, critChance: 5, natRoll });
   if (!resolved.hit) {
     const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
-    newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+    newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
     return { newState, narrative };
   }
   // Compute damage
@@ -1201,7 +1202,7 @@ export const executeCompanionAction = (
   }
 
   let narrative = `${ally.name} uses ${ability.name} and deals ${applied} damage to ${target.name}.`;
-  newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: applied, narrative, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
+  newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: applied, narrative, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now(), auto: !!isAuto });
 
   // Check victory
   const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);

@@ -506,7 +506,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (allyActor) {
         // If companion is set to auto-control, perform their default attack immediately
         if (allyActor.companionMeta?.autoControl !== false) {
-          const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll);
+          const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
           currentState = res.newState;
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
           setCombatState(currentState);
@@ -882,6 +882,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   <span className="text-stone-300">{entry.narrative}</span>
                   {entry.nat !== undefined && (
                     <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
+                  )}
+                  {entry.auto && (
+                    <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">AUTO</span>
                   )}
                 </div>
               ))}

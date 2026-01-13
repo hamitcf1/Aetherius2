@@ -70,7 +70,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                     {empoweredUnlocked ? (
                       <div className="text-xs text-stone-400 mt-1">Empowered variant available</div>
                     ) : (
-                      <div className="text-xs text-stone-500 italic mt-1">Empowered variant locked (higher level or perk required)</div>
+                      <div className="text-xs text-stone-500 italic mt-1">Empowered variant locked (requires level {((s.prerequisites?.level || 1) + 5)} or the Empower perk)</div>
                     )}
                   </div>
                   <div className="text-right">
