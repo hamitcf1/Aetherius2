@@ -18,6 +18,7 @@ import {
   calculatePlayerCombatStats,
   executePlayerAction,
   executeEnemyTurn,
+  executeCompanionAction,
   advanceTurn,
   applyTurnRegen,
   checkCombatEnd
@@ -109,9 +110,15 @@ const EnemyCard: React.FC<{
       
       {/* Enemy name and type */}
       <div className="mb-2">
-        <h4 className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
-          {enemy.name}
-        </h4>
+        <div className="flex items-center gap-2">
+          <h4 className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
+            {enemy.name}
+          </h4>
+          {/* Companion auto-control badge */}
+          {enemy.isCompanion && (enemy as any).companionMeta?.autoControl && (
+            <span className="text-xs bg-sky-600 text-black px-2 py-0.5 rounded">Auto</span>
+          )}
+        </div>
         <span className="text-xs text-stone-400 capitalize">{enemy.type} • Lv.{enemy.level}</span>
       </div>
       
@@ -231,8 +238,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
-  const [rollActor, setRollActor] = useState<'player' | 'enemy' | null>(null);
+  const [rollActor, setRollActor] = useState<'player' | 'enemy' | 'ally' | null>(null);
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
+  const [awaitingCompanionAction, setAwaitingCompanionAction] = useState(false);
   const enemyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [showDefeat, setShowDefeat] = useState(false);
@@ -253,6 +261,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Keep local inventory in sync with prop
     setLocalInventory(inventory);
   }, [inventory]);
+
+  // Recompute player combat stats whenever the local inventory or character changes
+  useEffect(() => {
+    setPlayerStats(calculatePlayerCombatStats(character, localInventory));
+  }, [localInventory, character]);
 
   // If the currently selected target dies, auto-select the next alive enemy
   useEffect(() => {
@@ -472,8 +485,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     while (currentState.active && currentState.currentTurnActor !== 'player') {
       setIsAnimating(true);
       
-      // Animate enemy d20 roll then execute enemy turn with deterministic nat roll
-      setRollActor('enemy');
+      // Animate actor d20 roll then execute turn with deterministic nat roll
+      const actorId = currentState.currentTurnActor;
+      const actorIsAlly = !!(currentState.allies || []).find(a => a.id === actorId);
+      setRollActor(actorIsAlly ? 'ally' : 'enemy');
       setShowRoll(true);
       let finalEnemyRoll = Math.floor(Math.random() * 20) + 1;
       for (let i = 0; i < 6; i++) {
@@ -485,6 +500,28 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       await new Promise(r => setTimeout(r, 220));
       setShowRoll(false);
       setRollActor(null);
+
+      // If current actor is an ally, either auto-execute their action or pause for player input
+      const allyActor = (currentState.allies || []).find(a => a.id === actorId);
+      if (allyActor) {
+        // If companion is set to auto-control, perform their default attack immediately
+        if (allyActor.companionMeta?.autoControl !== false) {
+          const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll);
+          currentState = res.newState;
+          if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+          setCombatState(currentState);
+          // Brief pause to animate companion action
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue; // proceed to next turn
+        }
+
+        // Otherwise, pause processing and let the UI await player input for companion control
+        setIsAnimating(false);
+        setAwaitingCompanionAction(true);
+        setCombatState(currentState);
+        setPlayerStats(currentPlayerStats);
+        return; // pause the processing loop
+      }
 
       const { newState, newPlayerStats, narrative } = executeEnemyTurn(
         currentState,
@@ -780,6 +817,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
         {/* Center - Enemies and combat log */}
         <div className="w-full lg:w-1/2 flex flex-col gap-4">
+          {/* Allies (companions) */}
+          {combatState.allies && combatState.allies.length > 0 && (
+            <div className="bg-stone-900/40 rounded-lg p-3 border border-stone-700 mb-3">
+              <h3 className="text-sm font-bold text-stone-400 mb-2">ALLIES</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {combatState.allies.map(ally => (
+                  <div key={ally.id} className="p-1">
+                    <EnemyCard
+                      enemy={ally}
+                      isTarget={selectedTarget === ally.id}
+                      onClick={() => setSelectedTarget(ally.id)}
+                      containerRef={(el) => { enemyRefs.current[ally.id] = el; }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Enemies */}
           <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700">
             <h3 className="text-sm font-bold text-stone-400 mb-3">ENEMIES</h3>
@@ -844,20 +900,53 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               </div>
             </div>
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {playerStats.abilities.map(ability => (
-                <ActionButton
-                  key={ability.id}
-                  ability={ability}
-                  disabled={!isPlayerTurn || isAnimating}
-                  cooldown={combatState.abilityCooldowns[ability.id] || 0}
-                  canAfford={
-                    ability.type === 'magic' 
-                      ? playerStats.currentMagicka >= ability.cost
-                      : true
-                  }
-                  onClick={() => handlePlayerAction('attack', ability.id)}
-                />
-              ))}
+              {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
+                (() => {
+                  const allyActor = combatState.allies.find(a => a.id === combatState.currentTurnActor);
+                  if (!allyActor) return null;
+                  return (
+                    <div>
+                      <div className="text-xs text-skyrim-text mb-2">Control {allyActor.name} (Companion)</div>
+                      <div className="space-y-2">
+                        {allyActor.abilities.map(ab => (
+                          <button key={ab.id} disabled={isAnimating} onClick={async () => {
+                            setIsAnimating(true);
+                            const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
+                            setCombatState(res.newState);
+                            if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                            // End companion turn and advance
+                            setAwaitingCompanionAction(false);
+                            setIsAnimating(false);
+                            setCombatState(prev => advanceTurn(prev));
+                            setTimeout(() => processEnemyTurns(), 200);
+                          }} className="w-full px-3 py-2 rounded bg-skyrim-gold text-black">{ab.name}</button>
+                        ))}
+                        <button onClick={() => {
+                          // Skip companion's turn
+                          setAwaitingCompanionAction(false);
+                          setCombatState(prev => advanceTurn(prev));
+                          setTimeout(() => processEnemyTurns(), 200);
+                        }} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Skip Companion Turn</button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                playerStats.abilities.map(ability => (
+                  <ActionButton
+                    key={ability.id}
+                    ability={ability}
+                    disabled={!isPlayerTurn || isAnimating}
+                    cooldown={combatState.abilityCooldowns[ability.id] || 0}
+                    canAfford={
+                      ability.type === 'magic' 
+                        ? playerStats.currentMagicka >= ability.cost
+                        : true
+                    }
+                    onClick={() => handlePlayerAction('attack', ability.id)}
+                  />
+                ))
+              )}
             </div>
           </div>
 
@@ -963,7 +1052,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       {/* D20 roll visual */}
       <div className="absolute left-1/2 top-16 sm:top-20 transform -translate-x-1/2 z-50 pointer-events-none">
-        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-xl sm:text-2xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : 'border-amber-500 text-amber-200'}`}>
+        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-xl sm:text-2xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : rollActor === 'ally' ? 'border-sky-500 text-sky-300' : 'border-amber-500 text-amber-200'}`}>
           {showRoll && rollValue ? (
             <span className={`animate-bounce`}>{rollValue}</span>
           ) : (

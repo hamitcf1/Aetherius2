@@ -180,6 +180,12 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                         <Star size={12} />
                       </div>
                     )}
+                    {/* Show ownership indicator when owned by a companion */}
+                    {equipped.equippedBy && equipped.equippedBy !== 'player' && (
+                      <div className="absolute top-1 left-1 text-xs bg-blue-900/60 px-1 py-0.5 rounded text-blue-200" title={`Equipped by companion (${equipped.equippedBy})`}>
+                        <Crown size={12} />
+                      </div>
+                    )}
                     {/* Unequip indicator on hover */}
                     <div className="absolute inset-0 bg-red-900/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                       <X size={20} className="text-red-300" />

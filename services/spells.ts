@@ -143,7 +143,48 @@ const STORAGE_PREFIX = 'aetherius:spells:';
 
 export const getAllSpells = (): Spell[] => Object.values(SPELL_REGISTRY);
 
-export const getSpellById = (id: string): Spell | undefined => SPELL_REGISTRY[id];
+export const getSpellById = (id: string): Spell | undefined => {
+  // Support high-level variant suffixes like 'flames:high' or 'flames_high'
+  if (!id) return undefined;
+  const parts = id.split(/[:_]/);
+  if (parts.length > 1 && (parts[1] === 'high' || parts[1] === 'empowered')) {
+    const baseId = parts[0];
+    const base = SPELL_REGISTRY[baseId];
+    if (!base) return undefined;
+    // Produce an empowered variant on the fly
+    const scale = 1.5;
+    const boosted: Spell = {
+      ...base,
+      id,
+      name: `${base.name} (Empowered)`,
+      description: `${base.description} (Empowered variant: increased potency.)`,
+      cost: Math.max(1, Math.floor((base.cost || 0) * scale)),
+      damage: base.damage ? Math.max(1, Math.floor(base.damage * scale)) : base.damage,
+      heal: base.heal ? Math.max(1, Math.floor(base.heal * scale)) : base.heal
+    };
+    return boosted;
+  }
+  return SPELL_REGISTRY[id];
+};
+
+// Determine whether a spell variant (e.g., ':high') is unlocked for a character
+export const isSpellVariantUnlocked = (character: { level: number; perks?: any[] } | null | undefined, id: string): boolean => {
+  if (!character) return false;
+  if (!id) return false;
+  const parts = id.split(/[:_]/);
+  if (parts.length === 1) return true;
+  const variant = parts[1];
+  if (!(variant === 'high' || variant === 'empowered')) return true;
+  const baseId = parts[0];
+  const base = SPELL_REGISTRY[baseId];
+  if (!base) return false;
+  // Unlock if character has explicit perk 'empower_spells'
+  const hasPerk = Array.isArray(character.perks) && character.perks.some((p: any) => p && (p.id === 'empower_spells' || p.id === 'empower_magic'));
+  if (hasPerk) return true;
+  // Otherwise require a sufficiently higher level (base prereq + 5)
+  const req = (base.prerequisites?.level || 1) + 5;
+  return (character.level || 0) >= req;
+};
 
 export const getLearnedSpellIds = (characterId: string): string[] => {
   try {

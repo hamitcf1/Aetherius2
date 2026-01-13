@@ -37,7 +37,7 @@ export default function RestModal({ open, onClose, onRest, hasBedroll }: Props) 
 
         <div className="mb-4">
           <label className="text-xs text-skyrim-text">Hours to rest</label>
-          <input type="range" min={1} max={24} value={hours} onChange={e => setHours(Number(e.target.value))} />
+          <input type="range" min={1} max={24} value={hours} onChange={e => setHours(Number(e.target.value))} className="w-full accent-skyrim-gold" />
           <div className="text-sm text-skyrim-text mt-1">{hours} hour{hours!==1?'s':''} ({hours*60} minutes)</div>
         </div>
 

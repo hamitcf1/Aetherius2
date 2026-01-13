@@ -89,7 +89,7 @@ export const finalizeLoot = (
   state: CombatState,
   selectedItems: Array<{ name: string; quantity: number }> | null,
   currentInventory: InventoryItem[]
-): { newState: CombatState; updatedInventory: InventoryItem[]; grantedXp: number; grantedGold: number; grantedItems: Array<{ name: string; type: string; description: string; quantity: number }> } => {
+): { newState: CombatState; updatedInventory: InventoryItem[]; grantedXp: number; grantedGold: number; grantedItems: Array<{ name: string; type: string; description: string; quantity: number }>; companionXp?: Array<{ companionId: string; xp: number }> } => {
   let newState = { ...state };
   const grantedItems: Array<{ name: string; type: string; description: string; quantity: number }> = [];
   let updatedInventory = [...currentInventory];
@@ -133,9 +133,19 @@ export const finalizeLoot = (
   const grantedXp = Math.max(0, newState.pendingRewards?.xp || 0);
   const grantedGold = Math.max(0, newState.pendingRewards?.gold || 0);
 
+  // Compute companion XP distribution from defeated enemies' XP, split evenly among participating companions
+  const defeated = (state.enemies || []).filter(e => e.currentHealth <= 0);
+  const totalEnemyXp = defeated.reduce((s, e) => s + computeEnemyXP(e), 0);
+  const companionIds = (state.allies || []).filter(a => a.isCompanion && a.companionMeta && a.companionMeta.companionId).map(a => a.companionMeta!.companionId);
+  const companionXp: Array<{ companionId: string; xp: number }> = [];
+  if (companionIds.length > 0 && totalEnemyXp > 0) {
+    const per = Math.max(1, Math.floor(totalEnemyXp / companionIds.length));
+    companionIds.forEach(cid => companionXp.push({ companionId: cid, xp: per }));
+  }
+
   // Mark rewards applied and persist transaction id so external systems can deduplicate
   const txnId = getTransactionLedger().generateTransactionId();
-  newState.rewards = { xp: grantedXp, gold: grantedGold, items: grantedItems, transactionId: txnId, combatId: newState.id };
+  newState.rewards = { xp: grantedXp, gold: grantedGold, items: grantedItems, transactionId: txnId, combatId: newState.id, companionXp };
   newState.result = 'victory';
   newState.rewardsApplied = true;
   newState.completed = true;

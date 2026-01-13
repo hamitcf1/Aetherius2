@@ -353,7 +353,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [recentlyPurchased, setRecentlyPurchased] = useState<Set<string>>(new Set());
   const [recentlySold, setRecentlySold] = useState<Set<string>>(new Set());
-  const [shopSort, setShopSort] = useState<'name' | 'price' | 'damage'>('name');
+  const [shopSort, setShopSort] = useState<string>('name:asc');
   const { showQuantityControls } = useAppContext();
 
   // Handle ESC key to close
@@ -397,16 +397,52 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
       return matchesCategory && matchesSearch;
     });
 
-    // Apply sorting
+    // Apply sorting (supports direction `key:asc` / `key:desc` and weight)
     const withStats = base.map(b => ({
       item: b,
       damage: getItemStats(b.name, b.type).damage || 0
     }));
 
+    const parseShopSort = (s: string) => {
+      const parts = (s || '').split(':');
+      return { key: parts[0] || 'name', dir: parts[1] === 'desc' ? 'desc' : 'asc' };
+    };
+
+    const getWeight = (it: ShopItem) => {
+      const n = it.name.toLowerCase();
+      if (it.type === 'weapon') {
+        if (n.includes('dagger')) return 1;
+        if (n.includes('arrow')) return 2;
+        if (n.includes('bow')) return 6;
+        if (n.includes('greatsword') || n.includes('warhammer') || n.includes('battleaxe') || n.includes('great sword')) return 12;
+        if (n.includes('sword') || n.includes('axe') || n.includes('mace')) return 6;
+        return 5;
+      }
+      if (it.type === 'apparel') {
+        if (n.includes('boots') || n.includes('gloves') || n.includes('helmet')) return 3;
+        if (n.includes('cloak') || n.includes('robe') || n.includes('tunic') || n.includes('shirt')) return 2;
+        if (n.includes('armor') || n.includes('plate') || n.includes('shield')) return 12;
+        return 4;
+      }
+      if (it.type === 'camping') {
+        if (n.includes('tent')) return 8;
+        if (n.includes('bedroll')) return 5;
+        return 3;
+      }
+      if (it.type === 'food' || it.type === 'drink') return 1;
+      if (it.type === 'potion' || it.type === 'ingredient' || it.type === 'misc' || it.category === 'Jewelry') return 1;
+      return 1;
+    };
+
+    const parsedShopSort = parseShopSort(shopSort);
+
     withStats.sort((a, b) => {
-      if (shopSort === 'price') return b.item.price - a.item.price;
-      if (shopSort === 'damage') return (b.damage || 0) - (a.damage || 0);
-      return a.item.name.localeCompare(b.item.name);
+      const dir = parsedShopSort.dir === 'desc' ? -1 : 1;
+      const key = parsedShopSort.key;
+      if (key === 'price') return dir * (a.item.price - b.item.price);
+      if (key === 'damage') return dir * ((a.damage || 0) - (b.damage || 0));
+      if (key === 'weight') return dir * (getWeight(a.item) - getWeight(b.item));
+      return dir * a.item.name.localeCompare(b.item.name);
     });
 
     return withStats.map(w => w.item);
@@ -566,11 +602,13 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                 <div className="text-xs text-skyrim-text">Sort:</div>
                 <SortSelector
                   currentSort={shopSort}
-                  onSelect={(s) => setShopSort(s as any)}
+                  onSelect={(s) => setShopSort(s)}
+                  allowDirection={true}
                   options={[
                     { id: 'name', label: 'Name' },
                     { id: 'price', label: 'Price' },
-                    { id: 'damage', label: 'Damage' }
+                    { id: 'damage', label: 'Damage' },
+                    { id: 'weight', label: 'Weight' }
                   ]}
                   label="Sort"
                 />

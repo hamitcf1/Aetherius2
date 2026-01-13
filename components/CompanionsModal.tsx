@@ -63,7 +63,10 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
       mood: 'neutral',
       cost: typeof cost === 'number' && cost > 0 ? cost : undefined,
       behavior: behavior || 'idle',
-      autoLoot: !!autoLoot
+      autoLoot: !!autoLoot,
+      autoControl: true,
+      xp: 0,
+      subclass: 'warrior'
     };
 
     onAdd(c);
@@ -111,6 +114,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
                 <button onClick={() => onRemove(c.id)} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
                 <button onClick={() => onUpdate({ ...c, behavior: c.behavior === 'follow' ? 'guard' : 'follow' })} className="px-2 py-1 rounded bg-skyrim-paper/30 text-skyrim-text text-xs" title="Toggle Follow/Guard">{c.behavior === 'follow' ? 'Following' : c.behavior === 'guard' ? 'Guarding' : 'Idle'}</button>
                 <button onClick={() => onUpdate({ ...c, autoLoot: !c.autoLoot })} className={`px-2 py-1 rounded text-xs ${c.autoLoot ? 'bg-yellow-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-loot">{c.autoLoot ? 'Auto-loot: On' : 'Auto-loot: Off'}</button>
+                <button onClick={() => onUpdate({ ...c, autoControl: !c.autoControl })} className={`px-2 py-1 rounded text-xs ${c.autoControl ? 'bg-sky-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-control">{c.autoControl ? 'Auto: On' : 'Auto: Off'}</button>
                 <button onClick={() => onTalk && onTalk(c)} className="px-2 py-1 rounded bg-blue-700 text-white text-xs">Talk</button>
                 <button onClick={() => setSelectedEquipCompanion(c)} className="px-2 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs">Manage Equipment</button>
               </div>
@@ -132,7 +136,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
               <DropdownSelector currentValue={behavior} onSelect={(v) => setBehavior(v as any)} options={[{ id: 'idle', label: 'Idle' }, { id: 'follow', label: 'Follow' }, { id: 'guard', label: 'Guard' }]} placeholder="Behavior" />
             </div>
             <div>
-              <label className="flex items-center gap-2 text-xs text-skyrim-text mt-1"><input type="checkbox" checked={autoLoot} onChange={(e) => setAutoLoot(e.target.checked)} /> Auto-loot</label>
+              <label className="flex items-center gap-2 text-xs text-skyrim-text mt-1"><input type="checkbox" className="w-4 h-4 accent-skyrim-gold" checked={autoLoot} onChange={(e) => setAutoLoot(e.target.checked)} /> Auto-loot</label>
             </div>
           </div>
           <div className="flex gap-2">

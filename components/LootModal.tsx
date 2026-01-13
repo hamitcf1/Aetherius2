@@ -57,7 +57,7 @@ export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onC
               <div className="flex flex-col gap-1">
                 {p.loot.map((l, idx) => (
                   <label key={idx} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={!!selected[l.name]} onChange={() => toggleItem(l.name, l.quantity)} />
+                    <input type="checkbox" className="w-4 h-4 accent-skyrim-gold" checked={!!selected[l.name]} onChange={() => toggleItem(l.name, l.quantity)} />
                     <span className="flex-1">{l.name} <span className="text-stone-400 text-xs">x{l.quantity}</span></span>
                     <span className="text-xs text-stone-400">{l.rarity || ''}</span>
                   </label>

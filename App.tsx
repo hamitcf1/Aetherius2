@@ -102,6 +102,7 @@ import { updateMusicForContext, AmbientContext, audioService, playMusic } from '
 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
 import { getRateLimitStats, generateAdventureResponse } from './services/geminiService';
 import { learnSpell, getSpellById } from './services/spells';
+import { applyCompanionXp } from './services/companionsService';
 import type { ShopItem } from './components/ShopModal';
 import { getDefaultSlotForItem } from './components/EquipmentHUD';
 import BonfireMenu from './components/BonfireMenu';
@@ -2326,6 +2327,9 @@ const App: React.FC = () => {
                    armor: existing.armor ?? rawItem.armor,
                    damage: existing.damage ?? rawItem.damage,
                    value: existing.value ?? rawItem.value,
+                   // Preserve or apply equipped state and ownership when provided in the update
+                   equipped: rawItem.equipped ?? existing.equipped ?? false,
+                   equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
                    slot: existing.slot ?? rawItem.slot,
                  }) as InventoryItem;
                  next[idx] = updated;
@@ -2339,7 +2343,8 @@ const App: React.FC = () => {
                    subtype: rawItem.subtype,
                    description: rawItem.description || '',
                    quantity: addQty,
-                   equipped: false,
+                   equipped: rawItem.equipped ?? false,
+                   equippedBy: rawItem.equippedBy ?? null,
                    armor: rawItem.armor,
                    damage: rawItem.damage,
                    value: rawItem.value,
@@ -3124,6 +3129,14 @@ const App: React.FC = () => {
           // Assign
           const updated = { ...item, equipped: true, slot: slot || item.slot, equippedBy: companionId };
           (window as any).app?.handleGameUpdate?.({ newItems: [updated] });
+
+          // Update companion equipment mapping so companion state reflects the change
+          setCompanions(prev => prev.map(c => {
+            if (c.id !== companionId) return c;
+            const slotKey = (slot || item.slot || getDefaultSlotForItem(item)) as any;
+            return { ...c, equipment: { ...(c.equipment || {}), [slotKey]: updated.id } };
+          }));
+
           showToast('Assigned item to companion', 'success');
         }}
         onUnassignItemFromCompanion={(itemId: string) => {
@@ -3131,8 +3144,18 @@ const App: React.FC = () => {
           const item = items.find(i => i.id === itemId);
           if (!item) { showToast('Item not found', 'error'); return; }
           if (!item.equippedBy || item.equippedBy === 'player') { showToast('Item not assigned to a companion', 'warning'); return; }
+          const ownerId = item.equippedBy as string;
           const updated = { ...item, equipped: false, slot: undefined, equippedBy: null };
           (window as any).app?.handleGameUpdate?.({ newItems: [updated] });
+
+          // Remove reference from the companion equipment mapping (if present)
+          setCompanions(prev => prev.map(c => {
+            if (c.id !== ownerId) return c;
+            const newEq = { ...(c.equipment || {}) } as Record<string, any>;
+            Object.keys(newEq).forEach(k => { if (newEq[k] === itemId) newEq[k] = null; });
+            return { ...c, equipment: newEq };
+          }));
+
           showToast('Removed item from companion', 'success');
         }}
       />
@@ -3342,6 +3365,20 @@ const App: React.FC = () => {
                   } : undefined,
                   timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
                 });
+
+                // Apply companion XP if provided
+                if ((rewards as any).companionXp && Array.isArray((rewards as any).companionXp)) {
+                  (rewards as any).companionXp.forEach((cp: any) => {
+                    const found = companions.find(c => c.id === cp.companionId);
+                    if (found) {
+                      // Apply XP and level ups using helper
+                      const updated = applyCompanionXp(found, cp.xp);
+                      updateCompanion(updated);
+                      showToast?.(`${found.name} gained ${cp.xp} XP and is now Lv ${updated.level}`, 'success');
+                    }
+                  });
+                }
+
               } else if (result === 'defeat') {
                 handleGameUpdate({
                   narrative: {

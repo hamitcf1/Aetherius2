@@ -182,7 +182,8 @@ export const calculatePlayerCombatStats = (
   equipment: InventoryItem[]
 ): PlayerCombatStats => {
   const validatedEquipment = validateShieldEquipping(equipment);
-  const equippedItems = validatedEquipment.filter(item => item.equipped);
+  // Only consider items actually equipped by the player (not companions)
+  const equippedItems = validatedEquipment.filter(item => item.equipped && (!item.equippedBy || item.equippedBy === 'player'));
   
   // Base stats from character
   let armor = 0;
@@ -456,8 +457,8 @@ export const initializeCombat = (
   }));
 
   // If companions are provided, include companions as allied combatants when their behavior indicates participation
-  const companionEnemies: CombatEnemy[] = (companions || []).filter(c => c && (c.behavior === 'follow' || c.behavior === 'guard')).map((c, idx) => ({
-    id: `comp_${c.id}_${Date.now()}_${idx}`,
+  const companionAllies: CombatEnemy[] = (companions || []).filter(c => c && (c.behavior === 'follow' || c.behavior === 'guard')).map((c, idx) => ({
+    id: `ally_${c.id}_${Date.now()}_${idx}`,
     name: c.name,
     type: 'humanoid',
     level: c.level || 1,
@@ -470,7 +471,7 @@ export const initializeCombat = (
     isCompanion: true,
     xpReward: 0,
     // Keep a reference to original companion so we can access autoLoot later
-    companionMeta: { companionId: c.id, autoLoot: !!c.autoLoot }
+    companionMeta: { companionId: c.id, autoLoot: !!c.autoLoot, autoControl: c.autoControl !== false }
   }));
 
   // Calculate turn order (player first unless ambushed)
@@ -479,10 +480,10 @@ export const initializeCombat = (
     : ['player', ...initializedEnemies.map(e => e.id)];
 
   // Insert companions at the end of turn order so they act after player and enemies typically
-  const finalTurnOrder = [...turnOrder, ...companionEnemies.map(c => c.id)];
+  const finalTurnOrder = [...turnOrder, ...companionAllies.map(c => c.id)];
 
-  // Merge companionEnemies into enemies list for combat state
-  const allEnemies = [...initializedEnemies, ...companionEnemies];
+  // Keep enemies and allies separate
+  const allEnemies = [...initializedEnemies];
 
   return {
     id: `combat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
@@ -493,6 +494,7 @@ export const initializeCombat = (
     currentTurnActor: finalTurnOrder[0],
     turnOrder: finalTurnOrder,
     enemies: allEnemies,
+    allies: companionAllies,
     location,
     fleeAllowed,
     surrenderAllowed,
@@ -615,17 +617,26 @@ export const executePlayerAction = (
         }
       }
 
-      // Find target
-      const target = targetId 
-        ? newState.enemies.find(e => e.id === targetId)
-        : newState.enemies.find(e => e.currentHealth > 0);
-      
+      // Find target (search enemies first, then allies)
+      const targetById = targetId ? (newState.enemies.find(e => e.id === targetId) || (newState.allies || []).find(a => a.id === targetId)) : null;
+      const defaultTarget = newState.enemies.find(e => e.currentHealth > 0);
+      const target = targetById || defaultTarget;
+      const targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
+
       if (!target) {
         narrative = 'No valid target!';
         break;
       }
 
-      // Prevent acting on defeated enemies
+      // Disallow targeting allies with damaging abilities
+      const isHealingAbility = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal')));
+      if (targetIsAlly && !isHealingAbility) {
+        narrative = `${ability.name} cannot be used on allies!`;
+        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+        break;
+      }
+
+      // Prevent acting on defeated targets
       if (target.currentHealth <= 0) {
         narrative = `${target.name} is already defeated!`;
         newState.combatLog.push({
@@ -645,17 +656,17 @@ export const executePlayerAction = (
       const attackerLvl = character?.level || playerStats.maxHealth ? Math.max(1, Math.floor((character?.level || 10))) : 10;
       let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
 
-      // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure)
-      if (!attackResolved.hit && attackResolved.rollTier === 'fail') {
+      // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure or miss)
+      if (!attackResolved.hit && (attackResolved.rollTier === 'fail' || attackResolved.rollTier === 'miss')) {
         const hasRerollPerk = !!(character && (character.perks || []).find((p: any) => p.id === 'reroll_on_failure' && (p.rank || 0) > 0));
+        const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : 'miss';
         if (hasRerollPerk) {
           // Reroll once automatically
           const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
-          // Log both rolls (first failed, second result)
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (critical failure) - rerolling...`, timestamp: Date.now() });
+          // Log both rolls (first failed/missed, second result)
+          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
           attackResolved = second;
         } else {
-          const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : 'miss';
           narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
           newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
           break;
@@ -677,12 +688,20 @@ export const executePlayerAction = (
       const resisted = ability.type === 'magic' && target.resistances?.includes('magic');
       const appliedDamage = resisted ? Math.floor(finalDamage * 0.5) : finalDamage;
 
-      // Apply damage
-      const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
-      newState.enemies[enemyIndex] = {
-        ...target,
-        currentHealth: Math.max(0, target.currentHealth - appliedDamage)
-      };
+      // Apply damage to the correct list (enemies or allies)
+      if (targetIsAlly) {
+        const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+        if (allyIndex >= 0) {
+          newState.allies = [ ...(newState.allies || []) ];
+          newState.allies[allyIndex] = { ...target, currentHealth: Math.max(0, target.currentHealth - appliedDamage) };
+        }
+      } else {
+        const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+        if (enemyIndex >= 0) {
+          newState.enemies = [ ...newState.enemies ];
+          newState.enemies[enemyIndex] = { ...target, currentHealth: Math.max(0, target.currentHealth - appliedDamage) };
+        }
+      }
 
       // Set cooldown
       if (ability.cooldown) {
@@ -934,25 +953,29 @@ export const executeEnemyTurn = (
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
   
-  const enemy = newState.enemies.find(e => e.id === enemyId);
-  if (!enemy || enemy.currentHealth <= 0) {
+  // Find actor (enemy or ally) by id
+  const actor = (newState.enemies || []).find(e => e.id === enemyId) || (newState.allies || []).find(a => a.id === enemyId);
+  if (!actor || actor.currentHealth <= 0) {
     return { newState, newPlayerStats, narrative: '' };
   }
 
-  // Process enemy status effects (dot and stun). Use a loop so we can early-return on stun, and still decrement durations.
+  // If this is an ally (companion), run ally-support AI which targets enemies rather than player
+  const isAlly = !!actor.isCompanion;
+
+  // Process actor status effects (dot and stun). Use a loop so we can early-return on stun, and still decrement durations.
   let isStunned = false;
-  if (enemy.activeEffects && enemy.activeEffects.length > 0) {
-    for (const ae of enemy.activeEffects) {
+  if (actor.activeEffects && actor.activeEffects.length > 0) {
+    for (const ae of actor.activeEffects) {
       if (ae.effect.type === 'dot') {
         const dotDamage = ae.effect.value;
-        enemy.currentHealth = Math.max(0, enemy.currentHealth - dotDamage);
+        actor.currentHealth = Math.max(0, actor.currentHealth - dotDamage);
       } else if (ae.effect.type === 'stun' && ae.turnsRemaining > 0) {
-        // Enemy is stunned; record it and log
+        // Actor is stunned; record it and log
         newState.combatLog.push({
           turn: newState.turn,
-          actor: enemy.name,
+          actor: actor.name,
           action: 'stunned',
-          narrative: `${enemy.name} is stunned and cannot act!`,
+          narrative: `${actor.name} is stunned and cannot act!`,
           timestamp: Date.now()
         });
         isStunned = true;
@@ -960,25 +983,26 @@ export const executeEnemyTurn = (
     }
 
     // Decrement effect durations (applies even if stunned)
-    enemy.activeEffects = enemy.activeEffects
+    actor.activeEffects = actor.activeEffects
       .map(ae => ({ ...ae, turnsRemaining: ae.turnsRemaining - 1 }))
       .filter(ae => ae.turnsRemaining > 0);
 
     // If stunned, skip the rest of this turn
     if (isStunned) {
-      return { newState, newPlayerStats, narrative: `${enemy.name} is stunned and skips their turn.` };
+      return { newState, newPlayerStats, narrative: `${actor.name} is stunned and skips their turn.` };
     }
   }
 
   // Choose ability based on behavior
   let chosenAbility: CombatAbility;
-  const availableAbilities = enemy.abilities.filter(a => {
+  const availableAbilities = actor.abilities.filter(a => {
     // Disallow magic if not enough magicka, but allow melee even with low stamina
-    if (a.type === 'magic' && enemy.currentMagicka && enemy.currentMagicka < a.cost) return false;
+    if (a.type === 'magic' && actor.currentMagicka && actor.currentMagicka < a.cost) return false;
     return true;
   });
 
-  switch (enemy.behavior) {
+  const behaviorSource = actor.behavior || 'tactical';
+  switch (behaviorSource) {
     case 'aggressive':
     case 'berserker':
       // Pick highest damage ability
@@ -1006,7 +1030,7 @@ export const executeEnemyTurn = (
       id: 'basic', 
       name: 'Attack', 
       type: 'melee', 
-      damage: enemy.damage, 
+      damage: actor.damage, 
       cost: 0, 
       description: 'Basic attack' 
     };
@@ -1014,39 +1038,39 @@ export const executeEnemyTurn = (
 
   // Avoid repeating the exact same ability if other options exist
   newState.lastActorActions = newState.lastActorActions || {};
-  const recent = newState.lastActorActions[enemy.id] || [];
+  const recent = newState.lastActorActions[actor.id] || [];
   if (availableAbilities.length > 1 && recent[0] && chosenAbility && recent.includes(chosenAbility.id)) {
     const alt = availableAbilities.find(a => !recent.includes(a.id));
     if (alt) chosenAbility = alt;
   }
 
 
-  // Resolve enemy attack via d20 + attack bonus
-  const attackBonus = Math.max(0, Math.floor(enemy.damage / 8));
-  const resolved = resolveAttack({ attackerLevel: enemy.level, attackBonus, targetArmor: playerStats.armor, targetDodge: playerStats.dodgeChance, critChance: 10, natRoll });
+  // Resolve enemy/actor attack via d20 + attack bonus
+  const attackBonus = Math.max(0, Math.floor(actor.damage / 8));
+  const resolved = resolveAttack({ attackerLevel: actor.level, attackBonus, targetArmor: playerStats.armor, targetDodge: playerStats.dodgeChance, critChance: 10, natRoll });
 
-  // If stamina is low, scale enemy melee damage instead of preventing the attack
+  // If stamina is low, scale melee damage instead of preventing the attack
   let appliedDamage = 0;
   let hitLocation = 'torso';
   if (!resolved.hit) {
     appliedDamage = 0;
   } else {
-    let enemyStaminaMultiplier = 1;
-    const enemyEffectiveCost = adjustAbilityCost(undefined, chosenAbility);
+    let staminaMultiplier = 1;
+    const effectiveCost = adjustAbilityCost(undefined, chosenAbility);
     if (chosenAbility.type === 'melee') {
-      const avail = enemy.currentStamina || 0;
-      if (avail <= 0) enemyStaminaMultiplier = 0.25;
-      else if (avail < (enemyEffectiveCost || 0)) enemyStaminaMultiplier = Math.max(0.25, avail / (enemyEffectiveCost || 1));
-      enemy.currentStamina = Math.max(0, (enemy.currentStamina || 0) - Math.min(enemyEffectiveCost || 0, avail));
+      const avail = actor.currentStamina || 0;
+      if (avail <= 0) staminaMultiplier = 0.25;
+      else if (avail < (effectiveCost || 0)) staminaMultiplier = Math.max(0.25, avail / (effectiveCost || 1));
+      actor.currentStamina = Math.max(0, (actor.currentStamina || 0) - Math.min(effectiveCost || 0, avail));
     } else if (chosenAbility.type === 'magic') {
-      if (enemy.currentMagicka && enemy.currentMagicka >= (enemyEffectiveCost || 0)) {
-        enemy.currentMagicka = Math.max(0, enemy.currentMagicka - (enemyEffectiveCost || 0));
+      if (actor.currentMagicka && actor.currentMagicka >= (effectiveCost || 0)) {
+        actor.currentMagicka = Math.max(0, actor.currentMagicka - (effectiveCost || 0));
       }
     }
 
-    const base = (chosenAbility.damage || enemy.damage) * enemyStaminaMultiplier;
+    const base = (chosenAbility.damage || actor.damage) * staminaMultiplier;
     const scaledBase = Math.max(1, Math.floor(base));
-    const rollRes = computeDamageFromNat(scaledBase, enemy.level, resolved.natRoll, resolved.rollTier, resolved.isCrit);
+    const rollRes = computeDamageFromNat(scaledBase, actor.level, resolved.natRoll, resolved.rollTier, resolved.isCrit);
     hitLocation = rollRes.hitLocation;
     // Apply armor reduction
     const armorReduction = playerStats.armor / (playerStats.armor + 100);
@@ -1065,18 +1089,52 @@ export const executeEnemyTurn = (
     appliedDamage = Math.floor(appliedDamage * 0.5);
   }
 
+  // If this actor is an ally, target a selected enemy and apply damage to them; allies shouldn't damage the player
+  if (isAlly) {
+    // pick a target enemy (default: first alive)
+    const target = (newState.enemies || []).find(e => e.currentHealth > 0);
+    if (!target) {
+      narrative = `${actor.name} has no valid targets.`;
+      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: 'wait', narrative, timestamp: Date.now() });
+      return { newState, newPlayerStats, narrative };
+    }
+
+    // Compute damage similarly to enemy attack but against the enemy target
+    let narrativeLocal = `${actor.name} uses ${chosenAbility.name}`;
+    if (!resolved.hit) {
+      narrativeLocal += ` and rolls ${resolved.natRoll} (${resolved.rollTier}), missing ${target.name}.`;
+    } else {
+      let dmg = appliedDamage;
+      // Apply to target
+      target.currentHealth = Math.max(0, (target.currentHealth || 0) - dmg);
+      narrativeLocal += ` and deals ${dmg} damage to ${target.name}!`;
+      if (target.currentHealth <= 0) narrativeLocal += ` ${target.name} is defeated!`;
+    }
+
+    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: target.name, damage: resolved.hit ? appliedDamage : 0, narrative: narrativeLocal, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
+
+    // If all enemies defeated, mark victory
+    const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);
+    if (!anyAlive) {
+      newState.result = 'victory';
+      newState.active = false;
+    }
+
+    return { newState, newPlayerStats, narrative: narrativeLocal };
+  }
+
   // Apply damage to player
   newPlayerStats.currentHealth = Math.max(0, newPlayerStats.currentHealth - appliedDamage);
 
   // Build narrative
-  let narrative = `${enemy.name} uses ${chosenAbility.name}`;
+  let narrative = `${actor.name} uses ${chosenAbility.name}`;
   if (!resolved.hit) {
     narrative += ` and rolls ${resolved.natRoll} (${resolved.rollTier}), missing you.`;
   } else if (appliedDamage === 0) {
     narrative += ` but you avoid the attack!`;
   } else {
     narrative += ` and deals ${appliedDamage} damage to your ${hitLocation}!`;
-    if (resolved.isCrit) narrative = `${enemy.name} lands a CRITICAL HIT with ${chosenAbility.name} for ${appliedDamage} damage!`;
+    if (resolved.isCrit) narrative = `${actor.name} lands a CRITICAL HIT with ${chosenAbility.name} for ${appliedDamage} damage!`;
   }
 
   if (newPlayerStats.currentHealth <= 0) {
@@ -1088,7 +1146,7 @@ export const executeEnemyTurn = (
   // Log
   newState.combatLog.push({
     turn: newState.turn,
-    actor: enemy.name,
+    actor: actor.name,
     action: chosenAbility.name,
     target: 'player',
     damage: appliedDamage,
@@ -1099,10 +1157,60 @@ export const executeEnemyTurn = (
     timestamp: Date.now()
   });
 
-  // Record enemy last action
-  newState.lastActorActions[enemy.id] = [chosenAbility.id, ...(newState.lastActorActions[enemy.id] || [])].slice(0, 4);
+  // Record actor last action
+  newState.lastActorActions[actor.id] = [chosenAbility.id, ...(newState.lastActorActions[actor.id] || [])].slice(0, 4);
 
   return { newState, newPlayerStats, narrative };
+};
+
+// Execute a companion/ally action chosen by player (manual control)
+export const executeCompanionAction = (
+  state: CombatState,
+  allyId: string,
+  abilityId: string,
+  targetId?: string,
+  natRoll?: number
+): { newState: CombatState; narrative: string } => {
+  let newState = { ...state };
+  const ally = (newState.allies || []).find(a => a.id === allyId);
+  if (!ally) return { newState, narrative: 'Companion not found' };
+
+  const ability = ally.abilities.find(a => a.id === abilityId) || ally.abilities[0];
+  if (!ability) return { newState, narrative: `${ally.name} has no usable abilities.` };
+
+  // Pick target (enemy only)
+  const target = targetId ? newState.enemies.find(e => e.id === targetId) : newState.enemies.find(e => e.currentHealth > 0);
+  if (!target) return { newState, narrative: 'No valid target' };
+
+  // Resolve attack
+  const attackBonus = Math.max(0, Math.floor((ally.damage || 4) / 8));
+  const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: target.armor, critChance: 5, natRoll });
+  if (!resolved.hit) {
+    const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
+    newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+    return { newState, narrative };
+  }
+  // Compute damage
+  const { damage } = computeDamageFromNat((ability.damage || ally.damage || 4), ally.level, resolved.natRoll, resolved.rollTier, resolved.isCrit);
+  const armorReduction = target.armor / (target.armor + 100);
+  const applied = Math.max(1, Math.floor(damage * (1 - armorReduction)));
+  const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+  if (enemyIndex >= 0) {
+    newState.enemies = [...newState.enemies];
+    newState.enemies[enemyIndex] = { ...target, currentHealth: Math.max(0, target.currentHealth - applied) };
+  }
+
+  let narrative = `${ally.name} uses ${ability.name} and deals ${applied} damage to ${target.name}.`;
+  newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: applied, narrative, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
+
+  // Check victory
+  const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);
+  if (!anyAlive) {
+    newState.result = 'victory';
+    newState.active = false;
+  }
+
+  return { newState, narrative };
 };
 
 // ============================================================================
@@ -1120,8 +1228,10 @@ export const advanceTurn = (state: CombatState): CombatState => {
   while (nextIndex !== currentIndex) {
     const nextActor = newState.turnOrder[nextIndex];
     if (nextActor === 'player') break;
-    const enemy = newState.enemies.find(e => e.id === nextActor);
-    if (enemy && enemy.currentHealth > 0) break;
+    const nextEnemy = (newState.enemies || []).find(e => e.id === nextActor);
+    const nextAlly = (newState.allies || []).find(a => a.id === nextActor);
+    const isAliveActor = (nextEnemy && nextEnemy.currentHealth > 0) || (nextAlly && nextAlly.currentHealth > 0);
+    if (isAliveActor) break;
     nextIndex = (nextIndex + 1) % newState.turnOrder.length;
   }
   

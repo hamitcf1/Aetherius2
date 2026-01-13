@@ -516,6 +516,8 @@ export interface CombatState {
   currentTurnActor: 'player' | string; // 'player' or enemy id
   turnOrder: string[]; // IDs in initiative order
   enemies: CombatEnemy[];
+  // Allied non-player combatants (companions, summons)
+  allies?: CombatEnemy[];
   location: string;
   fleeAllowed: boolean;
   surrenderAllowed: boolean;
@@ -669,6 +671,11 @@ export interface Companion {
   behavior?: 'idle' | 'follow' | 'guard';
   // If true, companion may pick up loot automatically after combat
   autoLoot?: boolean;
+  // If true, companion will perform actions automatically in combat (auto-control). If false, player must choose actions manually
+  autoControl?: boolean;
+  // Experience & progression for companions
+  xp?: number; // accumulated XP
+  subclass?: string; // e.g., 'warrior', 'mage', 'ranger'
   // Equipped items mapping (slot -> itemId). Items remain in player's inventory; ownership recorded on item via InventoryItem.equippedBy
   equipment?: Partial<Record<EquipmentSlot, string | null>>;
 }
