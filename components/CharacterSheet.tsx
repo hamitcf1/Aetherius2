@@ -8,6 +8,7 @@ import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { DropdownSelector, getEasterEggName } from './GameFeatures';
 import SpellsModal from './SpellsModal';
 import { getSpellById } from '../services/spells';
+import { useAppContext } from '../AppContext';
 
 interface CharacterSheetProps {
   character: Character;
@@ -192,6 +193,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingProfileImage, setIsGeneratingProfileImage] = useState(false);
   const [spellsOpen, setSpellsOpen] = useState(false);
+  const appCtx = useAppContext();
   
   // Survival modal states
   const [restModalOpen, setRestModalOpen] = useState(false);
@@ -643,6 +645,19 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               </div>
             </div>
 
+
+
+          {/* Perk Points Summary */}
+          <div className="mb-4 p-3 bg-skyrim-paper/30 border border-skyrim-border rounded flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-skyrim-text uppercase">Perk Points</div>
+              <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
+            </div>
+            <div>
+              <button onClick={() => onOpenPerkTree ? onOpenPerkTree() : null} className="px-3 py-1 rounded border border-skyrim-border hover:border-skyrim-gold text-sm">Open Perk Tree</button>
+            </div>
+          </div>
+
           {/* Max Stats Section (Toggleable - Character Creation) */}
           <div className="mb-6">
             <button 
@@ -684,17 +699,6 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 />
               </div>
             )}
-          </div>
-
-          {/* Perk Points Summary */}
-          <div className="mb-4 p-3 bg-skyrim-paper/30 border border-skyrim-border rounded flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-skyrim-text uppercase">Perk Points</div>
-              <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
-            </div>
-            <div>
-              <button onClick={() => onOpenPerkTree ? onOpenPerkTree() : null} className="px-3 py-1 rounded border border-skyrim-border hover:border-skyrim-gold text-sm">Open Perk Tree</button>
-            </div>
           </div>
 
           {/* Current Vitals (for Adventure) */}
@@ -940,6 +944,14 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 onChange={(v) => updateCharacter('identity', v)} 
                 placeholder="Who are they at their core? A lost noble? A vengeful orphan?"
             />
+            <div className="flex justify-end mb-4 gap-2">
+              <button onClick={() => setSpellsOpen(true)} className="px-3 py-1 bg-blue-800 text-white rounded flex items-center gap-2">
+                <Zap /> Spells
+              </button>
+              <button onClick={() => { try { appCtx.openCompanions(); } catch (e) { (window as any).app?.openCompanions?.(); } }} className="px-3 py-1 bg-amber-700 text-white rounded flex items-center gap-2">
+                <User /> Manage Companions
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <TextAreaField label="Psychology" value={character.psychology} onChange={(v) => updateCharacter('psychology', v)} placeholder="Mental state, personality quirks..." />
                 <TextAreaField label="Moral Code" value={character.moralCode} onChange={(v) => updateCharacter('moralCode', v)} placeholder="Lines they will not cross..." />

@@ -266,9 +266,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [combatState.enemies, selectedTarget]);
 
   const equipItem = (item: InventoryItem, slot: EquipmentSlot) => {
+    if (item.equippedBy && item.equippedBy !== 'player') {
+      showToast?.('Item is equipped by a companion. Unequip it first.', 'warning');
+      return;
+    }
     const updated = localInventory.map(it => {
-      if (it.id === item.id) return { ...it, equipped: true, slot };
-      if (it.equipped && it.slot === slot && it.id !== item.id) return { ...it, equipped: false, slot: undefined };
+      if (it.id === item.id) return { ...it, equipped: true, slot, equippedBy: 'player' };
+      if (it.equipped && it.slot === slot && it.id !== item.id) return { ...it, equipped: false, slot: undefined, equippedBy: null };
       return it;
     });
     setLocalInventory(updated);
@@ -278,7 +282,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   };
 
   const unequipItem = (item: InventoryItem) => {
-    const updated = localInventory.map(it => it.id === item.id ? { ...it, equipped: false, slot: undefined } : it);
+    const updated = localInventory.map(it => it.id === item.id ? { ...it, equipped: false, slot: undefined, equippedBy: null } : it);
     setLocalInventory(updated);
     onInventoryUpdate && onInventoryUpdate(updated as InventoryItem[]);
     setPlayerStats(calculatePlayerCombatStats(character, updated));
@@ -589,7 +593,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       abilityId,
       itemId,
       inventory,
-      finalRoll
+      finalRoll,
+      character
     );
     let newState = execRes.newState;
     let newPlayerStats = execRes.newPlayerStats;

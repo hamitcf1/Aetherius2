@@ -6,6 +6,7 @@ import type { RestOptions } from './SurvivalModals';
 import { useAppContext } from '../AppContext';
 import { PERK_DEFINITIONS, PerkDef } from '../data/perkDefinitions';
 import ModalWrapper from './ModalWrapper';
+import { saveUserLoadout, loadUserLoadouts, deleteUserLoadout } from '../services/firestore';
 
 interface BonfireMenuProps {
   open: boolean;
@@ -47,15 +48,15 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
 
   const equipItem = (item: InventoryItem, slot?: EquipmentSlot) => {
     setLocalInventory(prev => prev.map(it => {
-      if (it.id === item.id) return { ...it, equipped: true, slot };
-      if (it.equipped && it.slot === slot && it.id !== item.id) return { ...it, equipped: false, slot: undefined };
+      if (it.id === item.id) return { ...it, equipped: true, slot, equippedBy: 'player' };
+      if (it.equipped && it.slot === slot && it.id !== item.id) return { ...it, equipped: false, slot: undefined, equippedBy: null };
       return it;
     }));
     setSlotPicker(null);
   };
 
   const unequipItem = (item: InventoryItem) => {
-    setLocalInventory(prev => prev.map(it => it.id === item.id ? { ...it, equipped: false, slot: undefined } : it));
+    setLocalInventory(prev => prev.map(it => it.id === item.id ? { ...it, equipped: false, slot: undefined, equippedBy: null } : it));
   };
 
   const getCandidatesForSlot = (slot: EquipmentSlot) => {
@@ -74,17 +75,40 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
   // Loadout storage helpers (per-character, stored in localStorage)
   const loadoutKey = (name?: string) => `aetherius:bonfire:loadouts:${characterId || 'global'}`;
 
-  const getSavedLoadouts = (): Array<{ name: string; mapping: Record<string, { slot?: EquipmentSlot }>}> => {
+  const getSavedLoadouts = (): Array<{ id?: string; name: string; mapping: Record<string, { slot?: EquipmentSlot }>; createdAt?: number; cloudSynced?: boolean } > => {
     try { return JSON.parse(localStorage.getItem(loadoutKey()) || '[]'); } catch (e) { return []; }
   };
+
+  const [syncingLoadouts, setSyncingLoadouts] = useState<string[]>([]);
 
   const saveLoadout = (name: string) => {
     const mapping: Record<string, { slot?: EquipmentSlot }> = {};
     localInventory.forEach(it => { if (it.equipped) mapping[it.id] = { slot: it.slot }; });
     const list = getSavedLoadouts();
-    list.push({ name, mapping });
+    const newLoadout = { name, mapping, createdAt: Date.now(), id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`, cloudSynced: false } as any;
+    list.push(newLoadout);
     localStorage.setItem(loadoutKey(), JSON.stringify(list));
-    showSimpleToast('Loadout saved.');
+    showSimpleToast('Loadout saved locally. Syncing to cloud...', 'info');
+
+    // Attempt to sync to Firestore if logged in and mark cloudSynced on success or not on failure
+    const uid = (window as any).aetheriusUtils?.userId;
+    if (uid) {
+      setSyncingLoadouts(s => [...s, newLoadout.id]);
+      saveUserLoadout(uid, { ...newLoadout, characterId })
+        .then(() => {
+          // Update local copy with cloudSynced = true
+          const updated = getSavedLoadouts().map(l => l.id === newLoadout.id ? { ...l, cloudSynced: true } : l);
+          localStorage.setItem(loadoutKey(), JSON.stringify(updated));
+          setSyncingLoadouts(s => s.filter(id => id !== newLoadout.id));
+          showSimpleToast('Loadout synced to cloud.', 'success');
+        })
+        .catch(err => {
+          console.warn('Could not sync loadout to Firestore:', err);
+          setSyncingLoadouts(s => s.filter(id => id !== newLoadout.id));
+          // Leave cloudSynced as false, provide retry UI
+          showSimpleToast('Failed to sync loadout to cloud. You can retry later.', 'warning');
+        });
+    }
   };
 
   const applyLoadout = (idx: number) => {
@@ -108,10 +132,17 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
 
   const doRemoveLoadout = (idx: number) => {
     const list = getSavedLoadouts();
+    const picked = list[idx];
     list.splice(idx, 1);
     localStorage.setItem(loadoutKey(), JSON.stringify(list));
     showSimpleToast('Loadout removed.');
     setConfirmDelete(null);
+
+    // Try to remove from cloud if present
+    const uid = (window as any).aetheriusUtils?.userId;
+    if (uid && picked?.id) {
+      deleteUserLoadout(uid, picked.id).catch(err => console.warn('Failed to delete remote loadout', err));
+    }
   };
 
   const applyChanges = () => {
@@ -120,6 +151,52 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
   };
 
   const visibleLoadouts = useMemo(() => getSavedLoadouts(), [open, characterId, localInventory]);
+
+  // Retry sync helper for a single loadout
+  const retrySyncLoadout = (loadoutId: string) => {
+    const uid = (window as any).aetheriusUtils?.userId;
+    if (!uid) {
+      showSimpleToast('Not logged in; cannot sync to cloud.', 'warning');
+      return;
+    }
+    const list = getSavedLoadouts();
+    const picked = list.find(l => l.id === loadoutId);
+    if (!picked) return;
+    setSyncingLoadouts(s => [...s, loadoutId]);
+    saveUserLoadout(uid, { ...picked, characterId })
+      .then(() => {
+        const updated = getSavedLoadouts().map(l => l.id === loadoutId ? { ...l, cloudSynced: true } : l);
+        localStorage.setItem(loadoutKey(), JSON.stringify(updated));
+        setSyncingLoadouts(s => s.filter(id => id !== loadoutId));
+        showSimpleToast('Loadout synced to cloud.', 'success');
+      })
+      .catch(err => {
+        console.warn('Retry sync failed:', err);
+        setSyncingLoadouts(s => s.filter(id => id !== loadoutId));
+        showSimpleToast('Retry to sync loadout failed.', 'error');
+      });
+  };
+
+  // When opening, try to fetch cloud-saved loadouts and merge into local storage so users see both
+  React.useEffect(() => {
+    if (!open) return;
+    const uid = (window as any).aetheriusUtils?.userId;
+    if (!uid) return;
+    (async () => {
+      try {
+        const remote = await loadUserLoadouts(uid, characterId || undefined);
+        if (!Array.isArray(remote) || remote.length === 0) return;
+        const local = getSavedLoadouts();
+        const merged = [...local];
+        for (const r of remote) {
+          if (!merged.find(m => m.id === r.id)) merged.push({ ...r, cloudSynced: true });
+        }
+        localStorage.setItem(loadoutKey(), JSON.stringify(merged));
+      } catch (e) {
+        console.warn('Failed to fetch remote loadouts:', e);
+      }
+    })();
+  }, [open, characterId]);
 
   const confirmRest = () => {
     applyChanges();
@@ -130,11 +207,11 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
 
   // Small helper to show a toast using AppContext where available
   const appCtx = useAppContext();
-  const showSimpleToast = (msg: string) => {
+  const showSimpleToast = (msg: string, type: 'info' | 'success' | 'warning' | 'error' = 'success') => {
     try {
-      appCtx?.showToast?.(msg, 'success');
+      appCtx?.showToast?.(msg, type);
     } catch (e) {
-      try { (window as any).app?.showToast?.(msg, 'success'); } catch (e) { /* ignore */ }
+      try { (window as any).app?.showToast?.(msg, type); } catch (e) { /* ignore */ }
     }
   };
 
@@ -237,9 +314,22 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
           </div>
           <div className="space-y-2 max-h-36 overflow-y-auto">
             {visibleLoadouts.length === 0 ? <div className="text-xs text-gray-500">No saved loadouts</div> : visibleLoadouts.map((l, idx) => (
-              <div key={l.name} className="flex items-center justify-between p-1 bg-skyrim-paper/30 border border-skyrim-border rounded">
-                <div className="text-xs text-gray-200">{l.name}</div>
-                <div className="flex gap-2">
+              <div key={l.id || l.name} className="flex items-center justify-between p-1 bg-skyrim-paper/30 border border-skyrim-border rounded">
+                <div>
+                  <div className="text-xs text-gray-200 font-bold flex items-center gap-2">
+                    {l.name}
+                    {l.cloudSynced ? <span className="text-xs text-green-400 px-2 py-0.5 rounded border border-green-600">Cloud ✓</span> : <span className="text-xs text-yellow-400 px-2 py-0.5 rounded border border-yellow-600">Pending</span>}
+                  </div>
+                  <div className="text-[10px] text-gray-500">Saved {new Date(l.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="flex gap-2 items-center">
+                  {!l.cloudSynced && (
+                    syncingLoadouts.includes(l.id) ? (
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin border-yellow-500" title="Syncing" />
+                    ) : (
+                      <button onClick={() => retrySyncLoadout(l.id)} title="Retry sync" className="px-2 py-1 text-xs rounded border border-yellow-600 text-yellow-500">Retry</button>
+                    )
+                  )}
                   <button onClick={() => applyLoadout(idx)} className="px-2 py-1 text-xs bg-skyrim-gold text-skyrim-dark rounded">Apply</button>
                   <button onClick={() => removeLoadout(idx)} className="px-2 py-1 text-xs bg-red-700 text-white rounded">Delete</button>
                 </div>

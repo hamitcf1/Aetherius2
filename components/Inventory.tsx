@@ -222,7 +222,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
   const [newType, setNewType] = useState<InventoryItem['type']>('misc');
   const [newDesc, setNewDesc] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | InventoryItem['type'] | 'favorites'>('all');
-  const [sortOrder, setSortOrder] = useState<'name' | 'type' | 'newest' | 'quantity'>('name');
+  const [sortOrder, setSortOrder] = useState<'name' | 'type' | 'newest' | 'quantity' | 'damage' | 'value'>('name');
   const [viewMode, setViewMode] = useState<'inventory' | 'equipment'>('inventory');
   const [equipModalOpen, setEquipModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot | null>(null);
@@ -294,6 +294,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
     
     // Sort based on sortOrder
     return uniqueItems.sort((a, b) => {
+      const getDamage = (it: InventoryItem) => it.damage ?? getItemStats(it.name, it.type).damage ?? 0;
+      const getValue = (it: InventoryItem) => it.value ?? getItemStats(it.name, it.type).value ?? 0;
       switch (sortOrder) {
         case 'name':
           return a.name.localeCompare(b.name);
@@ -303,6 +305,10 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
           return (b.createdAt || 0) - (a.createdAt || 0);
         case 'quantity':
           return b.quantity - a.quantity || a.name.localeCompare(b.name);
+        case 'damage':
+          return getDamage(b) - getDamage(a) || a.name.localeCompare(b.name);
+        case 'value':
+          return getValue(b) - getValue(a) || a.name.localeCompare(b.name);
         default:
           return 0;
       }
@@ -391,20 +397,25 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
 
     // If equipping a two-handed weapon to main hand, auto-unequip any offhand item
     const updatedItems = items.map(i => {
+      // Block items currently equipped by a companion
       if (i.id === item.id) {
-        return { ...i, equipped: true, slot: targetSlot };
+        if (i.equippedBy && i.equippedBy !== 'player') {
+          showToast('Item is equipped by a companion. Unequip from companion first.', 'warning');
+          return i;
+        }
+        return { ...i, equipped: true, slot: targetSlot, equippedBy: 'player' };
       }
       // Unequip other items in the same slot
       if (i.equipped && i.slot === targetSlot) {
-        return { ...i, equipped: false, slot: undefined };
+        return { ...i, equipped: false, slot: undefined, equippedBy: null };
       }
       // Auto-unequip offhand when equipping two-handed in main
       if (targetSlot === 'weapon' && isTwoHandedWeapon(item) && i.equipped && i.slot === 'offhand') {
-        return { ...i, equipped: false, slot: undefined };
+        return { ...i, equipped: false, slot: undefined, equippedBy: null };
       }
       // Auto-unequip main two-handed when equipping to offhand
       if (unequipMainTwoHandedId && i.id === unequipMainTwoHandedId) {
-        return { ...i, equipped: false, slot: undefined };
+        return { ...i, equipped: false, slot: undefined, equippedBy: null };
       }
       return i;
     });
@@ -416,7 +427,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
 
   // Unequip an item
   const unequipItem = (item: InventoryItem) => {
-    updateItem({ ...item, equipped: false, slot: undefined });
+    updateItem({ ...item, equipped: false, slot: undefined, equippedBy: null });
   };
 
   // Open equip modal for a specific slot
@@ -738,7 +749,9 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
               { id: 'name', label: 'Name (A-Z)' },
               { id: 'type', label: 'Type' },
               { id: 'newest', label: 'Newest First' },
-              { id: 'quantity', label: 'Quantity' }
+              { id: 'quantity', label: 'Quantity' },
+              { id: 'damage', label: 'Damage / Power' },
+              { id: 'value', label: 'Value (Gold)' }
             ]}
           />
         </div>

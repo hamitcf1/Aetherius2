@@ -658,3 +658,77 @@ export const deleteItemByName = async (uid: string, itemName: string, characterI
   
   return toDelete.length;
 };
+
+// ============================================================================
+// COMPANIONS & LOADOUTS (user-scoped collections)
+// ============================================================================
+
+export const saveUserCompanions = async (uid: string, companions: any[]): Promise<void> => {
+  if (!uid) return;
+  try {
+    const db = getDb();
+    const batch = writeBatch(db);
+    companions.forEach(c => {
+      const docRef = doc(db, 'users', uid, 'companions', c.id);
+      const data = { ...c };
+      Object.keys(data).forEach(k => data[k] === undefined && delete data[k]);
+      batch.set(docRef, data as any, { merge: true } as any);
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to save companions to Firestore:', err);
+    throw err;
+  }
+};
+
+export const loadUserCompanions = async (uid: string): Promise<any[]> => {
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'companions');
+    const snapshot = await getDocs(collRef as any);
+    return snapshot.docs.map(d => d.data());
+  } catch (err) {
+    console.warn('Failed to load companions from Firestore:', err);
+    return [];
+  }
+};
+
+export const saveUserLoadout = async (uid: string, loadout: any): Promise<void> => {
+  if (!uid) return;
+  try {
+    const db = getDb();
+    const id = loadout.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+    const docRef = doc(db, 'users', uid, 'loadouts', id);
+    await setDoc(docRef, { ...loadout, id, createdAt: loadout.createdAt || Date.now() }, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save loadout to Firestore:', err);
+    throw err;
+  }
+};
+
+export const loadUserLoadouts = async (uid: string, characterId?: string): Promise<any[]> => {
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'loadouts') as CollectionReference<DocumentData>;
+    const constraints: QueryConstraint[] = [];
+    if (characterId) constraints.push(where('characterId', '==', characterId));
+    const q = constraints.length ? query(collRef, ...constraints, orderBy('createdAt', 'desc')) : query(collRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q as any);
+    return snapshot.docs.map(d => d.data());
+  } catch (err) {
+    console.warn('Failed to load loadouts from Firestore:', err);
+    return [];
+  }
+};
+
+export const deleteUserLoadout = async (uid: string, loadoutId: string): Promise<void> => {
+  if (!uid) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'loadouts', loadoutId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('Failed to delete loadout from Firestore:', err);
+    throw err;
+  }
+};

@@ -144,6 +144,8 @@ export interface InventoryItem {
   description: string;
   quantity: number;
   equipped: boolean;
+  // Ownership explicit: 'player' | companionId | null — prevents duplicate equip
+  equippedBy?: 'player' | string | null;
   createdAt?: number;
   // Favorites flag (player-specific)
   isFavorite?: boolean;
@@ -661,6 +663,22 @@ export interface Companion {
   recruitedAt: number;
   loyalty: number;
   mood: 'happy' | 'neutral' | 'unhappy' | 'angry';
+  // Optional recruitment or upkeep cost (gold per day, etc.)
+  cost?: number;
+  // Behavior in overworld/combat
+  behavior?: 'idle' | 'follow' | 'guard';
+  // If true, companion may pick up loot automatically after combat
+  autoLoot?: boolean;
+  // Equipped items mapping (slot -> itemId). Items remain in player's inventory; ownership recorded on item via InventoryItem.equippedBy
+  equipment?: Partial<Record<EquipmentSlot, string | null>>;
+}
+
+export interface Loadout {
+  id: string;
+  name: string;
+  characterId?: string;
+  mapping: Record<string, { slot?: EquipmentSlot }>; // itemId => slot mapping
+  createdAt: number;
 }
 
 export interface SessionRecord {

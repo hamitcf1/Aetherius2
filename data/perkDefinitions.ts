@@ -20,6 +20,7 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'mana_mastery', name: 'Mana Mastery', skill: 'Magicka', description: 'Increase max magicka by 20 per rank.', requires: ['arcane_focus:2'], maxRank: 8, masteryCost: 4, effect: { type: 'stat', key: 'magicka', amount: 20 } },
   { id: 'endurance', name: 'Endurance', skill: 'Stamina', description: 'Increase max stamina by 10 per rank.', maxRank: 9, masteryCost: 3, effect: { type: 'stat', key: 'stamina', amount: 10 } },
   { id: 'fleet_foot', name: 'Fleet Foot', skill: 'Stamina', description: 'Increase max stamina by 15 per rank.', requires: ['endurance:2'], maxRank: 8, masteryCost: 3, effect: { type: 'stat', key: 'stamina', amount: 15 } },
+  { id: 'reroll_on_failure', name: 'Lucky Strike', skill: 'Luck', description: 'When an attack critically fails, automatically reroll the attack once (passive).', maxRank: 1, masteryCost: 2 },
 ];
 
 export default PERK_DEFINITIONS;

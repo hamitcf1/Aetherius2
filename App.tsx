@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-    INITIAL_CHARACTER_TEMPLATE, Character, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
+    INITIAL_CHARACTER_TEMPLATE, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
     DifficultyLevel, WeatherState, StatusEffect, Companion
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -58,7 +58,7 @@ import {
   logoutUser,
   sendPasswordReset
 } from './services/firebase';
-import { 
+import {
   initializeFirestoreDb,
   loadCharacters,
   loadInventoryItems,
@@ -81,6 +81,12 @@ import {
   removeDuplicateItems,
   deleteJournalEntry,
   deleteStoryChapter,
+  // Companions & Loadouts
+  loadUserCompanions,
+  saveUserCompanions,
+  loadUserLoadouts,
+  saveUserLoadout,
+  deleteUserLoadout,
 } from './services/firestore';
 import {
   setUserOnline,
@@ -106,6 +112,7 @@ import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
 import PerkTreeModal from './components/PerkTreeModal';
 import CompanionsModal from './components/CompanionsModal';
+import CompanionDialogueModal from './components/CompanionDialogueModal';
 import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
 
@@ -263,6 +270,29 @@ const App: React.FC = () => {
   const [statusEffects, setStatusEffects] = useState<StatusEffect[]>([]);
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [colorTheme, setColorTheme] = useState('default');
+
+  // Apply theme variables (light / default)
+  React.useEffect(() => {
+    const root = document.documentElement;
+    if (colorTheme === 'light') {
+      root.style.setProperty('--skyrim-dark', '#f6f7f9');
+      root.style.setProperty('--skyrim-paper', '#ffffff');
+      root.style.setProperty('--skyrim-border', '#d7d7d7');
+      root.style.setProperty('--skyrim-gold', '#b07d3b');
+      root.style.setProperty('--skyrim-gold-hover', '#c99753');
+      root.style.setProperty('--skyrim-text', '#1b1b1b');
+      root.style.setProperty('--skyrim-accent', '#e8eef6');
+    } else {
+      // default/dark
+      root.style.setProperty('--skyrim-dark', '#0f0f0f');
+      root.style.setProperty('--skyrim-paper', '#1a1a1a');
+      root.style.setProperty('--skyrim-border', '#4a4a4a');
+      root.style.setProperty('--skyrim-gold', '#c0a062');
+      root.style.setProperty('--skyrim-gold-hover', '#d4b475');
+      root.style.setProperty('--skyrim-text', '#d1d1d1');
+      root.style.setProperty('--skyrim-accent', '#2a3b4c');
+    }
+  }, [colorTheme]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
@@ -330,6 +360,7 @@ const App: React.FC = () => {
 
   // Companions modal state
   const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
+  const [companionDialogue, setCompanionDialogue] = useState<null | any>(null);
 
   // Toast notification helper
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
@@ -369,6 +400,17 @@ const App: React.FC = () => {
       localStorage.setItem(key, JSON.stringify(companions));
     } catch (err) {
       console.warn('Failed to persist companions to localStorage:', err);
+    }
+
+    // Attempt to persist companions to Firestore when logged in
+    if (currentUser?.uid) {
+      (async () => {
+        try {
+          await saveUserCompanions(currentUser.uid, companions);
+        } catch (e) {
+          console.warn('Failed to persist companions to Firestore:', e);
+        }
+      })();
     }
   }, [companions, currentUser?.uid]);
 
@@ -646,6 +688,22 @@ const App: React.FC = () => {
         removeCompanion,
         companions,
         handleGameUpdate: (payload) => { try { handleGameUpdate(payload); return { ok: true }; } catch (e) { return { ok: false, error: String(e) }; } },
+        saveLoadoutCloud: async (loadout: any) => {
+          try {
+            const uid = (window as any).aetheriusUtils?.userId;
+            if (!uid) return { ok: false, message: 'not logged in' };
+            await saveUserLoadout(uid, loadout);
+            return { ok: true };
+          } catch (e) { return { ok: false, error: String(e) }; }
+        },
+        loadLoadoutsCloud: async (characterId?: string) => {
+          try {
+            const uid = (window as any).aetheriusUtils?.userId;
+            if (!uid) return [];
+            const lists = await loadUserLoadouts(uid, characterId);
+            return lists || [];
+          } catch (e) { console.warn('Failed to load cloud loadouts', e); return []; }
+        }
       });
 
       console.log('🔧 Database utils available via window.aetheriusUtils');
@@ -743,6 +801,17 @@ const App: React.FC = () => {
           setQuests(userQuests);
           setJournalEntries(userEntries);
           setStoryChapters(userChapters);
+
+          // Load remote companions if present (Cloud-synced), otherwise keep local companions
+          try {
+            const remoteCompanions = await loadUserCompanions(user.uid);
+            if (Array.isArray(remoteCompanions) && remoteCompanions.length > 0) {
+              setCompanions(remoteCompanions);
+            }
+          } catch (e) {
+            // ignore and fall back to localStorage loaded companions
+            console.warn('Could not load companions from Firestore, using local copies if available.');
+          }
           
           // Restore last selected character and tab from localStorage
           // BUT only if this is a page refresh, not a fresh login
@@ -2379,7 +2448,8 @@ const App: React.FC = () => {
           combatData.location,
           combatData.ambush ?? false,
           combatData.fleeAllowed ?? true,
-          combatData.surrenderAllowed ?? false
+          combatData.surrenderAllowed ?? false,
+          companions // include companions who will join if behavior indicates
         );
         setCombatState(initializedCombat);
         
@@ -3037,6 +3107,46 @@ const App: React.FC = () => {
         onAdd={addCompanion}
         onUpdate={updateCompanion}
         onRemove={removeCompanion}
+        onTalk={(c) => { setCompanionDialogue(c); setCompanionsModalOpen(false); }}
+        inventory={getCharacterItems()}
+        onAssignItemToCompanion={(companionId: string, itemId: string, slot?: any) => {
+          const items = getCharacterItems();
+          const item = items.find(i => i.id === itemId);
+          if (!item) { showToast('Item not found', 'error'); return; }
+          if (item.equippedBy && item.equippedBy !== 'player' && item.equippedBy !== companionId) {
+            showToast('Item already equipped by another companion', 'warning');
+            return;
+          }
+          if (item.equippedBy === 'player') {
+            showToast('Unequip item from player before assigning to companion', 'warning');
+            return;
+          }
+          // Assign
+          const updated = { ...item, equipped: true, slot: slot || item.slot, equippedBy: companionId };
+          (window as any).app?.handleGameUpdate?.({ newItems: [updated] });
+          showToast('Assigned item to companion', 'success');
+        }}
+        onUnassignItemFromCompanion={(itemId: string) => {
+          const items = getCharacterItems();
+          const item = items.find(i => i.id === itemId);
+          if (!item) { showToast('Item not found', 'error'); return; }
+          if (!item.equippedBy || item.equippedBy === 'player') { showToast('Item not assigned to a companion', 'warning'); return; }
+          const updated = { ...item, equipped: false, slot: undefined, equippedBy: null };
+          (window as any).app?.handleGameUpdate?.({ newItems: [updated] });
+          showToast('Removed item from companion', 'success');
+        }}
+      />
+
+      <CompanionDialogueModal
+        open={Boolean(companionDialogue)}
+        companion={companionDialogue}
+        onClose={() => setCompanionDialogue(null)}
+        onSend={(id, msg) => {
+          // simple persistence hook: record last message as mood modifier if contains keywords
+          const lower = (msg || '').toLowerCase();
+          if (lower.includes('good') || lower.includes('thanks')) updateCompanion({ ...(companionDialogue as any), mood: 'happy' });
+          if (lower.includes('tired') || lower.includes('leave')) updateCompanion({ ...(companionDialogue as any), mood: 'unhappy' });
+        }}
       />
 
       {/* Bonfire / Rest Menu */}

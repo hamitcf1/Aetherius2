@@ -4,6 +4,7 @@ import { useAppContext } from '../AppContext';
 import type { InventoryItem } from '../types';
 import { playSoundEffect } from '../services/audioService';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
+import { SortSelector } from './GameFeatures';
 
 export interface ShopItem {
   id: string;
@@ -352,6 +353,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [recentlyPurchased, setRecentlyPurchased] = useState<Set<string>>(new Set());
   const [recentlySold, setRecentlySold] = useState<Set<string>>(new Set());
+  const [shopSort, setShopSort] = useState<'name' | 'price' | 'damage'>('name');
   const { showQuantityControls } = useAppContext();
 
   // Handle ESC key to close
@@ -383,7 +385,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   }, [open]);
 
   const filteredShopItems = useMemo(() => {
-    return SHOP_INVENTORY.filter(item => {
+    const base = SHOP_INVENTORY.filter(item => {
       // Filter by character level - only show items the character can access
       if (item.requiredLevel && characterLevel < item.requiredLevel) {
         return false;
@@ -394,7 +396,21 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         item.description.toLowerCase().includes(search.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [category, search, characterLevel]);
+
+    // Apply sorting
+    const withStats = base.map(b => ({
+      item: b,
+      damage: getItemStats(b.name, b.type).damage || 0
+    }));
+
+    withStats.sort((a, b) => {
+      if (shopSort === 'price') return b.item.price - a.item.price;
+      if (shopSort === 'damage') return (b.damage || 0) - (a.damage || 0);
+      return a.item.name.localeCompare(b.item.name);
+    });
+
+    return withStats.map(w => w.item);
+  }, [category, search, characterLevel, shopSort]);
 
   const filteredInventoryItems = useMemo(() => {
     return inventory.filter(item => {
@@ -528,22 +544,38 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
             />
           </div>
           {mode === 'buy' && (
-            <div className="flex flex-wrap gap-1">
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                    category === cat
-                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-                      : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/50'
-                  }`}
-                >
-                  {categoryIcons[cat]}
-                  <span>{cat}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="flex flex-wrap gap-1">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategory(cat)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                      category === cat
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                        : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/50'
+                    }`}
+                  >
+                    {categoryIcons[cat]}
+                    <span>{cat}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <div className="text-xs text-skyrim-text">Sort:</div>
+                <SortSelector
+                  currentSort={shopSort}
+                  onSelect={(s) => setShopSort(s as any)}
+                  options={[
+                    { id: 'name', label: 'Name' },
+                    { id: 'price', label: 'Price' },
+                    { id: 'damage', label: 'Damage' }
+                  ]}
+                  label="Sort"
+                />
+              </div>
+            </>
           )}
         </div>
 

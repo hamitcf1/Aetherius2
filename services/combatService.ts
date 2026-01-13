@@ -144,6 +144,20 @@ const computeDamageFromNat = (
 // PLAYER COMBAT STATS CALCULATION
 // ============================================================================
 
+// Adjust ability costs based on character level and relevant skills
+const adjustAbilityCost = (character: Character | undefined, ability: CombatAbility): number => {
+  const base = Math.max(1, Math.floor(ability.cost || 0));
+  if (!character) return base;
+  const lvlFactor = 1 + (character.level || 1) * 0.01; // slightly increase cost with level (scale)
+  // Skill reductions
+  const getSkill = (name: string) => character.skills.find(s => s.name === name)?.level || 0;
+  let skillReduction = 0;
+  if (ability.type === 'magic') skillReduction = (getSkill('Destruction') || 0) * 0.005; // each 1 skill -> 0.5% cost reduction
+  if (ability.type === 'melee') skillReduction = (getSkill('One-Handed') || getSkill('Two-Handed')) * 0.003; // minor reduction
+  const adjusted = Math.max(1, Math.floor(base * lvlFactor * Math.max(0.6, 1 - skillReduction)));
+  return adjusted;
+};
+
 const validateShieldEquipping = (equipment: InventoryItem[]): InventoryItem[] => {
   return equipment.map(item => {
     const nameLower = (item.name || '').toLowerCase();
@@ -422,7 +436,8 @@ export const initializeCombat = (
   location: string,
   ambush: boolean = false,
   fleeAllowed: boolean = true,
-  surrenderAllowed: boolean = false
+  surrenderAllowed: boolean = false,
+  companions?: any[]
 ): CombatState => {
   // Initialize enemies with IDs and full health
   const initializedEnemies = enemies.map((enemy, index) => ({
@@ -440,10 +455,34 @@ export const initializeCombat = (
     loot: Array.isArray(enemy.loot) && enemy.loot.length ? enemy.loot : (BASE_ENEMY_TEMPLATES[(enemy.type || '').toLowerCase()]?.possibleLoot || enemy.loot || [])
   }));
 
+  // If companions are provided, include companions as allied combatants when their behavior indicates participation
+  const companionEnemies: CombatEnemy[] = (companions || []).filter(c => c && (c.behavior === 'follow' || c.behavior === 'guard')).map((c, idx) => ({
+    id: `comp_${c.id}_${Date.now()}_${idx}`,
+    name: c.name,
+    type: 'humanoid',
+    level: c.level || 1,
+    maxHealth: c.maxHealth || c.health || 50,
+    currentHealth: c.maxHealth || c.health || 50,
+    armor: c.armor || 0,
+    damage: c.damage || 4,
+    abilities: [{ id: `comp_attack_${c.id}`, name: `Strike (${c.name})`, type: 'melee', damage: c.damage || 4, cost: 0, description: 'Companion attack' }],
+    behavior: 'support',
+    isCompanion: true,
+    xpReward: 0,
+    // Keep a reference to original companion so we can access autoLoot later
+    companionMeta: { companionId: c.id, autoLoot: !!c.autoLoot }
+  }));
+
   // Calculate turn order (player first unless ambushed)
   const turnOrder = ambush 
     ? [...initializedEnemies.map(e => e.id), 'player']
     : ['player', ...initializedEnemies.map(e => e.id)];
+
+  // Insert companions at the end of turn order so they act after player and enemies typically
+  const finalTurnOrder = [...turnOrder, ...companionEnemies.map(c => c.id)];
+
+  // Merge companionEnemies into enemies list for combat state
+  const allEnemies = [...initializedEnemies, ...companionEnemies];
 
   return {
     id: `combat_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
@@ -451,9 +490,9 @@ export const initializeCombat = (
     // Mark combat start time for duration-based effects
     combatStartTime: Date.now(),
     turn: 1,
-    currentTurnActor: turnOrder[0],
-    turnOrder,
-    enemies: initializedEnemies,
+    currentTurnActor: finalTurnOrder[0],
+    turnOrder: finalTurnOrder,
+    enemies: allEnemies,
     location,
     fleeAllowed,
     surrenderAllowed,
@@ -517,7 +556,8 @@ export const executePlayerAction = (
   abilityId?: string,
   itemId?: string,
   inventory?: InventoryItem[],
-  natRoll?: number
+  natRoll?: number,
+  character?: Character
 ): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; usedItem?: InventoryItem } => {
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
@@ -551,23 +591,25 @@ export const executePlayerAction = (
       // Check cost and handle stamina-shortage by scaling damage instead of blocking
       const costType = ability.type === 'magic' ? 'currentMagicka' : 'currentStamina';
       let staminaMultiplier = 1;
+      // Adjust cost by level/skills
+      const effectiveCost = adjustAbilityCost(character, ability);
       if (ability.type === 'magic') {
-        if (newPlayerStats.currentMagicka < ability.cost) {
+        if (newPlayerStats.currentMagicka < effectiveCost) {
           narrative = `Not enough magicka for ${ability.name}!`;
           break;
         }
-        newPlayerStats.currentMagicka -= ability.cost;
+        newPlayerStats.currentMagicka -= effectiveCost;
       } else {
         const available = newPlayerStats.currentStamina || 0;
         if (available <= 0) {
           // No stamina: allow a weak attack
           staminaMultiplier = 0.25;
-        } else if (available < ability.cost) {
+        } else if (available < effectiveCost) {
           // Partial stamina: scale effectiveness proportionally but keep a floor
-          staminaMultiplier = Math.max(0.25, available / ability.cost);
+          staminaMultiplier = Math.max(0.25, available / effectiveCost);
         }
         // Consume what stamina is available (don't force negative)
-        newPlayerStats.currentStamina = Math.max(0, newPlayerStats.currentStamina - Math.min(ability.cost, available));
+        newPlayerStats.currentStamina = Math.max(0, newPlayerStats.currentStamina - Math.min(effectiveCost, available));
         if (staminaMultiplier < 1) {
           narrative = `Low stamina reduces the effectiveness of ${ability.name}.`;
         }
@@ -600,14 +642,24 @@ export const executePlayerAction = (
 
       // Resolve attack (d20 + bonuses vs armor/dodge) then roll damage dice
       const attackBonus = Math.floor(playerStats.weaponDamage / 10);
-      const attackResolved = resolveAttack({ attackerLevel: 12, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
+      const attackerLvl = character?.level || playerStats.maxHealth ? Math.max(1, Math.floor((character?.level || 10))) : 10;
+      let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
 
-      // If nat indicates miss/fail, log accordingly
-      if (!attackResolved.hit) {
-        const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : 'miss';
-        narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
-        break;
+      // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure)
+      if (!attackResolved.hit && attackResolved.rollTier === 'fail') {
+        const hasRerollPerk = !!(character && (character.perks || []).find((p: any) => p.id === 'reroll_on_failure' && (p.rank || 0) > 0));
+        if (hasRerollPerk) {
+          // Reroll once automatically
+          const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
+          // Log both rolls (first failed, second result)
+          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (critical failure) - rerolling...`, timestamp: Date.now() });
+          attackResolved = second;
+        } else {
+          const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : 'miss';
+          narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
+          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+          break;
+        }
       }
 
       // Determine damage tier multipliers based on rollTier
@@ -663,9 +715,9 @@ export const executePlayerAction = (
                 newPlayerStats.currentHealth + healAmount
               );
               narrative += ` You recover ${healAmount} health.`;
-            } else if (effect.type === 'summon') {
+            } else if ((effect as any).type === 'summon') {
               // Create a summoned companion (ally)
-              const summonName = effect.name || 'Summoned Ally';
+              const summonName = (effect as any).name || 'Summoned Ally';
               const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
               const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
               const maxHealth = 30 + (level * 8);
@@ -701,7 +753,7 @@ export const executePlayerAction = (
               }
 
               // Track pending summon expiration in turns (use effect.duration as turns if supplied)
-              const turns = Math.max(1, effect.duration || 3);
+              const turns = Math.max(1, (effect as any).duration || 3);
               newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
 
               narrative += ` ${summonName} joins the fight to aid you for ${turns} turns!`;
@@ -980,14 +1032,15 @@ export const executeEnemyTurn = (
     appliedDamage = 0;
   } else {
     let enemyStaminaMultiplier = 1;
+    const enemyEffectiveCost = adjustAbilityCost(undefined, chosenAbility);
     if (chosenAbility.type === 'melee') {
       const avail = enemy.currentStamina || 0;
       if (avail <= 0) enemyStaminaMultiplier = 0.25;
-      else if (avail < (chosenAbility.cost || 0)) enemyStaminaMultiplier = Math.max(0.25, avail / (chosenAbility.cost || 1));
-      enemy.currentStamina = Math.max(0, (enemy.currentStamina || 0) - Math.min(chosenAbility.cost || 0, avail));
+      else if (avail < (enemyEffectiveCost || 0)) enemyStaminaMultiplier = Math.max(0.25, avail / (enemyEffectiveCost || 1));
+      enemy.currentStamina = Math.max(0, (enemy.currentStamina || 0) - Math.min(enemyEffectiveCost || 0, avail));
     } else if (chosenAbility.type === 'magic') {
-      if (enemy.currentMagicka && enemy.currentMagicka >= (chosenAbility.cost || 0)) {
-        enemy.currentMagicka = Math.max(0, enemy.currentMagicka - (chosenAbility.cost || 0));
+      if (enemy.currentMagicka && enemy.currentMagicka >= (enemyEffectiveCost || 0)) {
+        enemy.currentMagicka = Math.max(0, enemy.currentMagicka - (enemyEffectiveCost || 0));
       }
     }
 
@@ -1134,6 +1187,28 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
 
     newState.pendingRewards = { xp, gold, items };
     newState.pendingLoot = pendingLoot;
+
+    // Companion auto-loot: assign any drops to companions that had autoLoot enabled
+    try {
+      const autoLooters = (newState.enemies || []).filter((e: any) => e.isCompanion && e.companionMeta?.autoLoot);
+      if (autoLooters.length > 0 && newState.pendingLoot && newState.pendingLoot.length > 0) {
+        newState.pendingLoot.forEach(pl => {
+          // For each loot item from enemy, assign to an auto-looter if available
+          pl.loot.forEach(item => {
+            const looter = autoLooters[Math.floor(Math.random() * autoLooters.length)];
+            if (!looter) return;
+            // Move item to pendingRewards directly and log it as auto-looted
+            newState.pendingRewards = newState.pendingRewards || { xp: 0, gold: 0, items: [] };
+            newState.pendingRewards.items = newState.pendingRewards.items || [];
+            newState.pendingRewards.items.push({ name: item.name, type: item.type, description: item.description, quantity: item.quantity });
+            newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'auto_loot', narrative: `${looter.name} auto-looted ${item.name} from ${pl.enemyName}.`, timestamp: Date.now() });
+            // Note: we do not remove from pendingLoot here to keep UI transparent, but an item duplicated into pendingRewards is considered already obtained by companion
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('Auto-loot processing failed:', e);
+    }
 
     // Compute elapsed combat time and survival deltas
     const start = newState.combatStartTime || Date.now();

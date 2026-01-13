@@ -46,7 +46,6 @@ export interface AppContextType {
   showQuantityControls: boolean;
   setShowQuantityControls: (v: boolean) => void;
   // Companions management
-  companions: Companion[];
   openCompanions: () => void;
 }
 

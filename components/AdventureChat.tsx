@@ -670,12 +670,18 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
     setLocalInventory(prev => {
       return prev.map(i => {
-        if (i.id === item.id) return { ...i, equipped: true, slot: targetSlot };
-        if (i.equipped && i.slot === targetSlot) return { ...i, equipped: false, slot: undefined };
-        if (unequipMainTwoHandedId && i.id === unequipMainTwoHandedId) return { ...i, equipped: false, slot: undefined };
+        if (i.id === item.id) {
+          if (i.equippedBy && i.equippedBy !== 'player') {
+            showToast?.('Item is equipped by a companion. Unequip from companion first.', 'warning');
+            return i;
+          }
+          return { ...i, equipped: true, slot: targetSlot, equippedBy: 'player' };
+        }
+        if (i.equipped && i.slot === targetSlot) return { ...i, equipped: false, slot: undefined, equippedBy: null };
+        if (unequipMainTwoHandedId && i.id === unequipMainTwoHandedId) return { ...i, equipped: false, slot: undefined, equippedBy: null };
         // Auto-unequip offhand when equipping two-handed in main
         if (targetSlot === 'weapon' && isTwoHandedWeapon(item) && i.equipped && i.slot === 'offhand') {
-          return { ...i, equipped: false, slot: undefined };
+          return { ...i, equipped: false, slot: undefined, equippedBy: null };
         }
         return i;
       });
@@ -697,10 +703,10 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   };
 
   const unequipItem = async (item: InventoryItem) => {
-    setLocalInventory(prev => prev.map(i => i.id === item.id ? { ...i, equipped: false, slot: undefined } : i));
+    setLocalInventory(prev => prev.map(i => i.id === item.id ? { ...i, equipped: false, slot: undefined, equippedBy: null } : i));
     if (userId) {
       try {
-        await saveInventoryItem(userId, { ...item, equipped: false, slot: undefined, characterId: (character?.id || '') } as any);
+        await saveInventoryItem(userId, { ...item, equipped: false, slot: undefined, equippedBy: null, characterId: (character?.id || '') } as any);
         try { (window as any).aetheriusUtils?.reloadItems?.(); } catch { /* ignore */ }
       } catch (e) {
         console.warn('Failed to save unequipped item:', e);
