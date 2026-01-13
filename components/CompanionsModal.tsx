@@ -5,6 +5,23 @@ import { Plus, Trash2, X } from 'lucide-react';
 import { SortSelector, DropdownSelector } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 
+// Themed input used across the companions UI to ensure consistent dark styling
+const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', ...props }) => (
+  <input
+    {...props}
+    className={`bg-skyrim-paper/20 p-3 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+  />
+);
+
+// Small numeric input variant for compact layout
+const NumberInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', ...props }) => (
+  <input
+    {...props}
+    type={props.type || 'number'}
+    className={`bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+  />
+);
+
 const RACE_OPTIONS = [
   { id: 'Nord', label: 'Nord' },
   { id: 'Imperial', label: 'Imperial' },
@@ -125,10 +142,28 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
         <div className="mt-4 border-t border-skyrim-border pt-3">
           <h4 className="text-sm font-bold text-skyrim-gold mb-2">Recruit New Companion</h4>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+            <FieldInput
+              aria-label="Companion name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+            />
+
             <DropdownSelector currentValue={race} onSelect={(value) => setRace(value)} options={RACE_OPTIONS} placeholder="Race" />
-            <input type="number" value={level} onChange={(e) => setLevel(Number(e.target.value))} min={1} className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
-            <input type="number" value={cost as any} onChange={(e) => setCost(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Cost (g)" className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+
+            <NumberInput
+              aria-label="Companion level"
+              value={level}
+              onChange={(e) => setLevel(Number(e.target.value))}
+              min={1}
+            />
+
+            <NumberInput
+              aria-label="Companion cost"
+              value={cost as any}
+              onChange={(e) => setCost(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="Cost (g)"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
             <div>

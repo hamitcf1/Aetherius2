@@ -44,5 +44,8 @@ describe('CompanionsModal component', () => {
     const nameInput = await screen.findByPlaceholderText('Name');
     expect(nameInput).toHaveClass('bg-skyrim-paper/20');
     expect(nameInput).toHaveClass('text-skyrim-text');
+    // aria label is present for accessibility
+    const nameByLabel = screen.getByLabelText('Companion name');
+    expect(nameByLabel).toBeTruthy();
   });
 });
