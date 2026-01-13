@@ -498,6 +498,8 @@ export interface CombatEnemy {
   goldReward?: number;
   isBoss?: boolean;
   description?: string;
+  // Mark summoned allies or companions
+  isCompanion?: boolean;
   // Combat AI behavior
   behavior: 'aggressive' | 'defensive' | 'tactical' | 'support' | 'berserker';
   // Status effects currently on this enemy
@@ -545,6 +547,8 @@ export interface CombatState {
   combatElapsedSec?: number;
   // Survival needs changes (hunger/thirst/fatigue) computed from combat duration
   survivalDelta?: Partial<SurvivalNeeds>;
+  // Track summoned companions and their turns remaining during combat
+  pendingSummons?: Array<{ companionId: string; turnsRemaining: number }>;
   // Combat result when finished
   result?: 'victory' | 'defeat' | 'fled' | 'surrendered';
   // Unique combat id (helps deduplication and tracking across systems)

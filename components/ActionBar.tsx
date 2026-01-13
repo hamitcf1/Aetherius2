@@ -35,6 +35,7 @@ const ActionBar: React.FC = () => {
     handleImportJSON,
     colorTheme,
     setColorTheme,
+    openCompanions,
   } = useAppContext();
   const [open, setOpen] = useState(false);
   const [snow, setSnow] = useState(false);
@@ -277,6 +278,12 @@ const ActionBar: React.FC = () => {
                   <ChevronDown size={16} className={showSnowOptions ? 'rotate-180 transition-transform' : 'transition-transform'} />
                 </button>
               )}
+            </div>
+            {/* Companion management button */}
+            <div className="mt-2">
+              <button onClick={openCompanions} className="w-full flex items-center gap-2 px-3 py-2 rounded font-bold bg-purple-700 text-white hover:bg-purple-600">
+                <Users size={16} /> Manage Companions
+              </button>
             </div>
             {/* Snow intensity options */}
             {snow && showSnowOptions && isFeatureEnabled('snowEffect') && (

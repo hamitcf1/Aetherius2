@@ -663,6 +663,49 @@ export const executePlayerAction = (
                 newPlayerStats.currentHealth + healAmount
               );
               narrative += ` You recover ${healAmount} health.`;
+            } else if (effect.type === 'summon') {
+              // Create a summoned companion (ally)
+              const summonName = effect.name || 'Summoned Ally';
+              const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+              const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
+              const maxHealth = 30 + (level * 8);
+              const companion: CombatEnemy = {
+                id: summonId,
+                name: summonName,
+                type: 'humanoid',
+                level,
+                maxHealth,
+                currentHealth: maxHealth,
+                armor: 5,
+                damage: 8 + level,
+                abilities: [
+                  { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' }
+                ],
+                behavior: 'support',
+                xpReward: 0,
+                loot: [],
+                isCompanion: true,
+                description: `A summoned ally: ${summonName}`
+              } as any;
+
+              // Add to enemies list but mark as companion so AI treats it as ally
+              newState.enemies = [...newState.enemies, companion];
+              // Insert into turn order right after player
+              const playerIndex = newState.turnOrder.indexOf('player');
+              if (playerIndex >= 0) {
+                const before = newState.turnOrder.slice(0, playerIndex + 1);
+                const after = newState.turnOrder.slice(playerIndex + 1);
+                newState.turnOrder = [...before, companion.id, ...after];
+              } else {
+                newState.turnOrder = [...newState.turnOrder, companion.id];
+              }
+
+              // Track pending summon expiration in turns (use effect.duration as turns if supplied)
+              const turns = Math.max(1, effect.duration || 3);
+              newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
+
+              narrative += ` ${summonName} joins the fight to aid you for ${turns} turns!`;
+
             } else if (effect.duration) {
               // Add status effect to enemy
               newState.enemies[enemyIndex].activeEffects = [
@@ -1042,6 +1085,19 @@ export const advanceTurn = (state: CombatState): CombatState => {
     });
     // Reset defending
     newState.playerDefending = false;
+
+    // Decrement pending summon durations and remove expired summons
+    if (newState.pendingSummons && newState.pendingSummons.length) {
+      newState.pendingSummons = newState.pendingSummons.map(s => ({ ...s, turnsRemaining: s.turnsRemaining - 1 })).filter(s => s.turnsRemaining > 0);
+      // Remove any companions that expired (turnsRemaining <= 0)
+      const expired = (state.pendingSummons || []).filter(s => s.turnsRemaining <= 1).map(s => s.companionId);
+      if (expired.length) {
+        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_expire', narrative: `Some summoned allies have disappeared.`, timestamp: Date.now() });
+        // Remove expired enemies from list and turnOrder
+        newState.enemies = newState.enemies.filter(e => !expired.includes(e.id));
+        newState.turnOrder = newState.turnOrder.filter(id => !expired.includes(id));
+      }
+    }
   }
   
   return newState;

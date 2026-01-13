@@ -105,6 +105,7 @@ import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
 import PerkTreeModal from './components/PerkTreeModal';
+import CompanionsModal from './components/CompanionsModal';
 import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
 
@@ -327,6 +328,9 @@ const App: React.FC = () => {
     previousXP: number;
   }>(null);
 
+  // Companions modal state
+  const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
+
   // Toast notification helper
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
     // (no-change) helper kept here for context; Bonfire uses same toast flow
@@ -342,6 +346,58 @@ const App: React.FC = () => {
       setToastMessages(prev => prev.filter(t => t.id !== id));
     }, 4000);
   }, []);
+
+  // Companion persistence: load from localStorage per-user and save on change
+  useEffect(() => {
+    const key = currentUser?.uid ? `aetherius:companions:${currentUser.uid}` : null;
+    if (!key) return;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setCompanions(parsed);
+      }
+    } catch (err) {
+      console.warn('Failed to load companions from localStorage:', err);
+    }
+  }, [currentUser?.uid]);
+
+  useEffect(() => {
+    const key = currentUser?.uid ? `aetherius:companions:${currentUser.uid}` : null;
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(companions));
+    } catch (err) {
+      console.warn('Failed to persist companions to localStorage:', err);
+    }
+  }, [companions, currentUser?.uid]);
+
+  const openCompanions = () => setCompanionsModalOpen(true);
+  const closeCompanions = () => setCompanionsModalOpen(false);
+
+  const addCompanion = (c: Companion) => {
+    setCompanions(prev => {
+      const next = [...prev, c];
+      showToast(`Recruited ${c.name}`, 'success');
+      return next;
+    });
+  };
+
+  const updateCompanion = (c: Companion) => {
+    setCompanions(prev => prev.map(p => p.id === c.id ? c : p));
+    showToast(`Updated ${c.name}`, 'info');
+  };
+
+  const removeCompanion = (id: string) => {
+    setCompanions(prev => prev.filter(p => p.id !== id));
+    showToast('Companion removed', 'warning');
+  };
+
+  // Expose a convenience on window for quick access in the console (admin/debug)
+  useEffect(() => {
+    (window as any).openCompanions = openCompanions;
+    return () => { try { delete (window as any).openCompanions; } catch {} };
+  }, [openCompanions]);
 
   // Map stat to a representative color (hex)
   const getStatColor = (stat?: string) => {
@@ -579,12 +635,25 @@ const App: React.FC = () => {
         }
       };
 
+      (window as any).app = Object.assign((window as any).app || {}, {
+        currentUser,
+        currentCharacterId,
+        characters,
+        items,
+        setCharacters,
+        addCompanion,
+        updateCompanion,
+        removeCompanion,
+        companions,
+        handleGameUpdate: (payload) => { try { handleGameUpdate(payload); return { ok: true }; } catch (e) { return { ok: false, error: String(e) }; } },
+      });
+
       console.log('🔧 Database utils available via window.aetheriusUtils');
       console.log('  - removeDuplicateItems() - removes items with duplicate names');
       console.log('  - reloadItems() - reloads inventory from database');
       console.log('🎮 Demo commands available via window.demo (see CONSOLE_COMMANDS.md)');
     }
-  }, [currentUser?.uid, currentCharacterId]);
+  }, [currentUser?.uid, currentCharacterId, characters, items, companions]);
 
   // Firebase Authentication Listener + Firestore Data Loading
   useEffect(() => {
@@ -2687,18 +2756,18 @@ const App: React.FC = () => {
             // Deduct points for each mastery purchased
             pts = Math.max(0, pts - masteryCostResolved * (wantCount || 1));
 
-            // increment mastery counter (do NOT reset rank)
+            // increment mastery counter and reset rank to 1 (prestige while preserving prior stat gains)
             let found = false;
             for (let i = 0; i < nextPerks.length; i++) {
               if (nextPerks[i].id === baseId) {
-                nextPerks[i] = { ...nextPerks[i], mastery: (nextPerks[i].mastery || 0) + wantCount };
+                nextPerks[i] = { ...nextPerks[i], mastery: (nextPerks[i].mastery || 0) + wantCount, rank: 1 };
                 found = true;
                 break;
               }
             }
             if (!found) {
-              // If a perk wasn't present (edge case), add it with max rank and mastery
-              nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: max, mastery: wantCount, description: def.description });
+              // If a perk wasn't present (edge case), add it with rank=1 and mastery
+              nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: 1, mastery: wantCount, description: def.description });
             }
 
             // apply mastery bonus from config if present
@@ -2939,6 +3008,7 @@ const App: React.FC = () => {
       weather,
       statusEffects,
       companions,
+      openCompanions,
       colorTheme,
       setColorTheme,
       showQuantityControls,
@@ -2958,6 +3028,15 @@ const App: React.FC = () => {
         character={activeCharacter as any}
         onConfirm={(perkIds: string[]) => { applyPerks(perkIds); setPerkModalOpen(false); }}
         onForceUnlock={(id: string) => { forceUnlockPerk(id); setPerkModalOpen(false); }}
+      />
+
+      <CompanionsModal
+        open={companionsModalOpen}
+        onClose={closeCompanions}
+        companions={companions}
+        onAdd={addCompanion}
+        onUpdate={updateCompanion}
+        onRemove={removeCompanion}
       />
 
       {/* Bonfire / Rest Menu */}

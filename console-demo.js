@@ -215,6 +215,140 @@ window.demo.addPerkPoints = function(amount = 1) {
   return { ok: false, message: 'no update method' };
 };
 
+// Admin helper utilities (only allowed for admin uids)
+const ADMIN_IDS = ['6bmF8elZmJai6F5XCxeWoM7zTZv1'];
+function _isAdmin() {
+  const app = window.app;
+  if (!app) return false;
+  if (typeof app.isAdmin === 'function') return app.isAdmin();
+  const uid = app.currentUser?.uid || app.currentUserId || null;
+  if (!uid) return false;
+  return ADMIN_IDS.includes(uid);
+}
+
+// Set exact perk points for the active or specified character
+window.demo.setPerkPoints = function(amount = 0, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const next = Math.max(0, Number(amount) || 0);
+  if (typeof app.updateCharacter === 'function') { app.updateCharacter('perkPoints', next); console.log(`Set perk points to ${next}`); return { ok: true }; }
+  if (typeof app.setCharacters === 'function') { app.setCharacters(prev => prev.map(c => c.id === charId ? { ...c, perkPoints: next } : c)); console.log(`Set perk points (via setCharacters) to ${next}`); return { ok: true }; }
+  return { ok: false, message: 'no update method' };
+};
+
+window.demo.removePerkPoints = function(amount = 1, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const character = (app.characters || []).find(c => c.id === charId);
+  if (!character) return { ok: false, message: 'character not found' };
+  const next = Math.max(0, (character.perkPoints || 0) - Math.max(0, Number(amount) || 0));
+  if (typeof app.updateCharacter === 'function') { app.updateCharacter('perkPoints', next); console.log(`Removed ${amount} perk point(s). New total: ${next}`); return { ok: true }; }
+  if (typeof app.setCharacters === 'function') { app.setCharacters(prev => prev.map(c => c.id === charId ? { ...c, perkPoints: next } : c)); console.log(`Removed ${amount} perk point(s) via setCharacters. New total: ${next}`); return { ok: true }; }
+  return { ok: false, message: 'no update method' };
+};
+
+// Force-unlock a perk for a character (deducts 3 perk points if available)
+window.demo.forceUnlockPerk = function(perkId, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  if (!perkId) return { ok: false, message: 'perkId required' };
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const character = (app.characters || []).find(c => c.id === charId);
+  if (!character) return { ok: false, message: 'character not found' };
+  const pts = character.perkPoints || 0;
+  if (pts < 3) { console.warn('Not enough perk points (need 3)'); return { ok: false, message: 'not enough points' }; }
+  const nextPts = Math.max(0, pts - 3);
+  const existing = (character.perks || []).find(p => p.id === perkId);
+  let nextPerks = (character.perks || []).slice();
+  if (existing) {
+    nextPerks = nextPerks.map(p => p.id === perkId ? { ...p, rank: (p.rank || 0) + 1 } : p);
+  } else {
+    nextPerks.push({ id: perkId, name: perkId, skill: '', rank: 1, mastery: 0, description: '' });
+  }
+  if (typeof app.updateCharacter === 'function') { app.updateCharacter('perks', nextPerks); app.updateCharacter('perkPoints', nextPts); console.log(`Force-unlocked ${perkId} and charged 3 points.`); return { ok: true }; }
+  if (typeof app.setCharacters === 'function') { app.setCharacters(prev => prev.map(c => c.id === charId ? { ...c, perks: nextPerks, perkPoints: nextPts } : c)); console.log(`Force-unlocked ${perkId} (via setCharacters) and charged 3 points.`); return { ok: true }; }
+  return { ok: false, message: 'no update method' };
+};
+
+// Grant mastery tiers for a perk (charges default 3 points per mastery)
+window.demo.grantMastery = function(perkId, count = 1, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  if (!perkId) return { ok: false, message: 'perkId required' };
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const character = (app.characters || []).find(c => c.id === charId);
+  if (!character) return { ok: false, message: 'character not found' };
+  const masteryCost = 3;
+  const totalCost = masteryCost * (Number(count) || 0);
+  if ((character.perkPoints || 0) < totalCost) return { ok: false, message: 'not enough points' };
+  const nextPerks = (character.perks || []).slice();
+  let found = false;
+  for (let i = 0; i < nextPerks.length; i++) {
+    if (nextPerks[i].id === perkId) { nextPerks[i] = { ...nextPerks[i], mastery: (nextPerks[i].mastery || 0) + (Number(count) || 0) }; found = true; break; }
+  }
+  if (!found) nextPerks.push({ id: perkId, name: perkId, skill: '', rank: 0, mastery: (Number(count) || 0), description: '' });
+  const nextPts = Math.max(0, (character.perkPoints || 0) - totalCost);
+  if (typeof app.updateCharacter === 'function') { app.updateCharacter('perks', nextPerks); app.updateCharacter('perkPoints', nextPts); console.log(`Granted ${count} mastery for ${perkId} and charged ${totalCost} points.`); return { ok: true }; }
+  if (typeof app.setCharacters === 'function') { app.setCharacters(prev => prev.map(c => c.id === charId ? { ...c, perks: nextPerks, perkPoints: nextPts } : c)); console.log(`Granted ${count} mastery for ${perkId} (via setCharacters) and charged ${totalCost} points.`); return { ok: true }; }
+  return { ok: false, message: 'no update method' };
+};
+
+// Set level (and optionally grant naive perk points for levels increased)
+window.demo.setLevel = function(level, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const character = (app.characters || []).find(c => c.id === charId);
+  if (!character) return { ok: false, message: 'character not found' };
+  const lvl = Math.max(1, Number(level) || 1);
+  const gained = Math.max(0, lvl - (character.level || 0));
+  const extraPerkPoints = gained; // naive: 1 perk per level
+  const nextPts = (character.perkPoints || 0) + extraPerkPoints;
+  if (typeof app.updateCharacter === 'function') { app.updateCharacter('level', lvl); app.updateCharacter('perkPoints', nextPts); console.log(`Set level to ${lvl} and granted ${extraPerkPoints} perk points.`); return { ok: true }; }
+  if (typeof app.setCharacters === 'function') { app.setCharacters(prev => prev.map(c => c.id === charId ? { ...c, level: lvl, perkPoints: nextPts } : c)); console.log(`Set level to ${lvl} (via setCharacters) and granted ${extraPerkPoints} perk points.`); return { ok: true }; }
+  return { ok: false, message: 'no update method' };
+};
+
+// Give an item to a character
+window.demo.giveItem = function(name, type = 'misc', quantity = 1, characterId = null) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false, message: 'admin required' }; }
+  if (!name) return { ok: false, message: 'name required' };
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
+  const item = { id: Math.random().toString(36).substr(2,9), characterId: charId, name, type, description: '', quantity: Math.max(1, Number(quantity)||1), equipped: false, createdAt: Date.now() };
+  if (app.handleGameUpdate) { app.handleGameUpdate({ newItems: [item] }); console.log(`Gave ${quantity}x ${name} to character.`); return { ok: true }; }
+  return { ok: false, message: 'no handleGameUpdate' };
+};
+
+// Dump raw window.app for debugging
+window.demo.getRawState = function() { if (!_isAdmin()) { console.error('Admin only'); return null; } return window.app || null; };
+
+// Companions management helpers
+window.demo.recruitCompanion = function(payload = { name: 'New Follower', race: 'Nord', level: 1 }) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false }; }
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  const id = uniqueId();
+  const c = { id, name: payload.name || 'Companion', race: payload.race || 'Nord', class: 'Follower', level: Math.max(1, Number(payload.level)||1), health: 50, maxHealth: 50, damage: 6, armor: 5, personality: 'Loyal', recruitedAt: Date.now(), loyalty: 50, mood: 'neutral' };
+  if (typeof app.addCompanion === 'function') { app.addCompanion(c); console.log('Recruited companion:', c); return { ok: true, companion: c }; }
+  if (typeof app.setCompanions === 'function') { app.setCompanions(prev => [...(prev||[]), c]); console.log('Recruited companion (via setCompanions):', c); return { ok: true, companion: c }; }
+  return { ok: false, message: 'no method' };
+};
+
+window.demo.listCompanions = function() {
+  const app = window.app; if (!app) { console.error('no app'); return []; }
+  return app.companions || [];
+};
+
+window.demo.removeCompanion = function(id) {
+  if (!_isAdmin()) { console.error('Admin only'); return { ok: false }; }
+  const app = window.app; if (!app) return { ok: false, message: 'no app' };
+  if (typeof app.removeCompanion === 'function') { app.removeCompanion(id); console.log('Removed companion', id); return { ok: true }; }
+  if (typeof app.setCompanions === 'function') { app.setCompanions(prev => (prev||[]).filter(p => p.id !== id)); console.log('Removed companion (via setCompanions)', id); return { ok: true }; }
+  return { ok: false, message: 'no method' };
+};
+
 // One-time migration helper to fix potion items in player inventories
 window.demo.migratePotions = async function(options = { dryRun: false }) {
   try {

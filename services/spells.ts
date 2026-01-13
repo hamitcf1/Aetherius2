@@ -44,6 +44,98 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     perkCost: 1,
     type: 'heal',
     heal: 25
+  },
+  spark: {
+    id: 'spark',
+    name: 'Spark',
+    description: 'A small shock of lightning that deals modest damage.',
+    cost: 10,
+    perkCost: 1,
+    type: 'damage',
+    damage: 8,
+    effects: [{ type: 'damage', stat: 'health', value: 2 }]
+  },
+  fireball: {
+    id: 'fireball',
+    name: 'Fireball',
+    description: 'A powerful explosion of fire that hits multiple targets.',
+    cost: 40,
+    perkCost: 3,
+    type: 'damage',
+    damage: 45,
+    effects: [{ type: 'dot', stat: 'health', value: 6, duration: 3 }],
+    prerequisites: { level: 12 }
+  },
+  frost_nova: {
+    id: 'frost_nova',
+    name: 'Frost Nova',
+    description: 'A chilling burst that damages and slows nearby enemies.',
+    cost: 35,
+    perkCost: 2,
+    type: 'debuff',
+    damage: 20,
+    effects: [{ type: 'slow', amount: 30, duration: 3 }],
+    prerequisites: { level: 8 }
+  },
+  lightning_bolt: {
+    id: 'lightning_bolt',
+    name: 'Lightning Bolt',
+    description: 'A concentrated bolt of lightning that pierces armor.',
+    cost: 30,
+    perkCost: 2,
+    type: 'damage',
+    damage: 30,
+    effects: [{ type: 'stun', duration: 1 }]
+  },
+  chain_lightning: {
+    id: 'chain_lightning',
+    name: 'Chain Lightning',
+    description: 'Lightning that arcs between multiple foes.',
+    cost: 50,
+    perkCost: 4,
+    type: 'damage',
+    damage: 55,
+    effects: [{ type: 'damage', stat: 'health', value: 10 }],
+    prerequisites: { level: 18 }
+  },
+  summon_skeleton: {
+    id: 'summon_skeleton',
+    name: 'Summon Skeleton',
+    description: 'Summons a skeletal minion to fight for you.',
+    cost: 40,
+    perkCost: 3,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Skeleton', duration: 60 }],
+    prerequisites: { level: 10 }
+  },
+  invisibility: {
+    id: 'invisibility',
+    name: 'Invisibility',
+    description: 'Become unseen for a short duration.',
+    cost: 60,
+    perkCost: 5,
+    type: 'utility',
+    effects: [{ type: 'buff', stat: 'stealth', amount: 100, duration: 8 }],
+    prerequisites: { level: 20 }
+  },
+  slow: {
+    id: 'slow',
+    name: 'Slow',
+    description: 'Reduces target movement speed considerably.',
+    cost: 18,
+    perkCost: 1,
+    type: 'debuff',
+    effects: [{ type: 'slow', amount: 40, duration: 4 }]
+  },
+  heal_major: {
+    id: 'heal_major',
+    name: 'Heal Major',
+    description: 'Restores a large amount of health to the caster or an ally.',
+    cost: 45,
+    perkCost: 3,
+    type: 'heal',
+    heal: 60,
+    prerequisites: { level: 15 }
   }
 };
 

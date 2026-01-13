@@ -45,6 +45,9 @@ export interface AppContextType {
   setColorTheme: (theme: string) => void;
   showQuantityControls: boolean;
   setShowQuantityControls: (v: boolean) => void;
+  // Companions management
+  companions: Companion[];
+  openCompanions: () => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
