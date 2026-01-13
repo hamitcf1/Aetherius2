@@ -68,6 +68,7 @@ The menu must allow the player to perform the following:
 - All pre-rest and post-rest actions are functional.
 - Stats recovery (health, stamina, magicka) occurs correctly.
 - Level-ups and perk assignments are applied and tracked.
+- Mastery purchases now consume perk points (configurable via `masteryCost` per perk); force-unlock costs 3 perk points and is limited to 3 uses per character.
 - All changes are reversible before rest confirmation.
 - Code modularity for future expansion confirmed.
 - Interface is clear and responsive.

@@ -238,26 +238,21 @@ const ActionBar: React.FC = () => {
           {/* Shop Button - Now in Inventory section */}
           {/* Removed: Shop button moved to Inventory for better UX */}
 
-          {/* AI Profile Image - show as disabled if feature not enabled */}
-          <div className="relative group">
-            <button 
-              onClick={isFeatureEnabled('aiProfileImage') ? handleGenerateProfileImage : undefined}
-              disabled={!isFeatureEnabled('aiProfileImage') || isGeneratingProfileImage}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${
-                isFeatureEnabled('aiProfileImage')
-                  ? 'bg-skyrim-accent text-white hover:bg-purple-700 disabled:opacity-50'
-                  : 'bg-gray-600 text-skyrim-text cursor-not-allowed opacity-60'
-              }`}
-            >
-              {isGeneratingProfileImage ? <Loader2 className="animate-spin" size={16} /> : <ImageIcon size={16} />}
-              {isGeneratingProfileImage ? 'Generating...' : 'Generate Profile Photo'}
-            </button>
-            {!isFeatureEnabled('aiProfileImage') && (
-              <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-lg">
-                {getFeatureLabel('aiProfileImage') || 'Work in Progress'}
-              </div>
-            )}
-          </div>
+          {/* AI Profile Image - hide entirely when feature is disabled */}
+          {isFeatureEnabled('aiProfileImage') && (
+            <div className="relative group">
+              <button 
+                onClick={handleGenerateProfileImage}
+                disabled={isGeneratingProfileImage}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${
+                  isGeneratingProfileImage ? 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-70' : 'bg-skyrim-accent text-white hover:bg-purple-700'
+                }`}
+              >
+                {isGeneratingProfileImage ? <Loader2 className="animate-spin" size={16} /> : <ImageIcon size={16} />}
+                {isGeneratingProfileImage ? 'Generating...' : 'Generate Profile Photo'}
+              </button>
+            </div>
+          )}
           
           {/* Snow Effect - show as disabled if feature not enabled */}
           <div className="relative group">

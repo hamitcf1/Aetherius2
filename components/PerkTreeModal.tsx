@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { PERK_DEFINITIONS, PerkDef } from '../data/perkDefinitions';
+import PERK_BALANCE from '../data/perkBalance';
 import { Perk, Character } from '../types';
 import { Check, Lock } from 'lucide-react';
 
@@ -43,8 +44,14 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
 
   const availablePoints = character.perkPoints || 0;
   const stagedCount = Object.values(stagedMap as Record<string, number>).reduce((s: number, v: number) => s + (v || 0), 0);
-  const remainingPoints = Math.max(0, availablePoints - stagedCount);
-
+  // Compute staged cost: 1 point per rank staged + masteryCost per staged mastery
+  const stagedMasterCost = Object.keys(stagedMaster).reduce((sum: number, k: string) => {
+    if (!stagedMaster[k]) return sum;
+    const def = defs.find(d => d.id === k);
+    return sum + (def?.masteryCost || 3);
+  }, 0);
+  const stagedPoints = Math.max(0, stagedCount + stagedMasterCost);
+  const remainingPoints = availablePoints - stagedPoints;
   const statusOf = (def: PerkDef) => {
     const curr = currentPerkRank(character, def.id);
     const max = def.maxRank || 1;
@@ -100,7 +107,13 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
               const max = def.maxRank || 1;
               const stagedCountFor = stagedFor(def.id);
               const currMastery = (character.perks || []).find(p => p.id === def.id)?.mastery || 0;
-              const canStage = st === 'available' && remainingPoints > 0 && (curr + stagedCountFor) < max;
+              const balance = PERK_BALANCE[def.id] || {};
+              const masteryCost = def.masteryCost || balance.masteryCost || 3;
+              // Mastery bonus per purchase (if configured)
+              const masteryBonus = balance.masteryBonus || (def.effect && def.effect.type === 'stat' ? { type: 'stat' as const, key: def.effect.key, amount: Math.ceil((def.effect.amount || 0) * 0.5 * (def.maxRank || 1)) } : undefined);
+
+              const canStage = st === 'available' && remainingPoints >= 1 && (curr + stagedCountFor) < max;
+              const canMaster = curr >= max && !stagedMaster[def.id] && remainingPoints >= masteryCost;
               return (
                 <div>
                   <div className="flex items-center justify-between">
@@ -112,7 +125,16 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                   </div>
                   <p className="mt-2 text-sm text-skyrim-text">{def.description}</p>
                   <div className="mt-2 text-xs text-skyrim-text">Current Rank: {curr} / {max}</div>
-                  {currMastery > 0 && <div className="mt-1 text-xs text-skyrim-gold">Mastery: x{currMastery} — grants additional bonus</div>}
+                  {currMastery > 0 && (
+                    <div className="mt-1 text-xs text-skyrim-gold">Mastery: x{currMastery} — grants additional bonus</div>
+                  )}
+                  <div className="mt-2 text-xs text-skyrim-text">Master cost: <span className="font-bold text-yellow-200">{masteryCost} pt{masteryCost>1?'s':''}</span></div>
+                  {masteryBonus && masteryBonus.type === 'stat' && (
+                    <div className="mt-2 text-xs text-skyrim-text">Mastery bonus: <span className="font-bold text-skyrim-gold">+{masteryBonus.amount} {masteryBonus.key} per mastery</span> — Current bonus: <span className="font-bold text-skyrim-gold">+{(masteryBonus.amount || 0) * currMastery} {masteryBonus.key}</span></div>
+                  )}
+                  {masteryBonus && masteryBonus.type === 'skill' && (
+                    <div className="mt-2 text-xs text-skyrim-text">Mastery bonus: <span className="font-bold text-skyrim-gold">+{masteryBonus.amount} to {masteryBonus.key} per mastery</span></div>
+                  )}
                       {def.effect && def.effect.type === 'stat' && (
                         (() => {
                           const perRank = def.effect ? def.effect.amount : 0;
@@ -143,7 +165,7 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                       if (next[def.id] === 0) delete next[def.id];
                       return next;
                     })} className={`px-3 py-2 rounded ${stagedCountFor ? 'border border-skyrim-gold text-skyrim-gold' : 'bg-skyrim-paper/20 text-skyrim-text border border-skyrim-border'}`}>Undo</button>
-                    <button disabled={curr < max || !!stagedMaster[def.id]} onClick={() => setStagedMaster(s => ({ ...s, [def.id]: true }))} className={`px-3 py-2 rounded ${curr >= max && !stagedMaster[def.id] ? 'bg-blue-700 text-white' : 'bg-skyrim-paper/20 text-skyrim-text border border-skyrim-border'}`}>Master</button>
+                    <button disabled={!canMaster} onClick={() => { if (!canMaster) return; setStagedMaster(s => ({ ...s, [def.id]: true })); }} className={`px-3 py-2 rounded ${canMaster ? 'bg-blue-700 text-white' : 'bg-skyrim-paper/20 text-skyrim-text border border-skyrim-border'}`}>{stagedMaster[def.id] ? 'Staged Master' : 'Master'}</button>
                         <button onClick={() => setSelected(null)} className="px-3 py-2 rounded border border-skyrim-border">Close</button>
                         {st === 'locked' && (
                           <button
@@ -165,10 +187,10 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mt-4 gap-3">
-          <div className="text-sm text-skyrim-text">Staged: <span className="text-skyrim-gold font-bold">{stagedCount}</span> / {availablePoints}</div>
+          <div className="text-sm text-skyrim-text">Staged: <span className="text-skyrim-gold font-bold">{stagedCount}</span> ranks (cost <span className="text-skyrim-gold font-bold">{stagedPoints}</span>) / {availablePoints} pts</div>
           <div className="flex gap-2">
             <button onClick={() => { setStagedMap({}); setStagedMaster({}); setSelected(null); onClose(); }} className="px-4 py-2 rounded border border-skyrim-border">Cancel</button>
-            <button disabled={stagedCount === 0 && Object.values(stagedMaster).filter(Boolean).length === 0} onClick={() => {
+            <button disabled={stagedPoints === 0 || stagedPoints > availablePoints} onClick={() => {
               // expand stagedMap into array of ids (allow duplicates per rank)
               const expanded: string[] = [];
               for (const k of Object.keys(stagedMap)) {
@@ -183,7 +205,7 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
               setStagedMap({});
               setStagedMaster({});
               setSelected(null);
-            }} className={`px-4 py-2 rounded ${stagedCount>0 || Object.values(stagedMaster).filter(Boolean).length>0 ? 'bg-skyrim-gold text-black' : 'bg-skyrim-paper/20 text-skyrim-text border border-skyrim-border'}`}>Confirm Unlocks</button>
+            }} className={`px-4 py-2 rounded ${stagedPoints>0 && stagedPoints<=availablePoints ? 'bg-skyrim-gold text-black' : 'bg-skyrim-paper/20 text-skyrim-text border border-skyrim-border'}`}>Confirm Unlocks</button>
           </div>
         </div>
       </div>

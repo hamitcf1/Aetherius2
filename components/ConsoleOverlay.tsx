@@ -19,6 +19,7 @@ const COMMAND_SUGGESTIONS = [
   'demo.addRandomQuests(2)',
   'demo.getAppState()',
   'demo.clearDemoData()',
+  'demo.addPerkPoints(3)',
   "demo.clearDemoData({ items: false })",
   'clear',
   'history',

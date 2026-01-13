@@ -173,6 +173,48 @@ window.demo.addRandomItems = function(count = 5) {
   return items;
 };
 
+/**
+ * Add perk points to current character (development helper)
+ * Usage: demo.addPerkPoints(2)
+ */
+window.demo.addPerkPoints = function(amount = 1) {
+  const app = window.app;
+  const safe = Math.max(0, Number(amount) || 0);
+  if (!app) {
+    console.error('App context not available. Open the app first.');
+    return { ok: false, message: 'app missing' };
+  }
+  const charId = app.currentCharacterId;
+  if (!charId) {
+    console.error('No active character selected.');
+    return { ok: false, message: 'no active character' };
+  }
+  const character = (app.characters || []).find(c => c.id === charId);
+  if (!character) {
+    console.error('Active character not found in app state.');
+    return { ok: false, message: 'character not found' };
+  }
+
+  const next = (character.perkPoints || 0) + safe;
+
+  if (typeof app.updateCharacter === 'function') {
+    app.updateCharacter('perkPoints', next);
+    const msg = `Added ${safe} perk point(s). New total: ${next}`;
+    console.log(msg);
+    return { ok: true, message: msg };
+  }
+
+  if (typeof app.setCharacters === 'function') {
+    app.setCharacters((prev) => prev.map(c => c.id === charId ? { ...c, perkPoints: next } : c));
+    const msg = `Added ${safe} perk point(s) via setCharacters. New total: ${next}`;
+    console.log(msg);
+    return { ok: true, message: msg };
+  }
+
+  console.error('No supported method found on window.app to update character.');
+  return { ok: false, message: 'no update method' };
+};
+
 // One-time migration helper to fix potion items in player inventories
 window.demo.migratePotions = async function(options = { dryRun: false }) {
   try {
@@ -657,6 +699,7 @@ window.demo.help = function() {
     'Utilities:',
     '  - demo.getAppState()         Show current app state',
     '  - demo.clearDemoData()       Clear items/quests/journal/story for the active character',
+    '  - demo.addPerkPoints(n)      Add n perk points to the current character (dev helper)',
     '  - demo.help()                Show this help',
     '',
     'Examples:',
@@ -664,6 +707,7 @@ window.demo.help = function() {
     '  - demo.addRandomItems(10)',
     '  - demo.createTestCharacter()',
     '  - demo.getAppState()',
+    '  - demo.addPerkPoints(3)',
     '',
     'Note: Most functions show suggested commands instead of directly modifying app state.'
   ].join('\n');

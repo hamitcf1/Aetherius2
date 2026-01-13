@@ -18,6 +18,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.5',
+    date: '2026-01-13',
+    title: 'Perk Tree: Mastery & Cost Fixes',
+    changes: [
+      { type: 'fix', text: 'Perk Tree: Mastery purchases now cost perk points (`masteryCost` per perk) and are validated in the UI' },
+      { type: 'fix', text: 'Perk Tree: Fixed bug where mastering a perk reset its rank to 0 — ranks are preserved and mastery increments properly' },
+      { type: 'improvement', text: 'Perk Tree: Show staged rank cost and mastery cost, disable actions when insufficient points' },
+      { type: 'fix', text: 'Perk Tree: Force-unlock now gives user feedback when insufficient points or unlock limit reached' }
+    ]
+  },
+  {
     version: '0.5.4',
     date: '2026-01-13',
     title: 'Bonfire Menu Enhancements',

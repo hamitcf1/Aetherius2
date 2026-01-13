@@ -105,6 +105,7 @@ import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
 import PerkTreeModal from './components/PerkTreeModal';
+import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
@@ -433,15 +434,17 @@ const App: React.FC = () => {
 
   // Console keypress tracking
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Only track if not in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only track if not in an input or textarea field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      const key = e.key.toLowerCase();
+      // Only accept single-letter keys to build the buffer (ignore modifiers and special keys)
+      const key = e.key;
+      if (!key || key.length !== 1 || !/^[a-zA-Z]$/.test(key)) return;
+
+      const lower = key.toLowerCase();
       setConsoleKeyBuffer(prev => {
-        const newBuffer = (prev + key).slice(-7); // Keep last 7 characters
+        const newBuffer = (prev + lower).slice(-7); // Keep last 7 characters
         if (newBuffer.includes('console')) {
           // Prevent the final keypress from being applied to the newly-focused console input
           try { e.preventDefault(); } catch (err) {}
@@ -452,8 +455,8 @@ const App: React.FC = () => {
       });
     };
 
-    window.addEventListener('keypress', handleKeyPress);
-    return () => window.removeEventListener('keypress', handleKeyPress);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Global Backquote / ~ key toggles the developer console (outside of text inputs)
@@ -2643,7 +2646,7 @@ const App: React.FC = () => {
       }
       pts = Math.max(0, pts - 1);
       setDirtyEntities(d => new Set([...d, c.id]));
-      return { ...c, stats: updatedStats, perks: newPerks, perkPoints: pts } as Character;
+      return { ...c, stats: updatedStats, perks: sanitizePerks(newPerks), perkPoints: pts } as Character;
     }));
   };
 
@@ -2668,26 +2671,49 @@ const App: React.FC = () => {
           const existing = nextPerks.find(p => p.id === baseId);
           const currRank = existing?.rank || 0;
           const max = def.maxRank || 1;
+          const masteryCost = def.masteryCost || 3;
           // only allow mastering when at max rank
           if (currRank >= max) {
-            // increment mastery counter (no perk point cost)
+            // Check if we have enough points to pay for mastery
+            const balance = PERK_BALANCE || {};
+            const masteryCostResolved = def.masteryCost || balance[baseId]?.masteryCost || 3;
+            const masteryBonusCfg = balance[baseId]?.masteryBonus;
+
+            if (pts < masteryCostResolved * (wantCount || 1)) {
+              showToast && showToast(`Not enough perk points to purchase mastery for ${def.name}.`, 'warning');
+              continue;
+            }
+
+            // Deduct points for each mastery purchased
+            pts = Math.max(0, pts - masteryCostResolved * (wantCount || 1));
+
+            // increment mastery counter (do NOT reset rank)
             let found = false;
             for (let i = 0; i < nextPerks.length; i++) {
               if (nextPerks[i].id === baseId) {
-                nextPerks[i] = { ...nextPerks[i], rank: 0, mastery: (nextPerks[i].mastery || 0) + wantCount };
+                nextPerks[i] = { ...nextPerks[i], mastery: (nextPerks[i].mastery || 0) + wantCount };
                 found = true;
                 break;
               }
             }
             if (!found) {
-              nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: 0, mastery: wantCount, description: def.description });
+              // If a perk wasn't present (edge case), add it with max rank and mastery
+              nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: max, mastery: wantCount, description: def.description });
             }
-            // apply a small mastery bonus to stats
-            if (def.effect && def.effect.type === 'stat') {
+
+            // apply mastery bonus from config if present
+            if (masteryBonusCfg && masteryBonusCfg.type === 'stat') {
+              const key = masteryBonusCfg.key as keyof typeof updatedStats;
+              const bonus = (masteryBonusCfg.amount || 0) * (wantCount || 1);
+              updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + bonus };
+            } else if (def.effect && def.effect.type === 'stat') {
+              // fallback to previous heuristic
               const key = def.effect.key as keyof typeof updatedStats;
-              const bonus = Math.ceil((def.effect.amount || 0) * 0.5 * (def.maxRank || 1)) * (wantCount || 1);
+              const bonusPerMastery = Math.ceil((def.effect.amount || 0) * 0.5 * (def.maxRank || 1));
+              const bonus = bonusPerMastery * (wantCount || 1);
               updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + bonus };
             }
+            showToast && showToast(`Mastery purchased for ${def.name} (x${wantCount})`, 'success');
           }
           continue;
         }
@@ -2718,8 +2744,17 @@ const App: React.FC = () => {
       }
 
       setDirtyEntities(d => new Set([...d, c.id]));
-      return { ...c, stats: updatedStats, perks: nextPerks, perkPoints: pts } as Character;
+      return { ...c, stats: updatedStats, perks: sanitizePerks(nextPerks), perkPoints: pts } as Character; // already sanitized above (nextPerks)
     }));
+  };
+
+  // Sanitize perks to ensure ranks/mastery are within logical bounds
+  const sanitizePerks = (perks: Perk[]) => {
+    return (perks || []).map(p => {
+      const def = PERK_DEFINITIONS.find(d => d.id === p.id);
+      const max = def?.maxRank || 1;
+      return { ...p, rank: Math.max(0, Math.min(max, p.rank || 0)), mastery: Math.max(0, p.mastery || 0) };
+    });
   };
 
   // Force-unlock a locked perk by spending 3 perk points (limited uses per character)
@@ -2729,14 +2764,23 @@ const App: React.FC = () => {
       if (c.id !== currentCharacterId) return c;
       let pts = c.perkPoints || 0;
       let forced = c.forcedPerkUnlocks || 0;
-      if (pts < 3) return c; // not enough points
-      if (forced >= 3) return c; // reached forced-unlock limit
+      if (pts < 3) {
+        showToast && showToast('Not enough perk points to force-unlock this perk.', 'warning');
+        return c; // not enough points
+      }
+      if (forced >= 3) {
+        showToast && showToast('You have reached the maximum number of forced unlocks (3).', 'warning');
+        return c; // reached forced-unlock limit
+      }
       const def = PERK_DEFINITIONS.find(d => d.id === perkId);
       if (!def) return c;
       const max = def.maxRank || 1;
       const existing = (c.perks || []).find(p => p.id === perkId);
       const currRank = existing?.rank || 0;
-      if (currRank >= max) return c; // already maxed
+      if (currRank >= max) {
+        showToast && showToast('Perk is already at maximum rank.', 'info');
+        return c; // already maxed
+      }
 
       // Apply one rank regardless of prerequisites
       let updatedStats = { ...c.stats };
