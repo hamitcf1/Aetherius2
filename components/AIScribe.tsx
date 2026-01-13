@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { generateGameMasterResponse, generateLoreImage } from '../services/geminiService';
 import { GameStateUpdate } from '../types';
 import { Sparkles, X, Scroll, Loader2, Play, Image as ImageIcon, User, Brain, Wand2 } from 'lucide-react';
+import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import type { PreferredAIModel } from '../services/geminiService';
 
 // Quick prompts for hero detail generation
@@ -30,6 +31,12 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
   const [lastResponse, setLastResponse] = useState<GameStateUpdate | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [mode, setMode] = useState<'action' | 'hero'>('action'); // Mode toggle
+  // Feature gating for AIScribe
+  const _featureEnabled = isFeatureEnabled('aiScribe');
+  const _featureWIP = isFeatureWIP('aiScribe');
+  // If disabled and not WIP, hide entirely
+  if (!_featureEnabled && !_featureWIP) return null;
+
   // --- Consult Game Master button visibility ---
   const [showConsultButton, setShowConsultButton] = useState(() => {
     try {
@@ -305,11 +312,12 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
         )}
         {showConsultButton && (
           <button
-            onMouseDown={handleMouseDown}
-            onClick={handleButtonClick}
-            className={`fixed top-1/2 right-10 z-50 p-3 bg-skyrim-gold hover:bg-skyrim-goldHover text-skyrim-dark rounded-full shadow-lg border-2 border-skyrim-dark transition-transform hover:scale-105 flex items-center gap-2 font-serif font-bold ${
+            onMouseDown={_featureEnabled ? handleMouseDown : undefined}
+            onClick={_featureEnabled ? handleButtonClick : (e) => e.preventDefault()}
+            className={`fixed top-1/2 right-10 z-50 p-3 ${_featureEnabled ? 'bg-skyrim-gold hover:bg-skyrim-goldHover text-skyrim-dark' : 'bg-gray-700 text-gray-400 cursor-not-allowed'} rounded-full shadow-lg border-2 ${_featureEnabled ? 'border-skyrim-dark transition-transform hover:scale-105' : 'border-gray-600'} flex items-center gap-2 font-serif font-bold ${
               isCollapsed ? 'opacity-70 scale-75' : ''
             }`}
+            title={_featureEnabled ? (isCollapsed ? 'Click to restore' : 'Consult the Game Master (drag to move)') : (getFeatureLabel('aiScribe') || 'Work in Progress')}
             style={{
               transform: 'translateY(-50%)',
               minWidth: window.innerWidth <= 600 ? 50 : 44,
@@ -320,7 +328,6 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
               padding: window.innerWidth <= 600 ? '8px' : 0,
               boxSizing: 'border-box'
             }}
-            title={isCollapsed ? 'Click to restore' : 'Consult the Game Master (drag to move)'}
           >
             <Sparkles size={20} />
             {!isCollapsed && <span className="hidden md:inline">Consult Game Master</span>}

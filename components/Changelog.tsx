@@ -18,6 +18,16 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.4',
+    date: '2026-01-13',
+    title: 'Bonfire Menu Enhancements',
+    changes: [
+      { type: 'improvement', text: 'Bonfire Menu: Added tooltips to explain each equipment change before resting' },
+      { type: 'improvement', text: 'Bonfire Menu: Improved layout and styling for better clarity on mobile devices' },
+      { type: 'fix', text: 'Bonfire Menu: Resolved issue where certain equipment changes were not applying correctly after rest' },
+      ]
+  },
+  {
     version: '0.5.3',
     date: '2026-01-12',
     title: 'Themes & Pointer improvements',

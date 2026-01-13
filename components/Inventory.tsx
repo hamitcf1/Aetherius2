@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, EquipmentSlot } from '../types';
-import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff } from 'lucide-react';
+import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowDownToLine as ArrowDownToLineAlt, ArrowUpFromLine as ArrowUpFromLineAlt, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff } from 'lucide-react';
+import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
 import { isTwoHandedWeapon, isShield, canEquipInOffhand, canEquipInMainhand } from '../services/equipment';
 import { ShopModal } from './ShopModal';
@@ -610,12 +611,24 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
               </div>
           </div>
           <div className="flex gap-2">
-            <button 
-                onClick={() => setShopOpen(true)}
-                className="px-4 py-2 bg-amber-700 text-white hover:bg-amber-600 transition-colors rounded flex items-center gap-2 font-bold"
-            >
-                <ShoppingBag size={18} /> Shop
-            </button>
+            {(isFeatureEnabled('shop') || isFeatureWIP('shop')) && (
+              isFeatureEnabled('shop') ? (
+                <button 
+                  onClick={() => setShopOpen(true)}
+                  className="px-4 py-2 bg-amber-700 text-white hover:bg-amber-600 transition-colors rounded flex items-center gap-2 font-bold"
+                >
+                  <ShoppingBag size={18} /> Shop
+                </button>
+              ) : (
+                <button
+                  className="px-4 py-2 bg-gray-700 text-gray-400 cursor-not-allowed transition-colors rounded flex items-center gap-2 font-bold"
+                  title={getFeatureLabel('shop') || 'Work in Progress'}
+                  onClick={(e) => e.preventDefault()}
+                >
+                  <ShoppingBag size={18} /> Shop
+                </button>
+              )
+            )}
             <button 
               onClick={() => setBlacksmithOpen(true)}
               className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-700 transition-colors rounded flex items-center gap-2 font-bold"
@@ -755,15 +768,17 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
     )}
 
     {/* Shop Modal */}
-    <ShopModal
-      open={shopOpen}
-      onClose={() => setShopOpen(false)}
-      gold={gold}
-      onPurchase={handleShopPurchase}
-      inventory={items}
-      onSell={handleShopSell}
-      characterLevel={characterLevel}
-    />
+    {(isFeatureEnabled('shop') || isFeatureWIP('shop')) && (
+      <ShopModal
+        open={shopOpen}
+        onClose={() => setShopOpen(false)}
+        gold={gold}
+        onPurchase={handleShopPurchase}
+        inventory={items}
+        onSell={handleShopSell}
+        characterLevel={characterLevel}
+      />
+    )}
     <BlacksmithModal
       open={blacksmithOpen}
       onClose={() => setBlacksmithOpen(false)}

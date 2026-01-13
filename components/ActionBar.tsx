@@ -188,26 +188,14 @@ const ActionBar: React.FC = () => {
             <Sparkles size={16} /> Create Image Prompt
           </button>
           
-          {/* Upload Photo - show as disabled if feature not enabled */}
-          <div className="relative group">
-            <label 
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${
-                isFeatureEnabled('photoUpload') 
-                  ? 'bg-green-700 text-white cursor-pointer hover:bg-green-600' 
-                  : 'bg-gray-600 text-skyrim-text cursor-not-allowed opacity-60'
-              }`}
-            >
-              <ImageIcon size={16} /> Upload Photo
-              {isFeatureEnabled('photoUpload') && (
+          {isFeatureEnabled('photoUpload') && (
+            <div className="relative">
+              <label className="w-full flex items-center gap-2 px-3 py-2 rounded font-bold bg-green-700 text-white cursor-pointer hover:bg-green-600">
+                <ImageIcon size={16} /> Upload Photo
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
-              )}
-            </label>
-            {!isFeatureEnabled('photoUpload') && (
-              <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-lg">
-                {getFeatureLabel('photoUpload') || 'Work in Progress'}
-              </div>
-            )}
-          </div>
+              </label>
+            </div>
+          )}
           
           {/* Export PDF - show as disabled if feature not enabled */}
           <div className="relative group">

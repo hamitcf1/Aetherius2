@@ -44,7 +44,7 @@ import {
 } from './components/GameFeatures';
 import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { setCurrentUser as setFeatureFlagUser } from './featureFlags';
+import { setCurrentUser as setFeatureFlagUser, isFeatureEnabled, isFeatureWIP } from './featureFlags';
 import { 
   initializeCombat,
   calculatePlayerCombatStats
@@ -636,12 +636,12 @@ const App: React.FC = () => {
             const remoteDone = settings?.onboardingCompleted === true;
             const isNewAccount = (userProfiles?.length || 0) === 0 && (userCharacters?.length || 0) === 0;
             setUserSettings(settings);
-            setOnboardingOpen(isNewAccount && !localDone && !remoteDone);
+            setOnboardingOpen(isFeatureEnabled('onboarding') && isNewAccount && !localDone && !remoteDone);
           } catch {
             const remoteDone = settings?.onboardingCompleted === true;
             const isNewAccount = (userProfiles?.length || 0) === 0 && (userCharacters?.length || 0) === 0;
             setUserSettings(settings);
-            setOnboardingOpen(isNewAccount && !remoteDone);
+            setOnboardingOpen(isFeatureEnabled('onboarding') && isNewAccount && !remoteDone);
           }
 
           // Normalize older saves to include new survival/time fields
@@ -2813,7 +2813,9 @@ const App: React.FC = () => {
               onDeleteCharacter={handleDeleteCharacter}
               onMarkCharacterDead={handleMarkCharacterDead}
           />
-          <OnboardingModal open={onboardingOpen} onComplete={completeOnboarding} />
+          {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
+            <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
+          )}
         </>
       );
   }
@@ -2924,7 +2926,9 @@ const App: React.FC = () => {
         <OfflineIndicator />
         <AutoSaveIndicator status={saveStatus} lastSaved={lastSaved} />
         
-        <OnboardingModal open={onboardingOpen} onComplete={completeOnboarding} />
+        {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
+          <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
+        )}
         {/* Navigation Header */}
         <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-2xl">
           <div className="max-w-7xl mx-auto px-4">

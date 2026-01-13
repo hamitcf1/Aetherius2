@@ -50,7 +50,7 @@ export const FEATURES = {
   // === AI FEATURES ===
   aiScribe: { enabled: true, wip: false },
   aiCharacterGeneration: { enabled: true, wip: false },
-  aiProfileImage: { enabled: false, wip: false, label: 'Coming Soon' },
+  aiProfileImage: { enabled: false, wip: false},
   gemmaModels: { enabled: true, wip: false },
 
   // === CHARACTER MANAGEMENT ===
@@ -62,9 +62,7 @@ export const FEATURES = {
   onboarding: { enabled: true, wip: false },
   snowEffect: { enabled: true, wip: false, label: 'Coming Soon' },
   exportPDF: { enabled: true, wip: false, label: 'Coming Soon' },
-  photoUpload: { enabled: false, wip: false, label: 'Coming Soon' },
-
-  // === EXPERIMENTAL ===
+  photoUpload: { enabled: false, wip: false },
   multiplayerPresence: { enabled: false, wip: true, label: 'Experimental' },
 
   // === ADMIN ONLY (only visible when logged in as admin) ===
