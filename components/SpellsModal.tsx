@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Spell, getAllSpells, getLearnedSpellIds, learnSpell, getSpellById } from '../services/spells';
+import { Spell, getAllSpells, getLearnedSpellIds, learnSpell, getSpellById, isSpellVariantUnlocked } from '../services/spells';
 import { Character } from '../types';
 import { Zap, Book, Check } from 'lucide-react';
 

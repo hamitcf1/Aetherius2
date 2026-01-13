@@ -125,10 +125,10 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
         <div className="mt-4 border-t border-skyrim-border pt-3">
           <h4 className="text-sm font-bold text-skyrim-gold mb-2">Recruit New Companion</h4>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:border-skyrim-gold" />
             <DropdownSelector currentValue={race} onSelect={(value) => setRace(value)} options={RACE_OPTIONS} placeholder="Race" />
-            <input type="number" value={level} onChange={(e) => setLevel(Number(e.target.value))} min={1} className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
-            <input type="number" value={cost as any} onChange={(e) => setCost(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Cost (g)" className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+            <input type="number" value={level} onChange={(e) => setLevel(Number(e.target.value))} min={1} className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+            <input type="number" value={cost as any} onChange={(e) => setCost(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Cost (g)" className="bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
             <div>

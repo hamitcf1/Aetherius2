@@ -662,6 +662,8 @@ export interface Companion {
   damage: number;
   armor: number;
   personality: string;
+  // Short character backstory / flavor (optional). Shown in companion dialogue and passed to AI.
+  backstory?: string;
   recruitedAt: number;
   loyalty: number;
   mood: 'happy' | 'neutral' | 'unhappy' | 'angry';

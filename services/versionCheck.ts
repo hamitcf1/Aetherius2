@@ -4,6 +4,8 @@
  * and notifies users to refresh for the latest updates.
  */
 
+import { storage } from './storage';
+
 // Current build timestamp - this gets updated on each build
 const BUILD_TIMESTAMP = Date.now();
 const REQUEST_TIMEOUT_MS = 5000;
@@ -27,6 +29,9 @@ class VersionCheckService {
   constructor() {
     // Generate version from build timestamp
     this.currentVersion = this.generateVersionString(BUILD_TIMESTAMP);
+    // Import storage lazily to avoid top-level dependency issues in some environments
+    // (will be used where localStorage was previously accessed directly)
+    // Note: `storage` import is added at top; ensure tsconfig allows this import
   }
 
   private generateVersionString(timestamp: number): string {
@@ -111,12 +116,12 @@ class VersionCheckService {
       // If we can detect a different version
       if (serverVersion && serverVersion !== this.currentVersion) {
         // Store the initial version on first check
-        if (!this.hasNewVersion && !localStorage.getItem('aetherius-version')) {
-          localStorage.setItem('aetherius-version', this.currentVersion);
+        if (!this.hasNewVersion && !storage.getItem('aetherius-version')) {
+          storage.setItem('aetherius-version', this.currentVersion);
           return false;
         }
 
-        const storedVersion = localStorage.getItem('aetherius-version');
+        const storedVersion = storage.getItem('aetherius-version');
         if (storedVersion && serverVersion !== storedVersion) {
           this.hasNewVersion = true;
           this.newVersionInfo = {
@@ -136,7 +141,7 @@ class VersionCheckService {
       }
       // Log only once to avoid console spam when offline/blocked
       if (!this.hasLoggedFailure) {
-        console.warn('Version check failed (will be suppressed after this):', error);
+        try { require('./logger').log.warn('Version check failed (will be suppressed after this):', error); } catch (e2) { /* fallback */ }
         this.hasLoggedFailure = true;
       }
       return false;
@@ -199,7 +204,7 @@ class VersionCheckService {
    */
   acknowledgeUpdate(): void {
     if (this.newVersionInfo) {
-      localStorage.setItem('aetherius-version', this.newVersionInfo.version);
+      storage.setItem('aetherius-version', this.newVersionInfo.version);
     }
     this.hasNewVersion = false;
     this.newVersionInfo = null;

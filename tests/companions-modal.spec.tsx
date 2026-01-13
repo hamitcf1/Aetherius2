@@ -37,4 +37,12 @@ describe('CompanionsModal component', () => {
     expect(added.name).toBe('TestComp');
     expect(added.race).toBe('Khajiit');
   });
+
+  it('renders name input with theme-consistent style', async () => {
+    render(<CompanionsModal open={true} onClose={() => {}} companions={[]} onAdd={() => {}} onUpdate={() => {}} onRemove={() => {}} />);
+
+    const nameInput = await screen.findByPlaceholderText('Name');
+    expect(nameInput).toHaveClass('bg-skyrim-paper/20');
+    expect(nameInput).toHaveClass('text-skyrim-text');
+  });
 });

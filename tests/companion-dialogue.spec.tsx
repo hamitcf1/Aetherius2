@@ -28,4 +28,24 @@ describe('CompanionDialogueModal', () => {
     const aiText = await screen.findByText(/I will watch your back\./i);
     expect(aiText).toBeTruthy();
   });
+
+  it('shows backstory snippet in header when present', async () => {
+    const comp = { id: 'c1', name: 'Hamit', mood: 'neutral', personality: 'Loyal', backstory: 'A retired guard who owes you a favor.' } as any;
+
+    render(<CompanionDialogueModal open={true} onClose={() => {}} companion={comp} onSend={() => {}} />);
+
+    // The header should show a truncated backstory snippet
+    const headerBackstory = await screen.findByText(/retired guard who owes you a favor/i);
+    expect(headerBackstory).toBeTruthy();
+  });
+
+  it('renders input with prominent white style', async () => {
+    const comp = { id: 'c1', name: 'Hamit' } as any;
+    render(<CompanionDialogueModal open={true} onClose={() => {}} companion={comp} onSend={() => {}} />);
+
+    const input = await screen.findByRole('textbox');
+    // The textarea should have the white background class we added
+    expect(input).toHaveClass('bg-white');
+    expect(input).toHaveClass('text-black');
+  });
 });

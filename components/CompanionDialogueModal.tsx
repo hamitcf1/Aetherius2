@@ -14,8 +14,14 @@ interface Props {
 const simpleReply = (companion: Companion | null, message: string) => {
   if (!companion) return "...";
   const mood = companion.mood || 'neutral';
-  const persona = companion.personality?.toLowerCase() || 'neutral';
+  const persona = (companion.personality || '').toLowerCase() || 'neutral';
   const m = message.toLowerCase();
+
+  // Recognize that player may be asserting or asking about the companion relationship
+  if (m.includes('you are my companion') || m.includes('are you my companion') || (m.includes('companion') && (m.includes('you') || m.includes('my')))) {
+    const back = companion.backstory ? ` ${companion.backstory}` : '';
+    return `${companion.name}: Yes — I am your companion.${back}`;
+  }
 
   // Very small rule-based replies for an initial prototype
   if (m.includes('guard') || m.includes('watch')) return `${companion.name}: I'll watch your back, ${persona === 'loyal' ? "my Thane" : 'friend'}.`;
@@ -30,7 +36,8 @@ const simpleReply = (companion: Companion | null, message: string) => {
   return `${companion.name}: I understand.`;
 };
 
-export const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, companion, onSend }) => {
+
+const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, companion, onSend }) => {
   const [history, setHistory] = useState<Array<{ speaker: 'player' | 'companion'; text: string }>>([]);
   const [input, setInput] = useState('');
 
@@ -59,6 +66,14 @@ export const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, compani
     if (onSend) onSend(companion.id, msg);
     setInput('');
 
+    // If the message is a simple companion-relationship assertion/question, keep the rule-based reply and skip calling the AI
+    const low = msg.toLowerCase();
+    const isCompanionQuery = low.includes('you are my companion') || low.includes('are you my companion') || (low.includes('companion') && (low.includes('you') || low.includes('my')));
+    if (isCompanionQuery) {
+      // for these assertions we intentionally don't call the AI to keep the reply deterministic and immediate
+      return;
+    }
+
     // Call AI for in-character reply and replace the last companion entry when it arrives
     setIsThinking(true);
     try {
@@ -86,26 +101,41 @@ export const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, compani
 
   return (
     <ModalWrapper open={open} onClose={onClose} preventOutsideClose>
-      <div className="w-full max-w-lg bg-skyrim-paper p-4 rounded border border-skyrim-border">
+      <div className="w-full max-w-3xl bg-skyrim-paper p-6 rounded border border-skyrim-border">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <MessageSquare size={18} className="text-skyrim-gold" />
-            <h3 className="text-lg font-bold text-skyrim-gold">Talking with {companion.name}</h3>
+            <div>
+              <h3 className="text-lg font-bold text-skyrim-gold">Talking with {companion.name}</h3>
+              {companion.backstory && (
+                <div className="text-xs text-stone-400 mt-1 max-w-xs truncate">{companion.backstory}</div>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="px-2 py-1 rounded border border-skyrim-border">Close</button>
         </div>
 
-        <div className="bg-black/80 text-xs text-green-300 font-mono p-3 rounded h-48 overflow-auto mb-3">
+        <div className="bg-black/80 text-xs text-green-300 font-mono p-4 rounded h-72 md:h-96 overflow-auto mb-4">
           {history.map((h, i) => (
             <div key={i} className={`mb-2 ${h.speaker === 'player' ? 'text-right' : ''}`}>
-              <div className={`inline-block p-2 rounded ${h.speaker === 'player' ? 'bg-gray-700' : 'bg-skyrim-paper/30 text-skyrim-text'}`}>{h.text}</div>
+              <div className={`inline-block max-w-[78%] break-words p-2 rounded ${h.speaker === 'player' ? 'bg-gray-700' : 'bg-skyrim-paper/30 text-skyrim-text'}`}>{h.text}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex gap-2">
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }} className="flex-1 bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
-          <button onClick={send} className="px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded">Send</button>
+        <div className="flex gap-2 items-end">
+          <textarea
+            role="textbox"
+            aria-label={companion ? `Message ${companion.name}` : 'Message'}
+            placeholder="Type your message (Enter to send, Shift+Enter for newline)"
+            value={input}
+            rows={3}
+            autoFocus
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            className="flex-1 bg-white p-4 rounded border border-stone-700 text-black placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-h-[64px] resize-none"
+          />
+          <button onClick={send} type="button" className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded h-fit">Send</button>
         </div>
       </div>
     </ModalWrapper>

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { waitMs } from '../utils/animation';
 import { 
   Character, 
   InventoryItem, 
@@ -494,10 +495,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       for (let i = 0; i < 6; i++) {
         setRollValue(Math.floor(Math.random() * 20) + 1);
         // eslint-disable-next-line no-await-in-loop
-        await new Promise(r => setTimeout(r, 60 + i * 30));
+        await waitMs(60 + i * 30);
       }
       setRollValue(finalEnemyRoll);
-      await new Promise(r => setTimeout(r, 220));
+      await waitMs(220);
       setShowRoll(false);
       setRollActor(null);
 
@@ -510,8 +511,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           currentState = res.newState;
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
           setCombatState(currentState);
-          // Brief pause to animate companion action
-          await new Promise(resolve => setTimeout(resolve, 1000));
+              // Brief pause to animate companion action
+          await waitMs(1000);
           continue; // proceed to next turn
         }
 
@@ -534,7 +535,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       currentPlayerStats = newPlayerStats;
       
       // Update state with animation delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await waitMs(1000);
       
       setCombatState(currentState);
       setPlayerStats(currentPlayerStats);
@@ -586,7 +587,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setCombatState(currentState);
       setPlayerStats(currentPlayerStats);
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await waitMs(500);
     }
     
     setIsAnimating(false);
@@ -614,11 +615,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setRollValue(Math.floor(Math.random() * 20) + 1);
       // shorten time as it progresses
       // eslint-disable-next-line no-await-in-loop
-      await new Promise(r => setTimeout(r, 50 + i * 20));
+      await waitMs(50 + i * 20);
     }
     // final settle
     setRollValue(finalRoll);
-    await new Promise(r => setTimeout(r, 220));
+    await waitMs(220);
     setShowRoll(false);
     setRollActor(null);
 
@@ -712,7 +713,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       } catch (e) {}
     }
     
-    setTimeout(() => setIsAnimating(false), 500);
+    // In tests this will resolve instantly, but in production we keep the short delay for UX
+    waitMs(500).then(() => setIsAnimating(false));
   };
 
 

@@ -141,6 +141,8 @@ const SPELL_REGISTRY: Record<string, Spell> = {
 
 const STORAGE_PREFIX = 'aetherius:spells:';
 
+import { storage } from './storage';
+
 export const getAllSpells = (): Spell[] => Object.values(SPELL_REGISTRY);
 
 export const getSpellById = (id: string): Spell | undefined => {
@@ -188,11 +190,12 @@ export const isSpellVariantUnlocked = (character: { level: number; perks?: any[]
 
 export const getLearnedSpellIds = (characterId: string): string[] => {
   try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${characterId}`);
+    const raw = storage.getItem(`${STORAGE_PREFIX}${characterId}`);
     if (!raw) return [];
     return JSON.parse(raw) as string[];
   } catch (e) {
-    console.warn('Failed to read learned spells', e);
+    // Use structured logger so tests are not noisy
+    try { require('./logger').log.warn('Failed to read learned spells', e); } catch (e2) { /* fallback */ }
     return [];
   }
 };
@@ -206,10 +209,10 @@ export const learnSpell = (characterId: string, spellId: string) => {
   if (existing.includes(spellId)) return false;
   const next = [...existing, spellId];
   try {
-    localStorage.setItem(`${STORAGE_PREFIX}${characterId}`, JSON.stringify(next));
+    storage.setItem(`${STORAGE_PREFIX}${characterId}`, JSON.stringify(next));
     return true;
   } catch (e) {
-    console.warn('Failed to persist learned spells', e);
+    try { require('./logger').log.warn('Failed to persist learned spells', e); } catch (e2) { /* fallback */ }
     return false;
   }
 };
@@ -217,10 +220,10 @@ export const learnSpell = (characterId: string, spellId: string) => {
 export const forgetSpell = (characterId: string, spellId: string) => {
   const existing = getLearnedSpellIds(characterId).filter(s => s !== spellId);
   try {
-    localStorage.setItem(`${STORAGE_PREFIX}${characterId}`, JSON.stringify(existing));
+    storage.setItem(`${STORAGE_PREFIX}${characterId}`, JSON.stringify(existing));
     return true;
   } catch (e) {
-    console.warn('Failed to persist learned spells', e);
+    try { require('./logger').log.warn('Failed to persist learned spells', e); } catch (e2) { /* fallback */ }
     return false;
   }
 };
