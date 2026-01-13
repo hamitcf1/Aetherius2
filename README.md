@@ -16,6 +16,7 @@ This README is both a player tutorial and a developer/operator guide.
 - AI models + keys
 - Data + saving model (Firestore + Realtime)
 - Local development
+- Testing
 - Firebase setup (required)
 - Deployment (Netlify)
 - Do / Don’t (important)
@@ -158,6 +159,37 @@ npm run dev
 npm run build
 ```
 
+## Testing
+
+We use Vitest for unit tests and React Testing Library for component tests. Playwright is recommended for end-to-end (E2E) tests.
+
+- Run unit tests:
+
+```bash
+npm test
+```
+
+- Run tests in watch mode (Vitest):
+
+```bash
+npx vitest --watch
+```
+
+- Add component tests using @testing-library/react and `tests/*.spec.tsx` naming convention.
+
+- E2E (Playwright) (optional): install and run Playwright tests with:
+
+```bash
+npm i -D @playwright/test
+npx playwright install
+npx playwright test
+```
+
+- Test matrix and test coverage planning lives in `tests/TEST_MATRIX.md` and `tests/CONTRIBUTING_TESTS.md` (guidelines for writing tests).
+
+- CI: add a workflow that runs `npx tsc --noEmit`, `npm test`, and (optionally) `npx playwright test` on push/PR.
+
+Please see `tests/TEST_MATRIX.md` for a prioritized list of feature tests to implement.
 ## Firebase setup (required)
 
 ### 1) Create a Firebase project

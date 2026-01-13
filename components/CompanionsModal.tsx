@@ -2,8 +2,21 @@ import React, { useState } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { Companion, InventoryItem, EquipmentSlot } from '../types';
 import { Plus, Trash2, X } from 'lucide-react';
-import { SortSelector } from './GameFeatures';
+import { SortSelector, DropdownSelector } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
+
+const RACE_OPTIONS = [
+  { id: 'Nord', label: 'Nord' },
+  { id: 'Imperial', label: 'Imperial' },
+  { id: 'Breton', label: 'Breton' },
+  { id: 'Redguard', label: 'Redguard' },
+  { id: 'High Elf', label: 'High Elf' },
+  { id: 'Dark Elf', label: 'Dark Elf' },
+  { id: 'Wood Elf', label: 'Wood Elf' },
+  { id: 'Orc', label: 'Orc' },
+  { id: 'Khajiit', label: 'Khajiit' },
+  { id: 'Argonian', label: 'Argonian' }
+];
 
 interface Props {
   open: boolean;
@@ -26,7 +39,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
   const [cost, setCost] = useState<number | ''>('');
   const [behavior, setBehavior] = useState<'idle'|'follow'|'guard'>('idle');
   const [autoLoot, setAutoLoot] = useState(false);
-  const [sort, setSort] = useState<'name' | 'damage' | 'armor' | 'loyalty'>('name');
+  const [sort, setSort] = useState<string>('name:asc');
 
   const [selectedEquipCompanion, setSelectedEquipCompanion] = useState<Companion | null>(null);
   const [equipSlotPicker, setEquipSlotPicker] = useState<EquipmentSlot | null>(null);
@@ -69,19 +82,24 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
           {companions.length === 0 && <div className="text-xs text-gray-500 italic">No companions recruited yet.</div>}
           {companions.length > 0 && (
             <div className="mb-2">
-              <SortSelector currentSort={sort} onSelect={(s) => setSort(s as any)} options={[{ id: 'name', label: 'Name' }, { id: 'damage', label: 'Damage' }, { id: 'armor', label: 'Armor' }, { id: 'loyalty', label: 'Loyalty' }]} />
+              <SortSelector currentSort={sort} allowDirection={true} onSelect={(s) => setSort(s)} options={[{ id: 'name', label: 'Name' }, { id: 'damage', label: 'Damage' }, { id: 'armor', label: 'Armor' }, { id: 'loyalty', label: 'Loyalty' }]} />
             </div>
           )}
 
           {companions.slice().sort((a, b) => {
-            switch (sort) {
-              case 'damage': return (b.damage || 0) - (a.damage || 0);
-              case 'armor': return (b.armor || 0) - (a.armor || 0);
-              case 'loyalty': return (b.loyalty || 0) - (a.loyalty || 0);
-              case 'name':
-              default:
-                return a.name.localeCompare(b.name);
-            }
+            const [key, dir] = (sort || 'name:asc').split(':');
+            const asc = dir !== 'desc';
+            const cmp = (() => {
+              switch (key) {
+                case 'damage': return (b.damage || 0) - (a.damage || 0);
+                case 'armor': return (b.armor || 0) - (a.armor || 0);
+                case 'loyalty': return (b.loyalty || 0) - (a.loyalty || 0);
+                case 'name':
+                default:
+                  return a.name.localeCompare(b.name);
+              }
+            })();
+            return asc ? cmp : -cmp;
           }).map(c => (
             <div key={c.id} className="p-2 rounded border border-skyrim-border bg-skyrim-paper/20 flex items-center justify-between gap-2">
               <div>
@@ -104,7 +122,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
           <h4 className="text-sm font-bold text-skyrim-gold mb-2">Recruit New Companion</h4>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
-            <input value={race} onChange={(e) => setRace(e.target.value)} placeholder="Race" className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
+            <DropdownSelector currentValue={race} onSelect={(value) => setRace(value)} options={RACE_OPTIONS} placeholder="Race" />
             <input type="number" value={level} onChange={(e) => setLevel(Number(e.target.value))} min={1} className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
             <input type="number" value={cost as any} onChange={(e) => setCost(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Cost (g)" className="bg-skyrim-paper/40 p-2 rounded border border-skyrim-border text-skyrim-text focus:outline-none focus:border-skyrim-gold" />
           </div>

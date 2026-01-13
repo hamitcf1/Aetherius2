@@ -920,9 +920,12 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             />
           )}
 
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end mb-4 gap-2">
             <button onClick={() => setSpellsOpen(true)} className="px-3 py-1 bg-blue-800 text-white rounded flex items-center gap-2">
               <Zap /> Spells
+            </button>
+            <button onClick={() => { try { appCtx.openCompanions(); } catch (e) { (window as any).app?.openCompanions?.(); } }} className="px-3 py-1 bg-amber-700 text-white rounded flex items-center gap-2">
+              <User /> Manage Companions
             </button>
           </div>
 
@@ -944,14 +947,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 onChange={(v) => updateCharacter('identity', v)} 
                 placeholder="Who are they at their core? A lost noble? A vengeful orphan?"
             />
-            <div className="flex justify-end mb-4 gap-2">
-              <button onClick={() => setSpellsOpen(true)} className="px-3 py-1 bg-blue-800 text-white rounded flex items-center gap-2">
-                <Zap /> Spells
-              </button>
-              <button onClick={() => { try { appCtx.openCompanions(); } catch (e) { (window as any).app?.openCompanions?.(); } }} className="px-3 py-1 bg-amber-700 text-white rounded flex items-center gap-2">
-                <User /> Manage Companions
-              </button>
-            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <TextAreaField label="Psychology" value={character.psychology} onChange={(v) => updateCharacter('psychology', v)} placeholder="Mental state, personality quirks..." />
                 <TextAreaField label="Moral Code" value={character.moralCode} onChange={(v) => updateCharacter('moralCode', v)} placeholder="Lines they will not cross..." />

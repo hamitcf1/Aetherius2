@@ -222,7 +222,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
   const [newType, setNewType] = useState<InventoryItem['type']>('misc');
   const [newDesc, setNewDesc] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | InventoryItem['type'] | 'favorites'>('all');
-  const [sortOrder, setSortOrder] = useState<'name' | 'type' | 'newest' | 'quantity' | 'damage' | 'value'>('name');
+  const [sortOrder, setSortOrder] = useState<string>('name:asc');
   const [viewMode, setViewMode] = useState<'inventory' | 'equipment'>('inventory');
   const [equipModalOpen, setEquipModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot | null>(null);
@@ -292,26 +292,31 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
       uniqueItems = uniqueItems.filter(item => item.type === activeTab);
     }
     
-    // Sort based on sortOrder
+    // Sort based on sortOrder with optional direction support (e.g., 'name:asc' or 'name:desc')
+    const [key, dir] = (sortOrder || 'name:asc').split(':');
     return uniqueItems.sort((a, b) => {
+      const asc = dir !== 'desc';
       const getDamage = (it: InventoryItem) => it.damage ?? getItemStats(it.name, it.type).damage ?? 0;
       const getValue = (it: InventoryItem) => it.value ?? getItemStats(it.name, it.type).value ?? 0;
-      switch (sortOrder) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'type':
-          return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
-        case 'newest':
-          return (b.createdAt || 0) - (a.createdAt || 0);
-        case 'quantity':
-          return b.quantity - a.quantity || a.name.localeCompare(b.name);
-        case 'damage':
-          return getDamage(b) - getDamage(a) || a.name.localeCompare(b.name);
-        case 'value':
-          return getValue(b) - getValue(a) || a.name.localeCompare(b.name);
-        default:
-          return 0;
-      }
+      const cmp = (() => {
+        switch (key) {
+          case 'name':
+            return a.name.localeCompare(b.name);
+          case 'type':
+            return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
+          case 'newest':
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          case 'quantity':
+            return b.quantity - a.quantity || a.name.localeCompare(b.name);
+          case 'damage':
+            return getDamage(b) - getDamage(a) || a.name.localeCompare(b.name);
+          case 'value':
+            return getValue(b) - getValue(a) || a.name.localeCompare(b.name);
+          default:
+            return 0;
+        }
+      })();
+      return asc ? cmp : -cmp;
     });
   }, [items, activeTab, sortOrder]);
 
@@ -744,7 +749,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
         <div className="flex items-center gap-2">
           <SortSelector
             currentSort={sortOrder}
-            onSelect={(value) => setSortOrder(value as typeof sortOrder)}
+            allowDirection={true}
+            onSelect={(value) => setSortOrder(value)}
             options={[
               { id: 'name', label: 'Name (A-Z)' },
               { id: 'type', label: 'Type' },

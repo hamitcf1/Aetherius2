@@ -19,7 +19,7 @@ import {
   Download, Upload, Sun, Moon, Cloud, CloudRain, CloudSnow, Wind,
   Undo2, Redo2, History, Users, Palette, Shield, Swords, Heart,
   Zap, Eye, Clock, Star, UserPlus, FileJson, Check, X, ChevronDown,
-  Thermometer, Droplets, Moon as MoonIcon, Sunrise, Sunset, Cpu, ArrowUpDown
+  Thermometer, Droplets, Moon as MoonIcon, Sunrise, Sunset, Cpu, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 // ============================================================================
@@ -999,13 +999,21 @@ export const SortSelector: React.FC<{
   onSelect: (sort: string) => void;
   options: Array<{ id: string; label: string; icon?: string }>;
   label?: string;
-}> = ({ currentSort, onSelect, options, label = 'Sort' }) => {
+  allowDirection?: boolean;
+}> = ({ currentSort, onSelect, options, label = 'Sort', allowDirection = false }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const current = options.find(o => o.id === currentSort) || options[0];
+  // If direction is allowed, currentSort is in the form 'key:asc' or 'key:desc'
+  const parseSort = (s: string) => {
+    const parts = (s || '').split(':');
+    return { key: parts[0] || options[0].id, dir: parts[1] === 'desc' ? 'desc' : 'asc' };
+  };
+
+  const currentParsed = allowDirection ? parseSort(currentSort) : { key: currentSort };
+  const current = options.find(o => o.id === currentParsed.key) || options[0];
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-2">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold transition-colors"
@@ -1014,6 +1022,19 @@ export const SortSelector: React.FC<{
         <span className="text-sm text-skyrim-text">{current.label}</span>
         <ChevronDown size={14} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
+
+      {allowDirection && (
+        <button
+          aria-label="toggle-sort-direction"
+          onClick={() => {
+            const dir = currentParsed.dir === 'asc' ? 'desc' : 'asc';
+            onSelect(`${currentParsed.key}:${dir}`);
+          }}
+          className="px-2 py-2 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold"
+        >
+          {currentParsed.dir === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+        </button>
+      )}
       
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-48 bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50">
@@ -1021,16 +1042,21 @@ export const SortSelector: React.FC<{
             <button
               key={option.id}
               onClick={() => {
-                onSelect(option.id);
+                if (allowDirection) {
+                  const newDir = option.id === currentParsed.key ? (currentParsed.dir === 'asc' ? 'desc' : 'asc') : 'asc';
+                  onSelect(`${option.id}:${newDir}`);
+                } else {
+                  onSelect(option.id);
+                }
                 setIsOpen(false);
               }}
               className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-skyrim-paper/30 transition-colors ${
-                option.id === currentSort ? 'text-skyrim-gold' : 'text-skyrim-text'
+                option.id === currentParsed.key ? 'text-skyrim-gold' : 'text-skyrim-text'
               }`}
             >
               {option.icon && <span className="text-xs">{option.icon}</span>}
               {option.label}
-              {option.id === currentSort && <Check size={14} className="ml-auto" />}
+              {option.id === currentParsed.key && <Check size={14} className="ml-auto" />}
             </button>
           ))}
         </div>
