@@ -142,6 +142,11 @@ All changes must be logged in a failsafe report file.
 - Manage Companions button repositioned ✔
 - Perk Points and Max Stats swapped ✔
 - Light mode styling fixed ✔
+- Companion behavior dropdown converted to `DropdownSelector` (supports consistent UI & keyboard selection) ✔
+- Sorting components updated to support ascending/descending with `SortSelector` ✔
+- Companion AI chat implemented: `chatWithCompanion` + UI integration ✔
+- Unit tests added for equipment utils, companion modal, companion dialogue, and sort selector ✔
 
 ## Issues
 - Edge-case: item reassignment during modal cancel ⚠
+- AI response latency: companion chat uses lightweight fallback while waiting for AI; consider showing typing indicator in UI improvements ⚠

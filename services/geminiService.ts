@@ -993,6 +993,33 @@ export const chatWithScribe = async (history: {role: 'user' | 'model', parts: [{
     throw new Error('All models failed for chatWithScribe');
 };
 
+// Chat with a companion (in-character reply)
+export const chatWithCompanion = async (companion: { name: string; personality?: string; mood?: string }, message: string) => {
+  const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  const systemInstruction = `You are a companion in a Skyrim RPG. Reply in-character as ${companion.name}. Keep responses short, concise, and in the companion's voice. If the companion has a personality, reflect it briefly (e.g., loyal, gruff, cheerful). Do NOT provide JSON — return plain text only. Avoid suggesting mechanical changes or making worldstate modifications.`;
+
+  for (const model of modelsToTry) {
+    try {
+      const apiKey = getAvailableApiKey(isGemmaModel(model));
+      if (!apiKey) continue;
+      const ai = getClientForModel(model, apiKey);
+      const chat = ai.chats.create({ model, config: { systemInstruction } });
+      const result = await chat.sendMessage({ message });
+      if (result && result.text) return result.text;
+    } catch (err: any) {
+      console.warn(`[chatWithCompanion] ${model} failed:`, err?.message);
+      if (isQuotaError(err)) {
+        const apiKey = getAvailableApiKey(isGemmaModel(model));
+        if (apiKey) markKeyExhausted(apiKey);
+      }
+      continue;
+    }
+  }
+
+  // fallback simple persona-based echo if all models fail
+  return `${companion.name}: ${companion.personality ? `${companion.personality.split(' ')[0]}ly, ` : ''}I have nothing to add right now.`;
+};
+
 export const generateCharacterProfileImage = async (
     characterName: string,
     race: string,

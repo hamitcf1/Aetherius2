@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { Companion } from '../types';
 import { MessageSquare, X } from 'lucide-react';
+import { chatWithCompanion } from '../services/geminiService';
 
 interface Props {
   open: boolean;
@@ -43,18 +44,42 @@ export const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, compani
     }
   }, [open, companion]);
 
-  const send = () => {
-    if (!input.trim() || !companion) return;
+  const [isThinking, setIsThinking] = useState(false);
+
+  const send = async () => {
+    if (!input.trim() || !companion || isThinking) return;
     const msg = input.trim();
     const playerLine = { speaker: 'player' as const, text: msg };
     setHistory(prev => [...prev, playerLine]);
-    const reply = simpleReply(companion, msg);
-    setTimeout(() => {
-      setHistory(prev => [...prev, { speaker: 'companion', text: reply }]);
-    }, 300);
+
+    // immediate lightweight fallback reply
+    const lightweightReply = simpleReply(companion, msg);
+    setHistory(prev => [...prev, { speaker: 'companion', text: lightweightReply }]);
 
     if (onSend) onSend(companion.id, msg);
     setInput('');
+
+    // Call AI for in-character reply and replace the last companion entry when it arrives
+    setIsThinking(true);
+    try {
+      const aiReply = await chatWithCompanion(companion, msg);
+      setHistory(prev => {
+        const copy = [...prev];
+        // find last companion entry
+        for (let i = copy.length - 1; i >= 0; i--) {
+          if (copy[i].speaker === 'companion') {
+            copy[i] = { speaker: 'companion', text: aiReply.startsWith(companion.name) ? aiReply : `${companion.name}: ${aiReply}` };
+            break;
+          }
+        }
+        return copy;
+      });
+    } catch (e) {
+      // keep lightweight reply; optionally add error note
+      setHistory(prev => [...prev, { speaker: 'companion', text: `${companion.name}: I'm having trouble connecting right now.` }]);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
   if (!open || !companion) return null;

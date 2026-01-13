@@ -129,11 +129,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
             <div>
               <label className="text-xs text-skyrim-text">Behavior</label>
-              <select value={behavior} onChange={(e) => setBehavior((e.target.value as any))} className="w-full p-2 bg-skyrim-paper/40 border border-skyrim-border rounded mt-1 text-sm">
-                <option value="idle">Idle</option>
-                <option value="follow">Follow</option>
-                <option value="guard">Guard</option>
-              </select>
+              <DropdownSelector currentValue={behavior} onSelect={(v) => setBehavior(v as any)} options={[{ id: 'idle', label: 'Idle' }, { id: 'follow', label: 'Follow' }, { id: 'guard', label: 'Guard' }]} placeholder="Behavior" />
             </div>
             <div>
               <label className="flex items-center gap-2 text-xs text-skyrim-text mt-1"><input type="checkbox" checked={autoLoot} onChange={(e) => setAutoLoot(e.target.checked)} /> Auto-loot</label>
