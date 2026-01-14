@@ -10,6 +10,7 @@ import SpellsModal from './SpellsModal';
 import { getSpellById } from '../services/spells';
 import { useAppContext } from '../AppContext';
 import { getXPForNextLevel, getXPProgress, formatXPDisplay } from '../utils/levelingSystem';
+import { isFeatureEnabled } from '../featureFlags';
 
 interface CharacterSheetProps {
   character: Character;
@@ -693,65 +694,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               </div>
             </div>
 
-
-
-          {/* Perk Points Summary */}
-          <div className="mb-4 p-3 bg-skyrim-paper/30 border border-skyrim-border rounded flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-skyrim-text uppercase">Perk Points</div>
-              <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
-            </div>
-            <div>
-              <button onClick={() => onOpenPerkTree ? onOpenPerkTree() : null} className="px-3 py-1 rounded border border-skyrim-border hover:border-skyrim-gold text-sm">Open Perk Tree</button>
-            </div>
-          </div>
-
-          {/* Max Stats Section (Toggleable - Character Creation) */}
-          <div className="mb-6">
-            <button 
-              onClick={() => setShowMaxStats(!showMaxStats)}
-              className="w-full flex items-center justify-between p-3 bg-skyrim-paper/40 rounded border border-skyrim-border hover:border-skyrim-gold/50 transition-colors"
-            >
-              <div className="flex items-center gap-2 text-sm">
-                <Activity size={14} className="text-skyrim-text" />
-                <span className="text-gray-300 font-medium">Max Stats (Character Creation)</span>
-                <span className="text-[10px] text-gray-500 px-1.5 py-0.5 bg-skyrim-paper/40 rounded">
-                  H:{character.stats.health} M:{character.stats.magicka} S:{character.stats.stamina}
-                </span>
-              </div>
-              {showMaxStats ? <ChevronDown size={16} className="text-skyrim-text" /> : <ChevronRight size={16} className="text-skyrim-text" />}
-            </button>
-            
-            {showMaxStats && (
-              <div className="mt-2 p-4 bg-skyrim-paper/40 rounded border border-skyrim-border flex flex-col sm:flex-row gap-4">
-                <StatBar 
-                  label="Max Health" 
-                  value={character.stats.health} 
-                  color="bg-red-700" 
-                  icon={<Heart size={12}/>} 
-                  onChange={(v) => updateCharacter('stats', { ...character.stats, health: v })}
-                />
-                <StatBar 
-                  label="Max Magicka" 
-                  value={character.stats.magicka} 
-                  color="bg-blue-600" 
-                  icon={<Droplets size={12}/>} 
-                  onChange={(v) => updateCharacter('stats', { ...character.stats, magicka: v })}
-                />
-                <StatBar 
-                  label="Max Stamina" 
-                  value={character.stats.stamina} 
-                  color="bg-green-600" 
-                  icon={<BicepsFlexed size={12}/>} 
-                  onChange={(v) => updateCharacter('stats', { ...character.stats, stamina: v })}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Current Vitals (for Adventure) */}
-          <div className="mb-6 p-4 bg-gradient-to-r from-red-950/30 via-skyrim-paper/40 to-blue-950/30 rounded border border-skyrim-border">
-            <div className="text-xs uppercase tracking-widest text-skyrim-text font-bold mb-3">Current Vitals (Adventure)</div>
+          {/* Current Vitals (for Adventure) - Moved directly under level */}
+          <div className="mb-4 p-4 bg-gradient-to-r from-red-950/30 via-skyrim-paper/40 to-blue-950/30 rounded border border-skyrim-border">
+            <div className="text-xs uppercase tracking-widest text-skyrim-text font-bold mb-3">Current Vitals</div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Current Health */}
               <div className="space-y-2">
@@ -814,6 +759,62 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               Current vitals change during adventure. Rest or use potions to restore them.
             </p>
           </div>
+
+          {/* Perk Points Summary */}
+          <div className="mb-4 p-3 bg-skyrim-paper/30 border border-skyrim-border rounded flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-skyrim-text uppercase">Perk Points</div>
+              <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
+            </div>
+            <div>
+              <button onClick={() => onOpenPerkTree ? onOpenPerkTree() : null} className="px-3 py-1 rounded border border-skyrim-border hover:border-skyrim-gold text-sm">Open Perk Tree</button>
+            </div>
+          </div>
+
+          {/* Max Stats Section (Toggleable - Character Creation) - Hidden by feature flag */}
+          {isFeatureEnabled('maxStatsEditor') && (
+          <div className="mb-6">
+            <button 
+              onClick={() => setShowMaxStats(!showMaxStats)}
+              className="w-full flex items-center justify-between p-3 bg-skyrim-paper/40 rounded border border-skyrim-border hover:border-skyrim-gold/50 transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <Activity size={14} className="text-skyrim-text" />
+                <span className="text-gray-300 font-medium">Max Stats (Character Creation)</span>
+                <span className="text-[10px] text-gray-500 px-1.5 py-0.5 bg-skyrim-paper/40 rounded">
+                  H:{character.stats.health} M:{character.stats.magicka} S:{character.stats.stamina}
+                </span>
+              </div>
+              {showMaxStats ? <ChevronDown size={16} className="text-skyrim-text" /> : <ChevronRight size={16} className="text-skyrim-text" />}
+            </button>
+            
+            {showMaxStats && (
+              <div className="mt-2 p-4 bg-skyrim-paper/40 rounded border border-skyrim-border flex flex-col sm:flex-row gap-4">
+                <StatBar 
+                  label="Max Health" 
+                  value={character.stats.health} 
+                  color="bg-red-700" 
+                  icon={<Heart size={12}/>} 
+                  onChange={(v) => updateCharacter('stats', { ...character.stats, health: v })}
+                />
+                <StatBar 
+                  label="Max Magicka" 
+                  value={character.stats.magicka} 
+                  color="bg-blue-600" 
+                  icon={<Droplets size={12}/>} 
+                  onChange={(v) => updateCharacter('stats', { ...character.stats, magicka: v })}
+                />
+                <StatBar 
+                  label="Max Stamina" 
+                  value={character.stats.stamina} 
+                  color="bg-green-600" 
+                  icon={<BicepsFlexed size={12}/>} 
+                  onChange={(v) => updateCharacter('stats', { ...character.stats, stamina: v })}
+                />
+              </div>
+            )}
+          </div>
+          )}
 
           {/* Armor & Damage from Equipment */}
           <div className="mb-6 p-4 bg-skyrim-paper/40 rounded border border-skyrim-border">

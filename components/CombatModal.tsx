@@ -808,25 +808,50 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   // Regen is applied after each turn via applyTurnRegen; time-based tick removed.
 
+  // Mobile action panel collapsed state
+  const [mobileActionsExpanded, setMobileActionsExpanded] = useState(true);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--skyrim-dark, #0f0f0f)' }}>
-      {/* Combat header */}
-      <div className="bg-gradient-to-b from-stone-900 to-transparent p-4 border-b border-amber-900/30">
+      {/* Combat header - more compact on mobile */}
+      <div className="bg-gradient-to-b from-stone-900 to-transparent p-2 sm:p-4 border-b border-amber-900/30">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold text-amber-100 tracking-wider">⚔️ COMBAT</h2>
-            <p className="text-sm text-stone-400">{combatState.location} • Turn {combatState.turn} • {String(Math.floor(elapsedSecDisplay/60)).padStart(2,'0')}:{String(elapsedSecDisplay%60).padStart(2,'0')}</p>
+            <h2 className="text-lg sm:text-2xl font-bold text-amber-100 tracking-wider">⚔️ COMBAT</h2>
+            <p className="text-xs sm:text-sm text-stone-400 truncate max-w-[150px] sm:max-w-none">{combatState.location} • T{combatState.turn} • {String(Math.floor(elapsedSecDisplay/60)).padStart(2,'0')}:{String(elapsedSecDisplay%60).padStart(2,'0')}</p>
           </div>
-          <div className={`px-4 py-2 rounded-lg ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
+          <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
             {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
           </div>
         </div>
       </div>
 
-      {/* Main combat area */}
-      <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-4 p-3 sm:p-4 max-w-7xl mx-auto w-full">
-        {/* Left side - Player stats */}
-        <div className="w-full lg:w-1/4 space-y-4">
+      {/* Mobile: Compact player stats bar at top */}
+      <div className="lg:hidden bg-stone-900/80 border-b border-amber-900/30 p-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-amber-100 font-bold truncate max-w-[80px]">{getEasterEggName(character.name)}</span>
+          <div className="flex-1 flex gap-1">
+            <div className="flex-1 h-2 bg-stone-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all" style={{ width: `${(playerStats.currentHealth / playerStats.maxHealth) * 100}%` }} />
+            </div>
+            <div className="flex-1 h-2 bg-stone-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-blue-600 to-blue-500 transition-all" style={{ width: `${(playerStats.currentMagicka / playerStats.maxMagicka) * 100}%` }} />
+            </div>
+            <div className="flex-1 h-2 bg-stone-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-green-600 to-green-500 transition-all" style={{ width: `${(playerStats.currentStamina / playerStats.maxStamina) * 100}%` }} />
+            </div>
+          </div>
+          <span className="text-[10px] text-red-300">{playerStats.currentHealth}/{playerStats.maxHealth}</span>
+        </div>
+        {combatState.playerDefending && (
+          <div className="mt-1 text-[10px] text-blue-300">🛡️ Defending</div>
+        )}
+      </div>
+
+      {/* Main combat area - reorganized for mobile */}
+      <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
+        {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
+        <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
           <div ref={playerRef} className="rounded-lg p-4 border border-amber-900/30" style={{ background: 'var(--skyrim-paper, #1a1a1a)' }}>
             <h3 className="text-lg font-bold text-amber-100 mb-3">{getEasterEggName(character.name)}</h3>
             <div className="space-y-3">
@@ -954,8 +979,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           </div>
         </div>
 
-        {/* Right side - Actions */}
-        <div className="w-full lg:w-1/4 space-y-4">
+        {/* Right side - Actions (Desktop only, hidden on mobile) */}
+        <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
           {/* Abilities */}
           <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30">
             <div className="flex items-center justify-between mb-3">
@@ -1102,6 +1127,139 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Mobile: Fixed bottom action bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-stone-900/95 border-t border-amber-900/30 safe-area-inset-bottom z-50">
+        {/* Action bar toggle */}
+        <button 
+          onClick={() => setMobileActionsExpanded(!mobileActionsExpanded)}
+          className="w-full py-2 flex items-center justify-center gap-2 text-sm text-amber-200 bg-stone-800"
+        >
+          {mobileActionsExpanded ? '▼ Hide Actions' : '▲ Show Actions'}
+        </button>
+        
+        {mobileActionsExpanded && (
+          <div className="p-2 max-h-[40vh] overflow-y-auto">
+            {/* Quick abilities grid */}
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-stone-400">ABILITIES</span>
+                <button onClick={() => setEquipModalOpen(true)} className="px-2 py-0.5 text-[10px] rounded bg-blue-800 hover:bg-blue-700">⚔ Equip</button>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
+                  (() => {
+                    const allyActor = combatState.allies.find(a => a.id === combatState.currentTurnActor);
+                    if (!allyActor) return null;
+                    return (
+                      <>
+                        {allyActor.abilities.slice(0, 3).map(ab => (
+                          <button 
+                            key={ab.id} 
+                            disabled={isAnimating} 
+                            onClick={async () => {
+                              setIsAnimating(true);
+                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
+                              setCombatState(res.newState);
+                              if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                              setAwaitingCompanionAction(false);
+                              setIsAnimating(false);
+                              setCombatState(prev => advanceTurn(prev));
+                              setTimeout(() => processEnemyTurns(), 200);
+                            }} 
+                            className="px-2 py-2 rounded bg-skyrim-gold text-black text-xs font-bold truncate"
+                          >
+                            {ab.name}
+                          </button>
+                        ))}
+                      </>
+                    );
+                  })()
+                ) : (
+                  playerStats.abilities.slice(0, 6).map(ability => (
+                    <button
+                      key={ability.id}
+                      disabled={!isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)}
+                      onClick={() => handlePlayerAction('attack', ability.id)}
+                      className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${
+                        !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)
+                          ? 'bg-stone-700 text-stone-500 opacity-50'
+                          : ability.type === 'magic'
+                            ? 'bg-blue-700 text-blue-100 hover:bg-blue-600'
+                            : 'bg-amber-700 text-amber-100 hover:bg-amber-600'
+                      }`}
+                    >
+                      {ability.name}
+                      {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
+                        <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+            
+            {/* Quick action buttons row */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => handlePlayerAction('defend')}
+                disabled={!isPlayerTurn || isAnimating}
+                className="flex-1 py-2 rounded bg-blue-900/60 border border-blue-700/50 text-blue-200 text-xs font-bold disabled:opacity-50"
+              >
+                🛡️ Defend
+              </button>
+              
+              {getUsableItems().length > 0 && (
+                <button
+                  onClick={() => setShowItemSelection(!showItemSelection)}
+                  disabled={!isPlayerTurn || isAnimating}
+                  className="flex-1 py-2 rounded bg-green-900/60 border border-green-700/50 text-green-200 text-xs font-bold disabled:opacity-50"
+                >
+                  🧪 Items ({getUsableItems().length})
+                </button>
+              )}
+              
+              {combatState.fleeAllowed && (
+                <button
+                  onClick={() => handlePlayerAction('flee')}
+                  disabled={!isPlayerTurn || isAnimating}
+                  className="flex-1 py-2 rounded bg-yellow-900/60 border border-yellow-700/50 text-yellow-200 text-xs font-bold disabled:opacity-50"
+                >
+                  🏃 Flee
+                </button>
+              )}
+            </div>
+            
+            {/* Mobile item selection panel */}
+            {showItemSelection && getUsableItems().length > 0 && (
+              <div className="mt-2 p-2 bg-stone-800 rounded border border-green-700/30">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-green-300">Select Item</span>
+                  <button onClick={() => setShowItemSelection(false)} className="text-xs text-stone-400">✕</button>
+                </div>
+                <div className="grid grid-cols-2 gap-1 max-h-24 overflow-y-auto">
+                  {getUsableItems().map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        handlePlayerAction('item', undefined, item.id);
+                        setShowItemSelection(false);
+                      }}
+                      disabled={!isPlayerTurn || isAnimating}
+                      className="p-1.5 rounded bg-green-900/40 border border-green-700/50 text-green-200 text-[10px] text-left disabled:opacity-50"
+                    >
+                      <div className="flex justify-between">
+                        <span className="truncate">{item.name}</span>
+                        <span className="text-stone-400">x{item.quantity}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
 

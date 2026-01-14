@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind } from 'lucide-react';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { audioService } from '../services/audioService';
 import { ThemeSelector, AIModelSelector } from './GameFeatures';
+import { VOICE_OPTIONS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from '../services/ttsService';
 
 type SnowIntensity = SnowSettings['intensity'];
 
@@ -40,26 +41,69 @@ const ActionBar: React.FC = () => {
     setWeatherEffect,
     weatherIntensity,
     setWeatherIntensity,
+    userSettings,
+    updateUserSettings,
   } = useAppContext();
   const [open, setOpen] = useState(false);
   const [showSnowOptions, setShowSnowOptions] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  
+  // Voice settings state - load from ttsService (which has localStorage fallback)
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => getVoiceSettings().gender || 'male');
+  const [voiceName, setVoiceName] = useState<string>(() => getVoiceSettings().voiceName || '');
   
   // Audio state - sync with audioService config
   const [soundEnabled, setSoundEnabled] = useState(() => audioService.getConfig().soundEffectsEnabled);
   const [musicEnabled, setMusicEnabled] = useState(() => audioService.getConfig().musicEnabled);
+
+  // Load voice settings from userSettings (Firebase) on mount
+  useEffect(() => {
+    if (userSettings?.voiceGender) {
+      setVoiceGender(userSettings.voiceGender);
+      setVoiceName(userSettings.voiceName || '');
+      // Also update the ttsService
+      saveVoiceSettings({
+        gender: userSettings.voiceGender,
+        voiceName: userSettings.voiceName,
+        pitch: userSettings.voicePitch,
+        speakingRate: userSettings.voiceSpeakingRate,
+      });
+    }
+  }, [userSettings]);
+
+  // Handle voice gender change
+  const handleVoiceGenderChange = (gender: 'male' | 'female') => {
+    setVoiceGender(gender);
+    setVoiceName(''); // Reset voice name when gender changes
+    const newSettings: VoiceSettings = { gender, voiceName: undefined };
+    saveVoiceSettings(newSettings);
+    // Persist to Firebase
+    updateUserSettings?.({ voiceGender: gender, voiceName: undefined });
+  };
+
+  // Handle voice name change
+  const handleVoiceNameChange = (name: string) => {
+    setVoiceName(name);
+    const newSettings: VoiceSettings = { gender: voiceGender, voiceName: name || undefined };
+    saveVoiceSettings(newSettings);
+    // Persist to Firebase
+    updateUserSettings?.({ voiceGender, voiceName: name || undefined });
+  };
 
   // Toggle handlers that update both local state and audioService
   const handleToggleSound = () => {
     const newState = !soundEnabled;
     setSoundEnabled(newState);
     audioService.setSoundEffectsEnabled(newState);
+    updateUserSettings?.({ soundEffectsEnabled: newState });
   };
 
   const handleToggleMusic = () => {
     const newState = !musicEnabled;
     setMusicEnabled(newState);
     audioService.setMusicEnabled(newState);
+    updateUserSettings?.({ musicEnabled: newState });
   };
   
   // Ref for the button to align dropdown
@@ -399,6 +443,69 @@ const ActionBar: React.FC = () => {
             <p className="text-[10px] text-gray-600 mt-1 text-center italic">
               Audio files coming soon
             </p>
+          </div>
+
+          {/* Voice Settings */}
+          <div className="border-t border-skyrim-border/60 pt-3 mt-2">
+            <button
+              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+              className="w-full flex items-center justify-between text-xs text-gray-500 font-bold mb-2"
+            >
+              <span className="flex items-center gap-1">
+                <Mic size={12} /> Voice Settings (TTS)
+              </span>
+              <ChevronDown size={14} className={`transition-transform ${showVoiceSettings ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showVoiceSettings && (
+              <div className="space-y-2">
+                {/* Gender Selection */}
+                <div>
+                  <div className="text-[10px] text-gray-500 mb-1">Voice Gender</div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleVoiceGenderChange('male')}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        voiceGender === 'male'
+                          ? 'bg-blue-700 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Male
+                    </button>
+                    <button
+                      onClick={() => handleVoiceGenderChange('female')}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        voiceGender === 'female'
+                          ? 'bg-pink-700 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Female
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Voice Selection */}
+                <div>
+                  <div className="text-[10px] text-gray-500 mb-1">Voice Style</div>
+                  <select
+                    value={voiceName}
+                    onChange={(e) => handleVoiceNameChange(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 focus:border-skyrim-gold focus:outline-none"
+                  >
+                    <option value="">Default (Auto)</option>
+                    {VOICE_OPTIONS[voiceGender].map(voice => (
+                      <option key={voice.name} value={voice.name}>{voice.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <p className="text-[10px] text-gray-600 text-center italic">
+                  Voice settings apply to TTS narration
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Version and Credits */}

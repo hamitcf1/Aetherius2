@@ -74,15 +74,30 @@
       /* Custom Scrollbar (theme-aware) */
       ::-webkit-scrollbar {
         width: 8px;
+        height: 6px; /* Thinner horizontal scrollbars */
       }
       ::-webkit-scrollbar-track {
         background: var(--skyrim-paper); 
       }
       ::-webkit-scrollbar-thumb {
         background: var(--skyrim-border); 
+        border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
         background: var(--skyrim-gold); 
+      }
+      /* Firefox scrollbar styling */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--skyrim-border) var(--skyrim-paper);
+      }
+      /* Utility class to hide scrollbars while keeping scroll functionality */
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
       }
       /* Theme the browser focus outline and Tailwind ring color (with fallbacks) */
       :root {

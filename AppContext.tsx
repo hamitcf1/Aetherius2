@@ -3,8 +3,9 @@ import type { InventoryItem, DifficultyLevel, WeatherState, StatusEffect, Compan
 import type { RestOptions } from './components/SurvivalModals';
 import type { ShopItem } from './components/ShopModal';
 import type { SnowSettings } from './components/SnowEffect';
+import type { UserSettings } from './services/firestore';
 
-export type WeatherEffectType = 'snow' | 'rain' | 'none';
+export type WeatherEffectType = 'snow' | 'rain' | 'sandstorm' | 'none';
 export type WeatherIntensity = SnowSettings['intensity'];
 
 export interface AppContextType {
@@ -56,6 +57,9 @@ export interface AppContextType {
   setWeatherIntensity: (intensity: WeatherIntensity) => void;
   // Companions management
   openCompanions: () => void;
+  // User settings (Firebase persistent)
+  userSettings: UserSettings | null;
+  updateUserSettings: ((updates: Partial<UserSettings>) => void) | null;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);

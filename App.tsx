@@ -1056,6 +1056,24 @@ const App: React.FC = () => {
     }
   };
 
+  // Update user settings (voice, audio, etc.) and persist to Firebase
+  const updateUserSettings = async (updates: Partial<UserSettings>) => {
+    if (!currentUser?.uid) return;
+    
+    const uid = currentUser.uid as string;
+    const next: UserSettings = {
+      ...(userSettings || {}),
+      ...updates,
+    };
+    setUserSettings(next);
+    
+    try {
+      await saveUserSettings(uid, next);
+    } catch (e) {
+      console.warn('Failed to persist user settings:', e);
+    }
+  };
+
   // Debounced Firestore saves for dirty entities
   useEffect(() => {
     if (!currentUser) return;
@@ -3397,6 +3415,8 @@ const App: React.FC = () => {
       setWeatherEffect,
       weatherIntensity,
       setWeatherIntensity,
+      userSettings,
+      updateUserSettings,
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
@@ -3538,11 +3558,11 @@ const App: React.FC = () => {
         <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-2xl">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer" onClick={() => setActiveTab(TABS.CHARACTER)}>
+              <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
                 <Skull size={24} />
                 <span className="hidden md:inline">Skyrim Aetherius</span>
               </div>
-              <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-hidden">
+              <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-x-auto scrollbar-hide max-w-[calc(100vw-140px)] sm:max-w-none">
                 {[
                         { id: TABS.CHARACTER, icon: User, label: 'Hero' },
                     { id: TABS.INVENTORY, icon: Package, label: 'Equipment' },
@@ -3554,14 +3574,14 @@ const App: React.FC = () => {
                   <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                    className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-all duration-300 text-sm md:text-base ${
+                    className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
                       activeTab === tab.id 
                           ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
                           : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
                       }`}
                   >
-                      <tab.icon size={16} />
-                      <span className="hidden md:inline">{tab.label}</span>
+                      <tab.icon size={14} className="sm:w-4 sm:h-4" />
+                      <span className="hidden sm:inline">{tab.label}</span>
                   </button>
                 ))}
                 {/* Actions button inline with tabs */}

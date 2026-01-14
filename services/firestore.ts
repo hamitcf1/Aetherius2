@@ -412,6 +412,14 @@ export interface UserSettings {
   // Adventure chat text settings
   chatFontSize?: 'small' | 'medium' | 'large';
   chatFontWeight?: 'normal' | 'medium' | 'bold';
+  // Voice/TTS settings
+  voiceGender?: 'male' | 'female';
+  voiceName?: string;
+  voicePitch?: number;
+  voiceSpeakingRate?: number;
+  // Audio settings
+  soundEffectsEnabled?: boolean;
+  musicEnabled?: boolean;
 }
 
 const userSettingsDocRef = (uid: string) => {
@@ -437,9 +445,22 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
     onboardingCompleted: settings.onboardingCompleted ?? false,
     chatFontSize: settings.chatFontSize ?? 'medium',
     chatFontWeight: settings.chatFontWeight ?? 'normal',
+    // Voice settings (preserve existing values if not provided)
+    voiceGender: settings.voiceGender,
+    voiceName: settings.voiceName,
+    voicePitch: settings.voicePitch,
+    voiceSpeakingRate: settings.voiceSpeakingRate,
+    // Audio settings
+    soundEffectsEnabled: settings.soundEffectsEnabled,
+    musicEnabled: settings.musicEnabled,
     createdAt: settings.createdAt ?? now,
     updatedAt: now,
   };
+
+  // Remove undefined values before saving
+  Object.keys(next).forEach(key => {
+    if ((next as any)[key] === undefined) delete (next as any)[key];
+  });
 
   await setDoc(userSettingsDocRef(uid), next, { merge: true });
 };
