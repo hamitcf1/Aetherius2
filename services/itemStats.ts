@@ -109,6 +109,13 @@ const WEAPON_STATS: Record<string, ItemStats> = {
   'dragonbone arrows (20)': { damage: 0, value: 200 },
   
   // === SPECIAL WEAPONS ===
+  // Basic Staves (Tier 1)
+  'novice staff': { damage: 5, value: 35 },
+  'basic staff of sparks': { damage: 6, value: 55 },
+  'basic staff of flames': { damage: 6, value: 55 },
+  'basic staff of frostbite': { damage: 6, value: 55 },
+  'apprentice staff': { damage: 8, value: 80 },
+  // Advanced Staves
   'staff of flames': { damage: 15, value: 250 },
   'staff of frost': { damage: 18, value: 280 },
   'staff of lightning': { damage: 20, value: 320 },

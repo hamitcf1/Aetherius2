@@ -83,6 +83,13 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'hunting_bow', name: 'Hunting Bow', type: 'weapon', description: 'A simple wooden bow for hunting.', price: 50, category: 'Weapons' },
   { id: 'iron_arrows', name: 'Iron Arrows (20)', type: 'weapon', description: 'A bundle of iron-tipped arrows.', price: 10, category: 'Weapons' },
   
+  // Basic Staves (Level 1+) - For new mage characters
+  { id: 'novice_staff', name: 'Novice Staff', type: 'weapon', description: 'A simple wooden staff for apprentice mages. Channels basic magical energy.', price: 35, category: 'Weapons' },
+  { id: 'basic_staff_sparks', name: 'Basic Staff of Sparks', type: 'weapon', description: 'A crude staff that channels weak shock magic. Good for beginners.', price: 55, category: 'Weapons' },
+  { id: 'basic_staff_flames', name: 'Basic Staff of Flames', type: 'weapon', description: 'A worn staff that shoots small fireballs. Entry-level destruction.', price: 55, category: 'Weapons' },
+  { id: 'basic_staff_frost', name: 'Basic Staff of Frostbite', type: 'weapon', description: 'An old staff that emits frost. Chills enemies slightly.', price: 55, category: 'Weapons' },
+  { id: 'apprentice_staff', name: 'Apprentice Staff', type: 'weapon', description: 'A better crafted staff for developing mages. Improved magical channeling.', price: 80, category: 'Weapons', requiredLevel: 3 },
+  
   // Tier 2: Steel Weapons (Level 5+)
   { id: 'steel_dagger', name: 'Steel Dagger', type: 'weapon', description: 'Sharp steel dagger. Fast attacks.', price: 45, category: 'Weapons', requiredLevel: 5 },
   { id: 'steel_sword', name: 'Steel Sword', type: 'weapon', description: 'A well-crafted steel blade.', price: 90, category: 'Weapons', requiredLevel: 5 },
