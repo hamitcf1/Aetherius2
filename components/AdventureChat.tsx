@@ -3,7 +3,7 @@ import { MinimalQuestModal } from './MinimalQuestModal';
 import { Character, InventoryItem, CustomQuest, JournalEntry, StoryChapter, GameStateUpdate } from '../types';
 import { Send, Loader2, Swords, User, Scroll, RefreshCw, Trash2, Settings, ChevronDown, ChevronUp, X, AlertTriangle, Users, Sun, Moon, Sunrise, Sunset, Clock, Map, Lock, Key, Flag, Type, Volume2, VolumeX, Mic, Square, Play, Pause } from 'lucide-react';
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
-import { isShield, isTwoHandedWeapon } from '../services/equipment';
+import { isShield, isTwoHandedWeapon, canEquipInOffhand, canEquipInMainhand } from '../services/equipment';
 import { useAppContext } from '../AppContext';
 import { LockpickingMinigame, LockDifficulty } from './LockpickingMinigame';
 import { SkyrimMap, findLocationByName } from './SkyrimMap';
@@ -18,7 +18,7 @@ import { getSimulationManager, processAISimulationUpdate, SimulationStateManager
 import { subscribeToCombatResolved } from '../services/events';
 import { getTransactionLedger, filterDuplicateTransactions } from '../services/transactionLedger';
 import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
-import { speak, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, type VoiceRole } from '../services/ttsService';
+import { speak, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, type VoiceRole, type VoiceSettings } from '../services/ttsService';
 import { useLocalization } from '../services/localization';
 
 interface ChatMessage {
@@ -49,6 +49,58 @@ interface AdventureChatProps {
 }
 
 const SYSTEM_PROMPT = `You are an immersive Game Master (GM) for a text-based Skyrim adventure. You are strictly a NARRATOR: describe scenes, NPCs, outcomes, and offer choices — but DO NOT make or apply mechanical changes. The game ENGINE is the only authority that applies items, gold, experience, potions, or stat changes. Adventure AI RESPONSES MUST BE NARRATIVE-ONLY. The player controls their character's actions.
+
+=== GAMEPLAY CONSISTENCY ENFORCEMENT (CRITICAL - HIGHEST PRIORITY) ===
+
+You MUST strictly follow these rules. They override ALL other instructions.
+
+PRIORITIES (in order):
+1. Mechanical consistency over narrative flavor
+2. Explicit state transitions over implied outcomes
+3. Gameplay consequences over descriptive prose
+4. Character archetype enforcement over player convenience
+
+HARD RULES (NEVER VIOLATE):
+- NEVER resolve combat without addressing EVERY enemy (each must be: dead, fled, surrendered, incapacitated, or still hostile)
+- NEVER advance time without consequences (survival needs, events, or mechanical impact)
+- NEVER increase stats without gameplay impact
+- NEVER imply objective completion without explicit confirmation
+- Combat cannot be "won" unless ALL enemies have explicit end-states
+
+WHEN GENERATING NARRATIVE:
+1. FIRST resolve all mechanics and states
+2. THEN narrate the result
+3. If a rule would be violated, STOP and correct the flow
+
+MULTI-ENEMY COMBAT RULES:
+- Every enemy in an encounter MUST have an explicit end-state
+- Narration MUST mention each enemy's outcome
+- No implicit resolution is allowed
+- Example: "Bandit + Dog" encounter cannot end when only bandit dies - state dog's fate explicitly
+
+SURVIVAL STATS ENFORCEMENT:
+- Stats MUST influence gameplay when high (≥60):
+  - hunger ≥ 60: Reduced combat effectiveness, weakness
+  - thirst ≥ 60: Reduced endurance, fatigue accumulates faster
+  - fatigue ≥ 60: Combat penalties, forced rest prompts at ≥80
+- Stats without mechanical consequences are NOT allowed
+
+DESTINATION & OBJECTIVE CLARITY:
+- Always explicitly separate: Region reached vs Objective reached vs Objective completed
+- No ambiguous "you have arrived" language
+- Output current region AND objective status when location changes
+
+LONG TRAVEL CONTENT:
+- Travel > 1 in-game hour MUST include at least ONE: environmental hazard, random encounter, narrative vignette, player decision, or skill check
+- "No-event travel" is only allowed for short durations
+
+IF UNCERTAIN:
+- Default to adding a consequence, not removing one
+- Default to explicit clarification, not ambiguity
+
+You are not a storyteller. You are a game system that outputs narrative as a consequence of rules.
+
+=== END GAMEPLAY ENFORCEMENT ===
 
 CORE RULES:
 1. Always stay in character as a Skyrim GM. Use Tamrielic lore, locations, factions, and NPCs.
@@ -389,6 +441,7 @@ RESPONSE FORMAT:
 Return ONLY a JSON object:
 {
   "narrative": { "title": "Short title", "content": "Your story response here..." },
+  "currentLocation": "Location name if the player moved to a new location (e.g., Whiterun, Riverwood, etc.)",
   "newItems": [{ "name": "Item", "type": "weapon|apparel|potion|misc|key|food|drink|camping|ingredient", "description": "...", "quantity": 1, "armor": 0, "damage": 0, "slot": "head|chest|hands|feet|weapon|offhand|ring|necklace" }],
   "removedItems": [{ "name": "Item", "quantity": 1 }],
   "newQuests": [{ "title": "Quest", "description": "...", "location": "...", "dueDate": "...", "objectives": [{ "description": "...", "completed": false }] }],
@@ -423,6 +476,13 @@ Return ONLY a JSON object:
     "newConsequences": [{ "type": "entry_denied", "description": "Guards will not allow entry", "triggerCondition": { "tensionThreshold": 80 } }]
   }
 }
+
+=== LOCATION TRACKING (IMPORTANT) ===
+
+When the player arrives at or enters a new location, ALWAYS include "currentLocation" in your response:
+- Use the canonical name (e.g., "Whiterun" not "the city of Whiterun")
+- Known locations: Whiterun, Solitude, Windhelm, Riften, Markarth, Falkreath, Morthal, Dawnstar, Winterhold, Riverwood, Rorikstead, Ivarstead, Helgen, Dragon Bridge, High Hrothgar
+- For new/custom locations, also add them to "discoveredLocations" with coordinates
 
 === TURN-BASED COMBAT SYSTEM (POKEMON STYLE) ===
 
@@ -569,6 +629,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [showQuestModal, setShowQuestModal] = useState(false);
   const [showTextSettings, setShowTextSettings] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(getVoiceSettings());
   const [localFontSize, setLocalFontSize] = useState<ChatFontSize>(chatFontSize);
   const [localFontWeight, setLocalFontWeight] = useState<ChatFontWeight>(chatFontWeight);
   const [toastMessages, setToastMessages] = useState<{ id: string; message: string; type: string }[]>([]);
@@ -619,11 +681,19 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [simulationWarnings, setSimulationWarnings] = useState<string[]>([]);
   const [rateLimitStats, setRateLimitStats] = useState(getRateLimitStats());
   
-  // TTS (Text-to-Speech) state
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  // TTS (Text-to-Speech) state - persisted
+  const [ttsEnabled, setTtsEnabled] = useState(() => {
+    const stored = localStorage.getItem('aetherius:ttsEnabled');
+    return stored === 'true';
+  });
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsSpeaking, setTtsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  
+  // Persist TTS enabled state
+  useEffect(() => {
+    localStorage.setItem('aetherius:ttsEnabled', ttsEnabled ? 'true' : 'false');
+  }, [ttsEnabled]);
   
   // Subscribe to TTS state changes
   useEffect(() => {
@@ -721,7 +791,11 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     const targetSlot = slot || getDefaultSlotForItem(item) || undefined;
     if (!targetSlot) return;
 
-    // Prevent equipping shields in main hand
+    // Validate equip restrictions
+    if (targetSlot === 'offhand' && isTwoHandedWeapon(item)) {
+      showToast?.('Cannot equip two-handed weapons in off-hand.', 'warning');
+      return;
+    }
     if (targetSlot === 'weapon' && isShield(item)) {
       showToast?.('Cannot equip shields in main hand.', 'warning');
       return;
@@ -787,6 +861,19 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     return localInventory.filter(item => {
       if (item.equipped) return false;
       if (!slotConfig.allowedTypes.includes(item.type)) return false;
+      
+      // Enforce explicit slot rules for hands/main/offhand
+      if (slot === 'offhand') {
+        return canEquipInOffhand(item);
+      }
+      if (slot === 'weapon') {
+        // Prevent shields in main hand
+        if (isShield(item)) return false;
+        // Allow small weapons and two-handed weapons
+        return canEquipInMainhand(item);
+      }
+
+      // Default fallback: use default slot inference
       const defaultSlot = getDefaultSlotForItem(item);
       return defaultSlot === slot || !defaultSlot;
     });
@@ -1509,6 +1596,11 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     if (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0) toApply.timeAdvanceMinutes = updates.timeAdvanceMinutes;
     if (updates.needsChange && Object.keys(updates.needsChange).length) toApply.needsChange = updates.needsChange;
     
+    // Handle current location update
+    if (updates.currentLocation) {
+      setCurrentLocation(updates.currentLocation);
+    }
+    
     // Handle discovered locations - add to map
     if (updates.discoveredLocations?.length) {
       setDiscoveredLocations(prev => {
@@ -1553,7 +1645,14 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             finalVitals: payload.finalVitals || null,
             location: payload.location || null
           };
-          const systemPrompt = `You are the adventure game master. Continue the story from the player's perspective after a combat. Do not perform mechanical state changes; focus on narrative and plausible next choices.`;
+          const systemPrompt = `You are the adventure game master. Continue the story from the player's perspective after a combat. Do not perform mechanical state changes; focus on narrative and plausible next choices.
+
+GAMEPLAY ENFORCEMENT (CRITICAL):
+- EVERY enemy in the combat MUST have an explicit end-state mentioned (dead, fled, surrendered, incapacitated)
+- Do not imply any enemy outcome - state each one explicitly
+- If combat result is victory, describe what happened to ALL enemies
+- If combat result is defeat/fled/surrendered, describe the consequences
+- You are a game system that outputs narrative as a consequence of rules, not a storyteller`;
           const playerInput = `Combat ended: ${payload.result}. Continue the story.`;
           const resp = await generateAdventureResponse(playerInput, JSON.stringify(contextObj), systemPrompt, { model: 'gemini-2.5-flash', language });
 
@@ -1768,18 +1867,6 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     localStorage.setItem('showRateLimitBar', showRateLimit ? 'true' : 'false');
   }, [showRateLimit]);
 
-  // --- Rate Limit Toggle Button ---
-  const RateLimitToggle = () => (
-    <button
-      className="ml-2 px-2 py-1 text-xs rounded bg-gray-800/60 hover:bg-gray-700/80 border border-skyrim-border text-gray-300 hover:text-skyrim-gold transition-colors"
-      style={{ marginTop: 4 }}
-      onClick={() => setShowRateLimit(v => !v)}
-      title={showRateLimit ? 'Hide rate limit bar' : 'Show rate limit bar'}
-    >
-      {showRateLimit ? 'Hide Rate Limit Bar' : 'Show Rate Limit Bar'}
-    </button>
-  );
-
   return (
     <div className="h-full flex flex-col max-w-4xl mx-auto px-2 sm:px-4 overflow-hidden">
       {/* Header - compact */}
@@ -1790,7 +1877,6 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         </h1>
         {/* Time Display */}
         <TimeDisplay />
-        <RateLimitToggle />
         {/* Rate Limit Indicator */}
         {showRateLimit && (rateLimitStats.callsThisMinute > 0 || rateLimitStats.callsThisHour > 0) && (
           <div className="mt-2 flex justify-center">
@@ -2114,6 +2200,17 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             <span className="text-xs text-skyrim-text">Auto-apply game changes (items, quests, gold)</span>
           </label>
           
+          {/* Rate Limit Bar toggle */}
+          <label className="flex items-center gap-2 cursor-pointer mb-3 pb-3 border-b border-skyrim-border/50">
+            <input
+              type="checkbox"
+              checked={showRateLimit}
+              onChange={() => setShowRateLimit(!showRateLimit)}
+              className="accent-skyrim-gold w-4 h-4"
+            />
+            <span className="text-xs text-skyrim-text">Show rate limit bar</span>
+          </label>
+          
           {/* Text & Voice Settings Row */}
           <div className="flex flex-wrap gap-2 mb-3">
             <button
@@ -2125,6 +2222,16 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
               }`}
             >
               <Type size={14} /> Text Settings
+            </button>
+            <button
+              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
+                showVoiceSettings 
+                  ? 'bg-skyrim-gold text-skyrim-dark' 
+                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+              }`}
+            >
+              <Volume2 size={14} /> Voice Settings
             </button>
             <button
               onClick={() => {
@@ -2144,6 +2251,126 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
               {ttsEnabled ? 'Voice On' : 'Voice Off'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Voice Settings Panel */}
+      {showVoiceSettings && (
+        <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Volume2 size={14} className="text-skyrim-gold" />
+              <span className="text-xs text-skyrim-gold font-semibold uppercase">Voice Settings</span>
+            </div>
+            <button
+              onClick={() => {
+                setVoiceSettings({});
+                saveVoiceSettings({});
+              }}
+              className="text-[10px] px-2 py-1 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold"
+            >
+              Reset to Default
+            </button>
+          </div>
+          
+          {/* Gender Selection */}
+          <div className="mb-3">
+            <label className="text-xs text-skyrim-text block mb-1.5">Voice Gender</label>
+            <div className="flex gap-1.5">
+              {(['male', 'female'] as const).map(gender => (
+                <button
+                  key={gender}
+                  onClick={() => {
+                    const newSettings = { ...voiceSettings, gender };
+                    setVoiceSettings(newSettings);
+                    saveVoiceSettings(newSettings);
+                  }}
+                  className={`flex-1 px-3 py-1.5 rounded text-xs transition-colors ${
+                    voiceSettings.gender === gender
+                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                  }`}
+                >
+                  {gender.charAt(0).toUpperCase() + gender.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Voice Selection */}
+          {voiceSettings.gender && (
+            <div className="mb-3">
+              <label className="text-xs text-skyrim-text block mb-1.5">Voice Style</label>
+              <select
+                value={voiceSettings.voiceName || ''}
+                onChange={(e) => {
+                  const newSettings = { ...voiceSettings, voiceName: e.target.value || undefined };
+                  setVoiceSettings(newSettings);
+                  saveVoiceSettings(newSettings);
+                }}
+                className="w-full px-2 py-1.5 rounded text-xs bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border focus:border-skyrim-gold"
+              >
+                <option value="">Default</option>
+                {VOICE_OPTIONS[voiceSettings.gender]?.map(voice => (
+                  <option key={voice.name} value={voice.name}>{voice.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Pitch Slider */}
+          <div className="mb-3">
+            <label className="text-xs text-skyrim-text block mb-1.5">
+              Pitch: {voiceSettings.pitch ?? 0} semitones
+            </label>
+            <input
+              type="range"
+              min="-10"
+              max="10"
+              step="1"
+              value={voiceSettings.pitch ?? 0}
+              onChange={(e) => {
+                const pitch = parseInt(e.target.value, 10);
+                const newSettings = { ...voiceSettings, pitch };
+                setVoiceSettings(newSettings);
+                saveVoiceSettings(newSettings);
+              }}
+              className="w-full accent-skyrim-gold"
+            />
+            <div className="flex justify-between text-[10px] text-skyrim-text/60">
+              <span>Lower</span>
+              <span>Higher</span>
+            </div>
+          </div>
+          
+          {/* Speaking Rate Slider */}
+          <div className="mb-3">
+            <label className="text-xs text-skyrim-text block mb-1.5">
+              Speed: {((voiceSettings.speakingRate ?? 1.0) * 100).toFixed(0)}%
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="1.5"
+              step="0.1"
+              value={voiceSettings.speakingRate ?? 1.0}
+              onChange={(e) => {
+                const speakingRate = parseFloat(e.target.value);
+                const newSettings = { ...voiceSettings, speakingRate };
+                setVoiceSettings(newSettings);
+                saveVoiceSettings(newSettings);
+              }}
+              className="w-full accent-skyrim-gold"
+            />
+            <div className="flex justify-between text-[10px] text-skyrim-text/60">
+              <span>Slower</span>
+              <span>Faster</span>
+            </div>
+          </div>
+          
+          <p className="text-[10px] text-skyrim-text/60 mt-2">
+            Note: Voice changes take effect on the next message. Custom voices count against your daily quota.
+          </p>
         </div>
       )}
 

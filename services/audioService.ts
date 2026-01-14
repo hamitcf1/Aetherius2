@@ -310,6 +310,68 @@ class AudioService {
     }
   }
 
+  // Duck (lower) music volume for TTS/voice playback
+  private preDuckVolume: number | null = null;
+  private isDucked: boolean = false;
+
+  public duckMusic(targetVolume: number = 0.1): void {
+    if (!this.musicAudio || this.isDucked) return;
+    this.preDuckVolume = this.musicAudio.volume;
+    this.isDucked = true;
+    
+    // Fade down quickly
+    const fadeDown = () => {
+      if (!this.musicAudio) return;
+      const step = (this.preDuckVolume! - targetVolume) / 10;
+      let currentVol = this.preDuckVolume!;
+      const interval = setInterval(() => {
+        if (!this.musicAudio || !this.isDucked) {
+          clearInterval(interval);
+          return;
+        }
+        currentVol -= step;
+        if (currentVol <= targetVolume) {
+          this.musicAudio.volume = targetVolume;
+          clearInterval(interval);
+        } else {
+          this.musicAudio.volume = currentVol;
+        }
+      }, 30);
+    };
+    fadeDown();
+  }
+
+  public unduckMusic(): void {
+    if (!this.musicAudio || !this.isDucked || this.preDuckVolume === null) return;
+    this.isDucked = false;
+    const targetVolume = this.preDuckVolume;
+    this.preDuckVolume = null;
+    
+    // Fade up slowly
+    const fadeUp = () => {
+      if (!this.musicAudio) return;
+      const step = (targetVolume - this.musicAudio.volume) / 20;
+      const interval = setInterval(() => {
+        if (!this.musicAudio || this.isDucked) {
+          clearInterval(interval);
+          return;
+        }
+        const newVol = this.musicAudio.volume + step;
+        if (newVol >= targetVolume) {
+          this.musicAudio.volume = targetVolume;
+          clearInterval(interval);
+        } else {
+          this.musicAudio.volume = newVol;
+        }
+      }, 50);
+    };
+    fadeUp();
+  }
+
+  public isMusicDucked(): boolean {
+    return this.isDucked;
+  }
+
   // Get/Set configuration
   public getConfig(): AudioConfig {
     return { ...this.config };

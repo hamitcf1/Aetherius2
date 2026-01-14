@@ -3810,7 +3810,15 @@ const App: React.FC = () => {
                       timeAdvanceMinutes: timeAdvanceMinutes || null
                     };
                   }
-                  const resp = await generateAdventureResponse(playerInput, JSON.stringify(aiContextObj), `Continue the adventure and branch according to combat outcome. Do not grant duplicate rewards.`);
+                  const resp = await generateAdventureResponse(playerInput, JSON.stringify(aiContextObj), `Continue the adventure and branch according to combat outcome. Do not grant duplicate rewards.
+
+GAMEPLAY ENFORCEMENT (CRITICAL):
+- EVERY enemy in the combat MUST have an explicit end-state mentioned (dead, fled, surrendered, incapacitated)
+- Do not imply any enemy outcome - state each one explicitly
+- If combat result is victory, describe what happened to ALL enemies
+- If combat result is defeat/fled/surrendered, describe the consequences
+- Mechanical consistency over narrative flavor
+- You are a game system that outputs narrative as a consequence of rules`);
                   // Apply generated updates to game state so the adventure continues
                   if (resp) handleGameUpdate(resp);
                 } catch (e) {

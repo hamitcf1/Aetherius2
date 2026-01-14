@@ -311,6 +311,9 @@ export interface GameStateUpdate {
   timeAdvanceMinutes?: number;
   needsChange?: Partial<SurvivalNeeds>;
   
+  // Current location for map updates
+  currentLocation?: string;
+  
   // Vitals (health, magicka, stamina) changes for adventure
   vitalsChange?: Partial<CurrentVitals>;
   // Effect objects representing atomic game effects (applied via central gate)

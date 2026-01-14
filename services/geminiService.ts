@@ -399,6 +399,23 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
     sanitized.characterUpdates = response.characterUpdates;
   }
 
+  // Pass through currentLocation for map updates
+  if (response.currentLocation && typeof response.currentLocation === 'string') {
+    sanitized.currentLocation = response.currentLocation;
+  }
+
+  // Pass through simulationUpdate for state tracking (NPCs, scenes, facts, etc.)
+  if (response.simulationUpdate && typeof response.simulationUpdate === 'object') {
+    sanitized.simulationUpdate = response.simulationUpdate;
+  }
+
+  // Pass through discoveredLocations for map updates
+  if (response.discoveredLocations && Array.isArray(response.discoveredLocations)) {
+    sanitized.discoveredLocations = response.discoveredLocations.filter((loc: any) => 
+      loc.name && typeof loc.name === 'string'
+    );
+  }
+
   if (response.transactionId) {
     if (allowMechanical) sanitized.transactionId = response.transactionId;
     else errors.push('transactionId is forbidden in Adventure responses (would imply mechanical application)');
@@ -645,6 +662,21 @@ export const generateGameMasterResponse = async (
 
   const fullPrompt = `
     You are the Game Master (GM) and Scribe for a Skyrim roleplay campaign.
+
+    === GAMEPLAY CONSISTENCY ENFORCEMENT (CRITICAL - HIGHEST PRIORITY) ===
+    HARD RULES (NEVER VIOLATE):
+    - NEVER resolve combat without addressing EVERY enemy (each must be: dead, fled, surrendered, incapacitated, or still hostile)
+    - NEVER advance time without consequences
+    - NEVER increase stats without gameplay impact
+    - NEVER imply objective completion without explicit confirmation
+    
+    PRIORITIES:
+    1. Mechanical consistency over narrative flavor
+    2. Explicit state transitions over implied outcomes
+    3. Gameplay consequences over descriptive prose
+    
+    You are a game system that outputs narrative as a consequence of rules.
+    === END ENFORCEMENT ===
     
     CURRENT GAME STATE CONTEXT:
     ${context}
@@ -871,7 +903,7 @@ export const generateCharacterProfile = async (
         "backstory": "String (Detailed)",
         "startingGold": Number,
         "inventory": [ { "name": "String", "type": "weapon/apparel/potion/ingredient/misc", "description": "String", "quantity": Number } ],
-        "quests": [ { "title": "String", "description": "String", "location": "String", "dueDate": "String (Optional)" } ],
+        "quests": [ { "title": "String", "description": "String", "location": "String", "dueDate": "String (Optional)", "objectives": [ { "description": "String", "completed": false } ] } ],
         "journalEntries": [ { "title": "String", "content": "String (Initial thoughts)" } ],
         "openingStory": { "title": "String", "content": "String (The beginning of the adventure)" }
     }
@@ -1128,6 +1160,14 @@ export const generateCombatEncounter = async (
   playerLevel: number = 1
 ): Promise<GameStateUpdate> => {
   const prompt = `You are a Game Master for a Skyrim RPG. Generate a combat encounter based on the context.
+
+=== GAMEPLAY CONSISTENCY ENFORCEMENT (CRITICAL) ===
+- ALL generated enemies MUST be explicitly tracked - no implied or background enemies
+- Enemy count MUST match what's described in narrative
+- Each enemy MUST have complete stats - no partial entries
+- Combat cannot start without explicit enemy list
+You are a game system, not a storyteller.
+=== END ENFORCEMENT ===
 
 CONTEXT: ${context}
 DIFFICULTY: ${difficulty}

@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, memo } from 'react';
  * - Supports snow, rain, and blood (Dark Brotherhood) effects
  */
 
-export type WeatherEffectType = 'snow' | 'rain' | 'none';
+export type WeatherEffectType = 'snow' | 'rain' | 'sandstorm' | 'none';
 
 export interface SnowSettings {
   intensity: 'light' | 'normal' | 'heavy' | 'blizzard';
@@ -61,7 +61,20 @@ const generateRaindrops = (count: number): Particle[] => {
   }));
 };
 
-type ParticleType = 'snow' | 'rain' | 'blood';
+// Generate sand particles (small, fast, more horizontal)
+const generateSandParticles = (count: number): Particle[] => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    size: 1 + Math.random() * 3, // Smaller particles
+    left: -10 + Math.random() * 110, // Start off-screen left sometimes
+    delay: Math.random() * 3,
+    duration: 1.5 + Math.random() * 2, // Fast horizontal movement
+    opacity: 0.4 + Math.random() * 0.4,
+    drift: 80 + Math.random() * 120, // Strong horizontal drift
+  }));
+};
+
+type ParticleType = 'snow' | 'rain' | 'blood' | 'sand';
 
 // CSS keyframes injected once
 const injectStyles = (particleType: ParticleType) => {
@@ -103,6 +116,49 @@ const injectStyles = (particleType: ParticleType) => {
         overflow: hidden;
         pointer-events: none;
         z-index: 9999;
+      }
+    `;
+  } else if (particleType === 'sand') {
+    style.textContent = `
+      @keyframes sandstorm {
+        0% {
+          transform: translate3d(-20vw, 0, 0) rotate(0deg);
+          opacity: 0;
+        }
+        10% {
+          opacity: var(--base-opacity);
+        }
+        90% {
+          opacity: var(--base-opacity);
+        }
+        100% {
+          transform: translate3d(var(--drift), 30vh, 0) rotate(180deg);
+          opacity: 0;
+        }
+      }
+
+      .sand-particle {
+        position: fixed;
+        top: 0;
+        background: radial-gradient(circle, rgba(194, 154, 108, 0.9) 0%, rgba(194, 154, 108, 0.6) 50%, transparent 70%);
+        border-radius: 50%;
+        pointer-events: none;
+        will-change: transform;
+        animation: sandstorm var(--duration) linear infinite;
+        animation-delay: var(--delay);
+        z-index: 9999;
+      }
+
+      .sand-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 9999;
+        background: linear-gradient(to bottom, rgba(194, 154, 108, 0.1) 0%, rgba(194, 154, 108, 0.05) 50%, transparent 100%);
       }
     `;
   } else if (particleType === 'blood') {
@@ -194,22 +250,31 @@ const injectStyles = (particleType: ParticleType) => {
 };
 
 const ParticleElement: React.FC<{ particle: Particle; particleType: ParticleType }> = memo(({ particle, particleType }) => {
-  const className = particleType === 'rain' ? 'raindrop' : particleType === 'blood' ? 'blood-particle' : 'snowflake';
+  const className = particleType === 'rain' ? 'raindrop' 
+    : particleType === 'blood' ? 'blood-particle' 
+    : particleType === 'sand' ? 'sand-particle'
+    : 'snowflake';
   const glowColor = particleType === 'blood' 
     ? 'rgba(220, 20, 60, 0.4)' 
     : particleType === 'rain' 
       ? 'rgba(174, 194, 224, 0.3)' 
-      : 'rgba(255,255,255,0.3)';
+      : particleType === 'sand'
+        ? 'rgba(194, 154, 108, 0.3)'
+        : 'rgba(255,255,255,0.3)';
   
-  // Rain drops are elongated
+  // Rain drops are elongated, sand particles are round
   const width = particleType === 'rain' ? particle.size : particle.size;
   const height = particleType === 'rain' ? particle.size * 8 : particle.size;
+  
+  // Sand particles start from random vertical positions
+  const top = particleType === 'sand' ? `${Math.random() * 70}%` : undefined;
   
   return (
     <div
       className={className}
       style={{
         left: `${particle.left}%`,
+        top: top,
         width: `${width}px`,
         height: `${height}px`,
         '--duration': `${particle.duration}s`,
@@ -236,21 +301,33 @@ const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherTy
   const isBloodEffect = theme === 'dark_brotherhood';
   
   // Determine actual particle type
-  const particleType: ParticleType = isBloodEffect ? 'blood' : (weatherType === 'rain' ? 'rain' : 'snow');
+  const particleType: ParticleType = isBloodEffect ? 'blood' 
+    : weatherType === 'rain' ? 'rain' 
+    : weatherType === 'sandstorm' ? 'sand'
+    : 'snow';
   
-  // Rain needs more particles for effect, but they're smaller so it's ok
-  const particleCount = particleType === 'rain' ? Math.floor(baseParticleCount * 1.5) : baseParticleCount;
+  // Rain needs more particles, sand needs even more for thick effect
+  const particleCount = particleType === 'rain' 
+    ? Math.floor(baseParticleCount * 1.5) 
+    : particleType === 'sand'
+      ? Math.floor(baseParticleCount * 2)
+      : baseParticleCount;
   
   // Generate particles based on type and intensity
   const particles = useMemo(() => {
-    return particleType === 'rain' ? generateRaindrops(particleCount) : generateParticles(particleCount);
+    if (particleType === 'rain') return generateRaindrops(particleCount);
+    if (particleType === 'sand') return generateSandParticles(particleCount);
+    return generateParticles(particleCount);
   }, [particleCount, particleType]);
 
   useEffect(() => {
     injectStyles(particleType);
   }, [particleType]);
 
-  const containerClass = particleType === 'rain' ? 'rain-container' : particleType === 'blood' ? 'blood-container' : 'snow-container';
+  const containerClass = particleType === 'rain' ? 'rain-container' 
+    : particleType === 'blood' ? 'blood-container' 
+    : particleType === 'sand' ? 'sand-container'
+    : 'snow-container';
 
   return (
     <div className={containerClass} aria-hidden="true">

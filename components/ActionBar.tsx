@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson } from 'lucide-react';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
@@ -285,12 +285,12 @@ const ActionBar: React.FC = () => {
             </div>
           )}
           
-          {/* Weather Effect - cycle through snow/rain/clear */}
+          {/* Weather Effect - cycle through snow/rain/sandstorm/clear */}
           <div className="relative group">
             <div className="flex gap-1">
               <button 
                 onClick={isFeatureEnabled('snowEffect') ? () => {
-                  const weatherCycle: WeatherEffectType[] = ['snow', 'rain', 'none'];
+                  const weatherCycle: WeatherEffectType[] = ['snow', 'rain', 'sandstorm', 'none'];
                   const currentIndex = weatherCycle.indexOf(weatherEffect);
                   const nextIndex = (currentIndex + 1) % weatherCycle.length;
                   setWeatherEffect(weatherCycle[nextIndex]);
@@ -302,15 +302,19 @@ const ActionBar: React.FC = () => {
                       ? 'bg-blue-200 text-blue-900'
                       : weatherEffect === 'rain'
                         ? 'bg-cyan-200 text-cyan-900'
-                        : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
+                        : weatherEffect === 'sandstorm'
+                          ? 'bg-amber-200 text-amber-900'
+                          : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                     : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                 }`}
               >
                 {weatherEffect === 'snow' ? <Snowflake size={16} /> : 
                  weatherEffect === 'rain' ? <CloudRain size={16} /> : 
+                 weatherEffect === 'sandstorm' ? <Wind size={16} /> :
                  <CloudOff size={16} />}
                 {weatherEffect === 'snow' ? 'Snow Effect' : 
                  weatherEffect === 'rain' ? 'Rain Effect' : 
+                 weatherEffect === 'sandstorm' ? 'Sandstorm' :
                  'Weather Off'}
               </button>
               {isFeatureEnabled('snowEffect') && weatherEffect !== 'none' && (
@@ -366,30 +370,30 @@ const ActionBar: React.FC = () => {
           {/* Audio Settings */}
           <div className="border-t border-skyrim-border/60 pt-3 mt-2">
             <div className="text-xs text-gray-500 font-bold mb-2">Audio Settings</div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={handleToggleSound}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded font-bold transition-colors ${
+                className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded font-bold transition-colors ${
                   soundEnabled 
                     ? 'bg-green-700 text-white hover:bg-green-600' 
                     : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                 }`}
                 title={soundEnabled ? 'Disable sound effects' : 'Enable sound effects'}
               >
-                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                <span className="text-xs">SFX</span>
+                {soundEnabled ? <Volume2 size={14} className="shrink-0" /> : <VolumeX size={14} className="shrink-0" />}
+                <span className="text-xs truncate">SFX</span>
               </button>
               <button
                 onClick={handleToggleMusic}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded font-bold transition-colors ${
+                className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded font-bold transition-colors ${
                   musicEnabled 
                     ? 'bg-purple-700 text-white hover:bg-purple-600' 
                     : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                 }`}
                 title={musicEnabled ? 'Disable background music' : 'Enable background music'}
               >
-                {musicEnabled ? <Music size={16} /> : <Music2 size={16} />}
-                <span className="text-xs">Music</span>
+                {musicEnabled ? <Music size={14} className="shrink-0" /> : <Music2 size={14} className="shrink-0" />}
+                <span className="text-xs truncate">Music</span>
               </button>
             </div>
             <p className="text-[10px] text-gray-600 mt-1 text-center italic">

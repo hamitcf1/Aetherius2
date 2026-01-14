@@ -6,6 +6,69 @@
 
 export type VoiceRole = 'narrator' | 'khajiit' | 'system' | 'npc' | 'npc_female';
 
+// Voice settings for customization
+export interface VoiceSettings {
+  gender?: 'male' | 'female';
+  voiceName?: string;
+  pitch?: number; // -20 to +20 semitones
+  speakingRate?: number; // 0.5 to 2.0
+}
+
+// Available voice options (matching the API)
+export const VOICE_OPTIONS = {
+  male: [
+    { name: 'en-US-Wavenet-A', label: 'Young Male' },
+    { name: 'en-US-Wavenet-B', label: 'Deep Male' },
+    { name: 'en-US-Wavenet-D', label: 'Mature Male' },
+    { name: 'en-US-Wavenet-I', label: 'Older Male' },
+    { name: 'en-US-Wavenet-J', label: 'Warm Male' },
+    { name: 'en-US-Neural2-A', label: 'Natural Male' },
+    { name: 'en-US-Neural2-D', label: 'Clear Male' },
+    { name: 'en-US-Neural2-I', label: 'Expressive Male' },
+    { name: 'en-US-Neural2-J', label: 'Conversational Male' },
+  ],
+  female: [
+    { name: 'en-US-Wavenet-C', label: 'Warm Female' },
+    { name: 'en-US-Wavenet-E', label: 'Young Female' },
+    { name: 'en-US-Wavenet-F', label: 'Atmospheric Female' },
+    { name: 'en-US-Wavenet-G', label: 'Soft Female' },
+    { name: 'en-US-Wavenet-H', label: 'Bright Female' },
+    { name: 'en-US-Neural2-C', label: 'Natural Female' },
+    { name: 'en-US-Neural2-E', label: 'Clear Female' },
+    { name: 'en-US-Neural2-F', label: 'Expressive Female' },
+    { name: 'en-US-Neural2-G', label: 'Conversational Female' },
+    { name: 'en-US-Neural2-H', label: 'Warm Neural Female' },
+  ]
+};
+
+// Current voice settings (persisted to localStorage)
+let currentVoiceSettings: VoiceSettings = loadVoiceSettings();
+
+function loadVoiceSettings(): VoiceSettings {
+  try {
+    const saved = localStorage.getItem('aetherius:voice_settings');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return {}; // Default to using role-based voices
+}
+
+export function saveVoiceSettings(settings: VoiceSettings): void {
+  currentVoiceSettings = settings;
+  try {
+    localStorage.setItem('aetherius:voice_settings', JSON.stringify(settings));
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+export function getVoiceSettings(): VoiceSettings {
+  return currentVoiceSettings;
+}
+
 interface TTSConfig {
   enabled: boolean;
   autoPlay: boolean;
@@ -63,10 +126,11 @@ export function getTTSState(): TTSState {
 }
 
 /**
- * Generate cache key from text and role
+ * Generate cache key from text, role, and voice settings
  */
-function getCacheKey(text: string, role: VoiceRole): string {
-  return `${role}:${text.slice(0, 100)}:${text.length}`;
+function getCacheKey(text: string, role: VoiceRole, voiceSettings?: VoiceSettings): string {
+  const settingsStr = voiceSettings ? JSON.stringify(voiceSettings) : '';
+  return `${role}:${text.slice(0, 100)}:${text.length}:${settingsStr}`;
 }
 
 /**
@@ -79,6 +143,13 @@ export function stopSpeaking(): void {
     currentAudio = null;
   }
   updateState({ isPlaying: false, isSpeaking: false, currentText: null });
+  
+  // Unduck the music when done speaking
+  import('./audioService').then(({ audioService }) => {
+    audioService.unduckMusic();
+  }).catch(() => {
+    // audioService may not be available
+  });
 }
 
 /**
@@ -130,6 +201,14 @@ export async function speak(
   // Stop any current playback
   stopSpeaking();
 
+  // Duck the music when speaking
+  try {
+    const { audioService } = await import('./audioService');
+    audioService.duckMusic(0.1);
+  } catch (e) {
+    // audioService may not be available
+  }
+
   // Clean text for TTS (remove markdown, special chars)
   const cleanText = text
     .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
@@ -149,7 +228,9 @@ export async function speak(
     ? cleanText.slice(0, 1997) + '...'
     : cleanText;
 
-  const cacheKey = getCacheKey(truncatedText, role);
+  // Get current voice settings
+  const voiceSettings = Object.keys(currentVoiceSettings).length > 0 ? currentVoiceSettings : undefined;
+  const cacheKey = getCacheKey(truncatedText, role, voiceSettings);
 
   updateState({ isSpeaking: true, currentText: truncatedText, error: null });
 
@@ -157,11 +238,15 @@ export async function speak(
     let audioUrl = audioCache.get(cacheKey);
 
     if (!audioUrl) {
-      // Call TTS API
+      // Call TTS API with voice settings
       const response = await fetch('/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: truncatedText, role })
+        body: JSON.stringify({ 
+          text: truncatedText, 
+          role,
+          voiceSettings: voiceSettings || null
+        })
       });
 
       if (response.status === 404) {
@@ -191,12 +276,20 @@ export async function speak(
     currentAudio.onended = () => {
       updateState({ isPlaying: false, isSpeaking: false, currentText: null });
       currentAudio = null;
+      // Unduck music when playback ends naturally
+      import('./audioService').then(({ audioService }) => {
+        audioService.unduckMusic();
+      }).catch(() => {});
     };
 
     currentAudio.onerror = (e) => {
       console.error('Audio playback error:', e);
       updateState({ isPlaying: false, isSpeaking: false, error: 'Playback failed' });
       currentAudio = null;
+      // Unduck music on error too
+      import('./audioService').then(({ audioService }) => {
+        audioService.unduckMusic();
+      }).catch(() => {});
     };
 
     if (config.autoPlay) {

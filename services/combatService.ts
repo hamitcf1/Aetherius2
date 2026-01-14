@@ -19,6 +19,46 @@ import { isSmallWeapon } from './equipment';
 import { modifyPlayerCombatStat } from './vitals';
 import { resolvePotionEffect } from './potionResolver';
 import { getLearnedSpellIds, createAbilityFromSpell } from './spells';
+import { PERK_DEFINITIONS } from '../data/perkDefinitions';
+
+// ============================================================================
+// COMBAT PERK SYSTEM - Perk effects in combat
+// ============================================================================
+
+/**
+ * Get the total bonus for a specific combat perk effect key.
+ * Sums up all ranks * effect amount for perks with matching effect key.
+ */
+export const getCombatPerkBonus = (character: Character | undefined, effectKey: string): number => {
+  if (!character || !character.perks) return 0;
+  
+  let totalBonus = 0;
+  for (const perk of character.perks) {
+    const def = PERK_DEFINITIONS.find(d => d.id === perk.id);
+    if (def && def.effect && def.effect.type === 'combat' && def.effect.key === effectKey) {
+      const rank = perk.rank || 1;
+      totalBonus += def.effect.amount * rank;
+    }
+  }
+  return totalBonus;
+};
+
+/**
+ * Check if a character has a specific perk (by id) with at least 1 rank.
+ */
+export const hasPerk = (character: Character | undefined, perkId: string): boolean => {
+  if (!character || !character.perks) return false;
+  return character.perks.some(p => p.id === perkId && (p.rank || 0) >= 1);
+};
+
+/**
+ * Get the rank of a specific perk (0 if not owned).
+ */
+export const getPerkRank = (character: Character | undefined, perkId: string): number => {
+  if (!character || !character.perks) return 0;
+  const perk = character.perks.find(p => p.id === perkId);
+  return perk?.rank || 0;
+};
 
 // ============================================================================
 // DYNAMIC ENEMY NAME POOLS - For variation
@@ -232,6 +272,76 @@ export const calculatePlayerCombatStats = (
   // Destruction affects magic damage (handled in abilities)
   // Alteration affects magic resist
   magicResist = Math.floor(getSkillLevel('Alteration') * 0.2);
+
+  // === COMBAT PERK BONUSES ===
+  
+  // Armor rating perks (light armor vs heavy armor - check which type is equipped)
+  const hasLightArmor = equippedItems.some(i => i.type === 'apparel' && (i.name?.toLowerCase().includes('leather') || i.name?.toLowerCase().includes('hide') || i.name?.toLowerCase().includes('scale') || i.name?.toLowerCase().includes('glass') || i.name?.toLowerCase().includes('elven')));
+  const hasHeavyArmor = equippedItems.some(i => i.type === 'apparel' && (i.name?.toLowerCase().includes('iron') || i.name?.toLowerCase().includes('steel') || i.name?.toLowerCase().includes('orcish') || i.name?.toLowerCase().includes('daedric') || i.name?.toLowerCase().includes('dwarven') || i.name?.toLowerCase().includes('ebony') || i.name?.toLowerCase().includes('plate')));
+  
+  const lightArmorBonus = getCombatPerkBonus(character, 'lightArmorRating');
+  const heavyArmorBonus = getCombatPerkBonus(character, 'heavyArmorRating');
+  const lightArmorSetBonus = getCombatPerkBonus(character, 'lightArmorSetBonus');
+  const heavyArmorSetBonus = getCombatPerkBonus(character, 'heavyArmorSetBonus');
+  
+  if (hasLightArmor && lightArmorBonus > 0) {
+    armor = Math.floor(armor * (1 + lightArmorBonus / 100));
+  }
+  if (hasHeavyArmor && heavyArmorBonus > 0) {
+    armor = Math.floor(armor * (1 + heavyArmorBonus / 100));
+  }
+  // Set bonuses (simplified - assume matched if wearing 3+ armor pieces of same type)
+  const armorPieceCount = equippedItems.filter(i => i.type === 'apparel' && ['head', 'chest', 'hands', 'feet'].includes(i.slot || '')).length;
+  if (armorPieceCount >= 3) {
+    if (hasLightArmor && lightArmorSetBonus > 0) {
+      armor = Math.floor(armor * (1 + lightArmorSetBonus / 100));
+    }
+    if (hasHeavyArmor && heavyArmorSetBonus > 0) {
+      armor = Math.floor(armor * (1 + heavyArmorSetBonus / 100));
+    }
+  }
+  
+  // Dodge chance from perks (Deft Movement - light armor)
+  const dodgeBonus = getCombatPerkBonus(character, 'dodgeChance');
+  if (hasLightArmor && dodgeBonus > 0) {
+    dodgeChance += dodgeBonus;
+  }
+  
+  // Weapon damage perks - detect weapon type
+  const weaponName = mainWeapon?.name?.toLowerCase() || '';
+  const isOneHanded = weaponName.includes('sword') || weaponName.includes('axe') || weaponName.includes('mace') || weaponName.includes('dagger') || weaponName.includes('war axe');
+  const isTwoHanded = weaponName.includes('greatsword') || weaponName.includes('battleaxe') || weaponName.includes('warhammer');
+  const isBow = weaponName.includes('bow');
+  const isDualWielding = !!offhandItem && offhandItem.type === 'weapon';
+  
+  // One-handed damage bonus (Armsman perk)
+  if (isOneHanded) {
+    const oneHandedBonus = getCombatPerkBonus(character, 'oneHandedDamage');
+    if (oneHandedBonus > 0) {
+      weaponDamage = Math.floor(weaponDamage * (1 + oneHandedBonus / 100));
+    }
+  }
+  
+  // Two-handed damage bonus (Barbarian perk)
+  if (isTwoHanded) {
+    const twoHandedBonus = getCombatPerkBonus(character, 'twoHandedDamage');
+    if (twoHandedBonus > 0) {
+      weaponDamage = Math.floor(weaponDamage * (1 + twoHandedBonus / 100));
+    }
+  }
+  
+  // Bow damage bonus (Overdraw perk)
+  if (isBow) {
+    const bowBonus = getCombatPerkBonus(character, 'bowDamage');
+    if (bowBonus > 0) {
+      weaponDamage = Math.floor(weaponDamage * (1 + bowBonus / 100));
+    }
+    // Bow crit chance (Eagle Eye perk)
+    const bowCritBonus = getCombatPerkBonus(character, 'bowCritChance');
+    if (bowCritBonus > 0) {
+      critChance += bowCritBonus;
+    }
+  }
 
   // Generate abilities based on skills and equipment
   const abilities = generatePlayerAbilities(character, equippedItems);
@@ -747,9 +857,56 @@ export const executePlayerAction = (
       const scaledBase = Math.max(1, Math.floor(baseDamage * staminaMultiplier * tierMult));
       const { damage, hitLocation } = computeDamageFromNat(scaledBase, 12, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);
 
-      // Apply armor/resistance reductions (post-roll)
-      const armorReduction = target.armor / (target.armor + 100);
-      const finalDamage = Math.max(1, Math.floor(damage * (1 - armorReduction)));
+      // === COMBAT PERK EFFECTS ===
+      let perkDamageMultiplier = 1.0;
+      let perkArmorPenetration = 0;
+      let perkLifesteal = 0;
+      
+      // Berserker Rage - bonus damage when below 25% health
+      const berserkerBonus = getCombatPerkBonus(character, 'lowHealthDamage');
+      const healthPercent = newPlayerStats.currentHealth / newPlayerStats.maxHealth;
+      if (berserkerBonus > 0 && healthPercent <= 0.25) {
+        perkDamageMultiplier *= (1 + berserkerBonus / 100);
+      }
+      
+      // Executioner - bonus damage vs enemies below 20% health
+      const executeBonus = getCombatPerkBonus(character, 'executeDamage');
+      const targetHealthPercent = target.currentHealth / target.maxHealth;
+      if (executeBonus > 0 && targetHealthPercent <= 0.20) {
+        perkDamageMultiplier *= (1 + executeBonus / 100);
+      }
+      
+      // Critical damage bonuses (Bladesman, Deep Wounds)
+      if (attackResolved.isCrit) {
+        const swordCritBonus = getCombatPerkBonus(character, 'swordCritDamage');
+        const greatswordCritBonus = getCombatPerkBonus(character, 'greatswordCritDamage');
+        const weaponName = ((character as any)?.equipment?.find((i: any) => i.slot === 'weapon')?.name || '').toLowerCase();
+        if (weaponName.includes('sword') && !weaponName.includes('great')) {
+          perkDamageMultiplier *= (1 + swordCritBonus / 100);
+        }
+        if (weaponName.includes('greatsword')) {
+          perkDamageMultiplier *= (1 + greatswordCritBonus / 100);
+        }
+      }
+      
+      // Armor penetration perks (Bone Breaker, Skull Crusher)
+      const maceArmorPen = getCombatPerkBonus(character, 'maceArmorPen');
+      const warhammerArmorPen = getCombatPerkBonus(character, 'warhammerArmorPen');
+      const equippedWeaponName = ((character as any)?.equipment?.find((i: any) => i.slot === 'weapon')?.name || '').toLowerCase();
+      if (equippedWeaponName.includes('mace')) {
+        perkArmorPenetration += maceArmorPen;
+      }
+      if (equippedWeaponName.includes('warhammer')) {
+        perkArmorPenetration += warhammerArmorPen;
+      }
+      
+      // Lifesteal (Vampiric Strikes)
+      perkLifesteal = getCombatPerkBonus(character, 'lifesteal');
+
+      // Apply armor/resistance reductions (post-roll) with armor penetration
+      const effectiveArmor = Math.max(0, target.armor * (1 - perkArmorPenetration / 100));
+      const armorReduction = effectiveArmor / (effectiveArmor + 100);
+      const finalDamage = Math.max(1, Math.floor(damage * perkDamageMultiplier * (1 - armorReduction)));
 
       const isCrit = attackResolved.isCrit;
       const resisted = ability.type === 'magic' && target.resistances?.includes('magic');
@@ -777,12 +934,22 @@ export const executePlayerAction = (
         newState.abilityCooldowns[ability.id] = ability.cooldown;
       }
 
-      // Build narrative
+      // Build damage narrative
       let damageNarrative = `deals ${appliedDamage} damage to the ${hitLocation}`;
       if (isCrit) damageNarrative = `CRITICAL HIT! ` + damageNarrative;
       if (resisted) damageNarrative += ` (resisted)`;
 
       narrative = `You use ${ability.name} on ${target.name} and ${damageNarrative}!`;
+
+      // === LIFESTEAL PERK EFFECT ===
+      if (perkLifesteal > 0 && ability.type === 'melee' && appliedDamage > 0 && !targetIsAlly) {
+        const lifestealAmount = Math.max(1, Math.floor(appliedDamage * perkLifesteal / 100));
+        newPlayerStats.currentHealth = Math.min(
+          newPlayerStats.maxHealth,
+          newPlayerStats.currentHealth + lifestealAmount
+        );
+        narrative += ` You drain ${lifestealAmount} health.`;
+      }
       
       if (enemyIndex >= 0 && newState.enemies[enemyIndex].currentHealth <= 0) {
         narrative += ` ${target.name} is defeated!`;
@@ -1156,6 +1323,13 @@ export const executeEnemyTurn = (
     const armorReduction = playerStats.armor / (playerStats.armor + 100);
     let d = Math.floor(rollRes.damage * (1 - armorReduction));
     if (resolved.isCrit) d = Math.floor(d * 1.25);
+    
+    // === DAMAGE REDUCTION PERK (Dragon Skin) ===
+    const damageReductionPerk = getCombatPerkBonus(character, 'damageReduction');
+    if (damageReductionPerk > 0) {
+      d = Math.floor(d * (1 - damageReductionPerk / 100));
+    }
+    
     appliedDamage = Math.max(0, d);
   }
 
@@ -1277,6 +1451,16 @@ export const executeEnemyTurn = (
 
   // Apply damage to player
   newPlayerStats.currentHealth = Math.max(0, newPlayerStats.currentHealth - appliedDamage);
+
+  // === AVOID DEATH PERK - Once per combat, auto-heal when health drops below 10% ===
+  const avoidDeathHeal = getCombatPerkBonus(character, 'avoidDeath');
+  const avoidDeathUsed = (newState as any).avoidDeathUsed || false;
+  const healthPercentAfterDamage = newPlayerStats.currentHealth / newPlayerStats.maxHealth;
+  if (avoidDeathHeal > 0 && !avoidDeathUsed && healthPercentAfterDamage < 0.10 && newPlayerStats.currentHealth > 0) {
+    newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + avoidDeathHeal);
+    (newState as any).avoidDeathUsed = true;
+    narrative += ` Your Restoration mastery triggers, automatically healing you for ${avoidDeathHeal} health!`;
+  }
 
   // Build narrative
   narrative = `${actor.name} uses ${chosenAbility.name}`;

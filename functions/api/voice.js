@@ -5,7 +5,35 @@
  * - MD5-based R2 caching
  * - KV-based daily quota tracking (30k chars/day)
  * - SSML voice profiles for different roles
+ * - Customizable voice settings (pitch, rate, gender)
  */
+
+// Available voice options for customization
+const VOICE_OPTIONS = {
+  male: [
+    { name: 'en-US-Wavenet-A', style: 'Young male' },
+    { name: 'en-US-Wavenet-B', style: 'Deep male' },
+    { name: 'en-US-Wavenet-D', style: 'Mature male' },
+    { name: 'en-US-Wavenet-I', style: 'Older male' },
+    { name: 'en-US-Wavenet-J', style: 'Warm male' },
+    { name: 'en-US-Neural2-A', style: 'Natural male' },
+    { name: 'en-US-Neural2-D', style: 'Clear male' },
+    { name: 'en-US-Neural2-I', style: 'Expressive male' },
+    { name: 'en-US-Neural2-J', style: 'Conversational male' },
+  ],
+  female: [
+    { name: 'en-US-Wavenet-C', style: 'Warm female' },
+    { name: 'en-US-Wavenet-E', style: 'Young female' },
+    { name: 'en-US-Wavenet-F', style: 'Atmospheric female' },
+    { name: 'en-US-Wavenet-G', style: 'Soft female' },
+    { name: 'en-US-Wavenet-H', style: 'Bright female' },
+    { name: 'en-US-Neural2-C', style: 'Natural female' },
+    { name: 'en-US-Neural2-E', style: 'Clear female' },
+    { name: 'en-US-Neural2-F', style: 'Expressive female' },
+    { name: 'en-US-Neural2-G', style: 'Conversational female' },
+    { name: 'en-US-Neural2-H', style: 'Warm neural female' },
+  ]
+};
 
 // Voice profiles with SSML attributes
 // Note: Journey voices don't support pitch, only Wavenet/Neural2 do
@@ -205,21 +233,85 @@ async function getGoogleAccessToken(serviceAccount) {
 }
 
 /**
- * Call Google Cloud TTS API
+ * Build SSML with custom settings
  */
-async function synthesizeSpeech(text, role, accessToken) {
+function buildSSMLWithCustom(text, settings) {
+  // Escape special XML characters
+  const escapedText = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const pitch = settings.pitch || 0;
+  const rate = settings.speakingRate || 1.0;
+
+  if (pitch !== 0) {
+    const pitchStr = pitch >= 0 ? `+${pitch}st` : `${pitch}st`;
+    return `<speak>
+      <prosody pitch="${pitchStr}" rate="${rate}">
+        ${escapedText}
+      </prosody>
+    </speak>`;
+  }
+  
+  return `<speak>
+    <prosody rate="${rate}">
+      ${escapedText}
+    </prosody>
+  </speak>`;
+}
+
+/**
+ * Call Google Cloud TTS API
+ * @param {string} text - Text to synthesize
+ * @param {string} role - Voice role (narrator, khajiit, etc.)
+ * @param {string} accessToken - Google OAuth access token
+ * @param {object} customSettings - Optional custom voice settings
+ */
+async function synthesizeSpeech(text, role, accessToken, customSettings = null) {
   const profile = VOICE_PROFILES[role] || VOICE_PROFILES.narrator;
-  const ssml = buildSSML(text, profile);
+  
+  // Determine voice settings - use custom if provided, otherwise use profile defaults
+  let voiceName = profile.name;
+  let speakingRate = profile.speakingRate;
+  let pitch = profile.pitch;
+  let ssmlGender = profile.ssmlGender;
+  
+  if (customSettings) {
+    // Apply custom settings
+    if (customSettings.voiceName) {
+      voiceName = customSettings.voiceName;
+    }
+    if (customSettings.gender) {
+      ssmlGender = customSettings.gender === 'male' ? 'MALE' : 'FEMALE';
+      // Pick a default voice for the gender if not specified
+      if (!customSettings.voiceName) {
+        const voices = VOICE_OPTIONS[customSettings.gender] || VOICE_OPTIONS.male;
+        voiceName = voices[0].name;
+      }
+    }
+    if (typeof customSettings.speakingRate === 'number') {
+      speakingRate = Math.max(0.5, Math.min(2.0, customSettings.speakingRate));
+    }
+    if (typeof customSettings.pitch === 'number') {
+      pitch = Math.max(-20, Math.min(20, customSettings.pitch));
+    }
+  }
+  
+  const ssml = buildSSMLWithCustom(text, { pitch, speakingRate });
 
   // Build audioConfig - only include pitch if voice supports it
   const audioConfig = {
     audioEncoding: 'MP3',
-    speakingRate: profile.speakingRate
+    speakingRate: speakingRate
   };
   
-  // Only add pitch if the voice supports it
-  if (profile.supportsPitch && profile.pitch !== 0) {
-    audioConfig.pitch = profile.pitch;
+  // Wavenet and Neural2 voices support pitch
+  const supportsPitch = voiceName.includes('Wavenet') || voiceName.includes('Neural2');
+  if (supportsPitch && pitch !== 0) {
+    audioConfig.pitch = pitch;
   }
 
   const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
@@ -231,9 +323,9 @@ async function synthesizeSpeech(text, role, accessToken) {
     body: JSON.stringify({
       input: { ssml },
       voice: {
-        languageCode: profile.languageCode,
-        name: profile.name,
-        ssmlGender: profile.ssmlGender
+        languageCode: 'en-US',
+        name: voiceName,
+        ssmlGender: ssmlGender
       },
       audioConfig
     })
@@ -275,7 +367,7 @@ export async function onRequest(context) {
   }
 
   try {
-    const { text, role = 'narrator' } = await request.json();
+    const { text, role = 'narrator', voiceSettings = null } = await request.json();
 
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ error: 'Text is required' }), {
@@ -292,8 +384,9 @@ export async function onRequest(context) {
       });
     }
 
-    // Generate cache key
-    const cacheKey = await md5Hash(`${text}:${role}`);
+    // Generate cache key (include voice settings in hash)
+    const settingsStr = voiceSettings ? JSON.stringify(voiceSettings) : '';
+    const cacheKey = await md5Hash(`${text}:${role}:${settingsStr}`);
     const filename = `${cacheKey}.mp3`;
 
     // Step 1: Check R2 cache
@@ -362,8 +455,8 @@ export async function onRequest(context) {
 
     const accessToken = await getGoogleAccessToken(serviceAccount);
 
-    // Step 4: Call Google TTS
-    const audioBase64 = await synthesizeSpeech(text, role, accessToken);
+    // Step 4: Call Google TTS (with optional custom voice settings)
+    const audioBase64 = await synthesizeSpeech(text, role, accessToken, voiceSettings);
     const audioBuffer = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
 
     // Step 5: Store in R2 cache
