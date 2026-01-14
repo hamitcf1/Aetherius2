@@ -8,11 +8,12 @@ const uniqueId = () => Math.random().toString(36).substr(2, 9);
 interface QuestLogProps {
   quests: CustomQuest[];
   setQuests: (quests: CustomQuest[]) => void;
+  onDelete?: (questId: string) => void;
 }
 
 type SortOption = 'newest' | 'oldest' | 'title_az' | 'title_za';
 
-export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests }) => {
+export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -77,6 +78,7 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests }) => {
 
   const deleteQuest = (id: string) => {
     setQuests(quests.filter(q => q.id !== id));
+    onDelete?.(id);
   };
 
   const startEditing = (quest: CustomQuest) => {

@@ -229,7 +229,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
   } : {};
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/90 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-skyrim-dark/90 backdrop-blur-sm flex items-center justify-center z-50">
       <div 
         ref={containerRef}
         className="bg-skyrim-paper border-2 border-skyrim-gold/50 rounded-lg p-6 max-w-lg w-full mx-4"

@@ -2095,7 +2095,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
       {/* Equipment Modal */}
       {showEquipment && (
-        <div className="fixed inset-0 bg-skyrim-dark/60 flex items-start justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl p-6 w-full max-w-4xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-serif text-skyrim-gold">Equipment</h3>
@@ -2147,7 +2147,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
             {/* Equip-from-slot modal (sub-modal) */}
             {equipModalOpen && selectedSlot && (
-              <div className="fixed inset-0 bg-skyrim-dark/50 flex items-center justify-center z-60 p-4">
+              <div className="fixed inset-0 bg-skyrim-dark/50 backdrop-blur-sm flex items-center justify-center z-60 p-4">
                 <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
                   <h4 className="text-lg font-serif text-skyrim-gold mb-3">Select item for {selectedSlot}</h4>
                   {getEquippableItemsForSlot(selectedSlot).length > 0 ? (
@@ -2249,6 +2249,25 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             >
               {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
               {ttsEnabled ? 'Voice On' : 'Voice Off'}
+            </button>
+          </div>
+          
+          {/* Reset All Settings Button */}
+          <div className="mt-3 pt-3 border-t border-skyrim-border/50">
+            <button
+              onClick={() => {
+                // Reset all settings to defaults
+                setAutoApply(true);
+                setShowRateLimit(true);
+                setLocalFontSize('medium');
+                setLocalFontWeight('normal');
+                setVoiceSettings({});
+                saveVoiceSettings({});
+                updateFontSettings('medium', 'normal');
+              }}
+              className="w-full px-3 py-2 rounded text-xs font-medium bg-red-900/40 text-red-200 border border-red-800 hover:bg-red-900/60 transition-colors flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={14} /> Reset All Settings to Defaults
             </button>
           </div>
         </div>

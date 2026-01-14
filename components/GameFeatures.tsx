@@ -132,7 +132,7 @@ export const CharacterExportModal: React.FC<CharacterExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg max-w-md w-full p-6">
         <h2 className="text-2xl font-serif text-skyrim-gold mb-4 flex items-center gap-2">
           <Download size={24} />
@@ -225,7 +225,7 @@ export const CharacterImportModal: React.FC<CharacterImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg max-w-md w-full p-6">
         <h2 className="text-2xl font-serif text-skyrim-gold mb-4 flex items-center gap-2">
           <Upload size={24} />
@@ -721,7 +721,7 @@ export const CharacterTemplateSelector: React.FC<{
   const selected = CHARACTER_TEMPLATES.find(t => t.id === selectedId);
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-skyrim-border">
           <h2 className="text-2xl font-serif text-skyrim-gold flex items-center gap-2">

@@ -74,6 +74,7 @@ import {
   saveInventoryItem,
   deleteInventoryItem,
   saveQuest,
+  deleteQuest,
   saveJournalEntry,
   saveStoryChapter,
   saveUserProfile,
@@ -2319,6 +2320,15 @@ const App: React.FC = () => {
       });
   };
 
+  const handleDeleteQuest = async (questId: string) => {
+    if (!currentUser) return;
+    try {
+      await deleteQuest(currentUser.uid, questId);
+    } catch (error) {
+      console.error('Failed to delete quest from Firestore:', error);
+    }
+  };
+
   const getCharacterStory = () => storyChapters.filter(s => s.characterId === currentCharacterId);
   
   const getCharacterJournal = () => journalEntries.filter((j: any) => j.characterId === currentCharacterId);
@@ -2525,6 +2535,7 @@ const App: React.FC = () => {
                    damage: rawItem.damage,
                    value: rawItem.value,
                    slot: rawItem.slot,
+                   rarity: rawItem.rarity,
                  }) as InventoryItem;
                  next.push(added);
                  setDirtyEntities(d => new Set([...d, added.id]));
@@ -2566,6 +2577,7 @@ const App: React.FC = () => {
                    damage: rawItem.damage,
                    value: rawItem.value,
                    slot: rawItem.slot,
+                   rarity: rawItem.rarity,
                  }) as InventoryItem;
                  next.push(added);
                  setDirtyEntities(d => new Set([...d, added.id]));
@@ -2595,6 +2607,7 @@ const App: React.FC = () => {
                      armor: existing.armor ?? rawItem.armor,
                      damage: existing.damage ?? rawItem.damage,
                      value: existing.value ?? rawItem.value,
+                     rarity: existing.rarity ?? rawItem.rarity,
                      // Preserve or apply equipped state and ownership when provided in the update
                      equipped: rawItem.equipped ?? existing.equipped ?? false,
                      equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
@@ -2617,6 +2630,7 @@ const App: React.FC = () => {
                      damage: rawItem.damage,
                      value: rawItem.value,
                      slot: rawItem.slot,
+                     rarity: rawItem.rarity,
                    }) as InventoryItem;
                    next.push(added);
                    setDirtyEntities(d => new Set([...d, added.id]));
@@ -2637,6 +2651,7 @@ const App: React.FC = () => {
                    damage: rawItem.damage,
                    value: rawItem.value,
                    slot: rawItem.slot,
+                   rarity: rawItem.rarity,
                  }) as InventoryItem;
                  next.push(added);
                  setDirtyEntities(d => new Set([...d, added.id]));
@@ -3634,7 +3649,7 @@ const App: React.FC = () => {
               />
             )}
             {activeTab === TABS.QUESTS && (
-              <QuestLog quests={getCharacterQuests()} setQuests={setCharacterQuests} />
+              <QuestLog quests={getCharacterQuests()} setQuests={setCharacterQuests} onDelete={handleDeleteQuest} />
             )}
             {activeTab === TABS.STORY && (
               <StoryLog 

@@ -245,7 +245,7 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/90 flex flex-col z-50 overflow-hidden">
+    <div className="fixed inset-0 bg-skyrim-dark/90 backdrop-blur-sm flex flex-col z-50 overflow-hidden">
       {/* Header - Mobile Responsive */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2 sm:p-4 border-b border-skyrim-border bg-skyrim-paper gap-2 sm:gap-0">
         <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">

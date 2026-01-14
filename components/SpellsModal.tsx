@@ -59,7 +59,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm p-4">
       <div className="bg-skyrim-paper border border-skyrim-gold rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-serif text-skyrim-gold flex items-center gap-2"><Zap /> Spells</h3>

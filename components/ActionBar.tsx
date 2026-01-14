@@ -521,7 +521,7 @@ const ActionBar: React.FC = () => {
 
       {/* Guest Logout Warning Modal */}
       {showLogoutWarning && createPortal(
-        <div className="fixed inset-0 bg-skyrim-dark/60 flex items-center justify-center z-[2000] p-4">
+        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
           <div className="bg-skyrim-paper border-2 border-red-600 rounded-lg shadow-2xl p-6 max-w-md w-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-900/50 rounded-full flex items-center justify-center">
