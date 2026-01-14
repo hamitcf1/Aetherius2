@@ -2594,23 +2594,33 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           </p>
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => {
+              onClick={async () => {
                 // Persist current voice settings and play a sample phrase
                 saveVoiceSettings(voiceSettings);
                 const sample = "The wind howls through the mountain pass as you approach the ancient ruins.";
                 // Use narrator role for the sample
-                speak(sample, 'narrator', { enabled: true, autoPlay: true, volume: 0.9 }).catch(() => {});
+                try {
+                  await speak(sample, 'narrator', { enabled: true, autoPlay: true, volume: 0.9 });
+                } catch (e) {
+                  console.error('Test Voice error:', e);
+                  showToast?.('Voice test failed. Make sure the TTS API is running.', 'error');
+                }
               }}
               className="px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold text-sm hover:bg-skyrim-goldHover transition-colors"
             >
               Test Voice
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 // Play a short NPC sample in the selected gender/voice
                 saveVoiceSettings(voiceSettings);
                 const sampleNpc = "Hail, traveler. Have you come seeking fortune or mischief?";
-                speak(sampleNpc, voiceSettings.gender === 'female' ? 'npc_female' : 'npc', { enabled: true, autoPlay: true, volume: 0.85 }).catch(() => {});
+                try {
+                  await speak(sampleNpc, voiceSettings.gender === 'female' ? 'npc_female' : 'npc', { enabled: true, autoPlay: true, volume: 0.85 });
+                } catch (e) {
+                  console.error('Test NPC error:', e);
+                  showToast?.('NPC voice test failed. Make sure the TTS API is running.', 'error');
+                }
               }}
               className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
             >
@@ -2628,9 +2638,14 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 <option value="system_demo">System Sample</option>
               </select>
               <button
-                onClick={() => {
+                onClick={async () => {
                   saveVoiceSettings(voiceSettings);
-                  speakSample(sampleKey || 'narrator_demo', voiceSettings.gender === 'female' ? 'npc_female' : 'narrator', { enabled: true, autoPlay: true, volume: 0.9 }).catch(() => {});
+                  try {
+                    await speakSample(sampleKey || 'narrator_demo', voiceSettings.gender === 'female' ? 'npc_female' : 'narrator', { enabled: true, autoPlay: true, volume: 0.9 });
+                  } catch (e) {
+                    console.error('Play Sample error:', e);
+                    showToast?.('Sample playback failed. Make sure the TTS API is running.', 'error');
+                  }
                 }}
                 className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
               >
