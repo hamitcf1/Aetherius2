@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Moon, TreePine, Tent, Home, Clock, Coins } from 'lucide-react';
+import { X, Moon, TreePine, Tent, Home, Clock, Coins, Heart, Sparkles, Zap, Apple, Droplets, BedDouble } from 'lucide-react';
 import { InventoryItem, EquipmentSlot, Character } from '../types';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 import type { RestOptions } from './SurvivalModals';
@@ -36,13 +36,75 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
   }, [open, inventory, previewOptions]);
 
   const restQuality = useMemo(() => {
-    if (restType === 'inn') return { label: 'Well Rested', fatigueReduction: 50, desc: 'A warm bed at the inn. Full rest.' };
+    if (restType === 'inn') return { label: 'Well Rested', fatigueReduction: 50, desc: 'A warm bed at the inn. Full rest.', baseEfficiency: 1.0 };
     if (restType === 'camp') {
-      if (hasCampingGear) return { label: 'Rested', fatigueReduction: 40, desc: 'Your tent provides good shelter.' };
-      if (hasBedroll) return { label: 'Somewhat Rested', fatigueReduction: 30, desc: 'Bedroll offers basic comfort.' };
+      if (hasCampingGear) return { label: 'Rested', fatigueReduction: 40, desc: 'Your tent provides good shelter.', baseEfficiency: 0.8 };
+      if (hasBedroll) return { label: 'Somewhat Rested', fatigueReduction: 30, desc: 'Bedroll offers basic comfort.', baseEfficiency: 0.6 };
     }
-    return { label: 'Poorly Rested', fatigueReduction: 15, desc: 'Sleeping on the ground. Uncomfortable.' };
+    return { label: 'Poorly Rested', fatigueReduction: 15, desc: 'Sleeping on the ground. Uncomfortable.', baseEfficiency: 0.4 };
   }, [restType, hasCampingGear, hasBedroll]);
+
+  // Calculate recovery preview based on rest type and hours
+  const recoveryPreview = useMemo(() => {
+    const needs = character?.needs || { hunger: 0, thirst: 0, fatigue: 0 };
+    const vitals = {
+      currentHealth: character?.currentHealth ?? character?.health ?? 100,
+      maxHealth: character?.health ?? 100,
+      currentMagicka: character?.currentMagicka ?? character?.magicka ?? 100,
+      maxMagicka: character?.magicka ?? 100,
+      currentStamina: character?.currentStamina ?? character?.stamina ?? 100,
+      maxStamina: character?.stamina ?? 100,
+    };
+
+    // Base recovery rates per hour of rest
+    const efficiency = restQuality.baseEfficiency;
+    const fatigueRecoveryPerHour = 12 * efficiency; // 12 base, modified by rest type
+    const healthRecoveryPerHour = (vitals.maxHealth * 0.08) * efficiency; // 8% of max per hour
+    const magickaRecoveryPerHour = (vitals.maxMagicka * 0.12) * efficiency; // 12% per hour
+    const staminaRecoveryPerHour = (vitals.maxStamina * 0.15) * efficiency; // 15% per hour
+
+    // Hunger/thirst increase slightly during rest
+    const hungerIncreasePerHour = 1.5;
+    const thirstIncreasePerHour = 2.0;
+
+    // Calculate changes
+    const fatigueChange = Math.min(needs.fatigue, fatigueRecoveryPerHour * hours);
+    const healthChange = Math.min(vitals.maxHealth - vitals.currentHealth, healthRecoveryPerHour * hours);
+    const magickaChange = Math.min(vitals.maxMagicka - vitals.currentMagicka, magickaRecoveryPerHour * hours);
+    const staminaChange = Math.min(vitals.maxStamina - vitals.currentStamina, staminaRecoveryPerHour * hours);
+    const hungerChange = Math.min(100 - needs.hunger, hungerIncreasePerHour * hours);
+    const thirstChange = Math.min(100 - needs.thirst, thirstIncreasePerHour * hours);
+
+    return {
+      current: {
+        health: vitals.currentHealth,
+        maxHealth: vitals.maxHealth,
+        magicka: vitals.currentMagicka,
+        maxMagicka: vitals.maxMagicka,
+        stamina: vitals.currentStamina,
+        maxStamina: vitals.maxStamina,
+        hunger: needs.hunger,
+        thirst: needs.thirst,
+        fatigue: needs.fatigue,
+      },
+      after: {
+        health: Math.min(vitals.maxHealth, vitals.currentHealth + healthChange),
+        magicka: Math.min(vitals.maxMagicka, vitals.currentMagicka + magickaChange),
+        stamina: Math.min(vitals.maxStamina, vitals.currentStamina + staminaChange),
+        hunger: Math.min(100, needs.hunger + hungerChange),
+        thirst: Math.min(100, needs.thirst + thirstChange),
+        fatigue: Math.max(0, needs.fatigue - fatigueChange),
+      },
+      changes: {
+        health: Math.round(healthChange),
+        magicka: Math.round(magickaChange),
+        stamina: Math.round(staminaChange),
+        hunger: Math.round(hungerChange),
+        thirst: Math.round(thirstChange),
+        fatigue: Math.round(fatigueChange),
+      }
+    };
+  }, [character, hours, restQuality]);
 
   const [slotPicker, setSlotPicker] = useState<EquipmentSlot | null>(null);
 
@@ -369,6 +431,145 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
               </div>
 
               <div className="p-2 bg-skyrim-paper/40 rounded text-sm text-skyrim-text">{restQuality.desc}</div>
+            </div>
+
+            {/* Stats Preview Section */}
+            <div className="p-3 bg-skyrim-paper/20 border border-skyrim-border rounded">
+              <div className="flex items-center gap-2 mb-3">
+                <BedDouble size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-amber-100">Recovery Preview</span>
+              </div>
+
+              {/* Vitals Section */}
+              <div className="space-y-2 mb-3">
+                <div className="text-[10px] text-gray-400 uppercase font-bold">Vitals</div>
+                
+                {/* Health */}
+                <div className="flex items-center gap-2">
+                  <Heart size={12} className="text-red-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Health</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.health)}/{recoveryPreview.current.maxHealth}
+                        {recoveryPreview.changes.health > 0 && <span className="text-green-400 ml-1">+{recoveryPreview.changes.health}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className="text-green-300">{Math.round(recoveryPreview.after.health)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className="h-full bg-red-500 transition-all" style={{ width: `${(recoveryPreview.after.health / recoveryPreview.current.maxHealth) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Magicka */}
+                <div className="flex items-center gap-2">
+                  <Sparkles size={12} className="text-blue-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Magicka</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.magicka)}/{recoveryPreview.current.maxMagicka}
+                        {recoveryPreview.changes.magicka > 0 && <span className="text-blue-400 ml-1">+{recoveryPreview.changes.magicka}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className="text-blue-300">{Math.round(recoveryPreview.after.magicka)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className="h-full bg-blue-500 transition-all" style={{ width: `${(recoveryPreview.after.magicka / recoveryPreview.current.maxMagicka) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stamina */}
+                <div className="flex items-center gap-2">
+                  <Zap size={12} className="text-green-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Stamina</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.stamina)}/{recoveryPreview.current.maxStamina}
+                        {recoveryPreview.changes.stamina > 0 && <span className="text-green-400 ml-1">+{recoveryPreview.changes.stamina}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className="text-green-300">{Math.round(recoveryPreview.after.stamina)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className="h-full bg-green-500 transition-all" style={{ width: `${(recoveryPreview.after.stamina / recoveryPreview.current.maxStamina) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Needs Section */}
+              <div className="space-y-2">
+                <div className="text-[10px] text-gray-400 uppercase font-bold">Needs</div>
+                
+                {/* Fatigue (goes down - good) */}
+                <div className="flex items-center gap-2">
+                  <Moon size={12} className="text-purple-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Fatigue</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.fatigue)}
+                        {recoveryPreview.changes.fatigue > 0 && <span className="text-green-400 ml-1">-{recoveryPreview.changes.fatigue}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className="text-green-300">{Math.round(recoveryPreview.after.fatigue)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className="h-full bg-purple-500/70 transition-all" style={{ width: `${recoveryPreview.after.fatigue}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hunger (goes up - caution) */}
+                <div className="flex items-center gap-2">
+                  <Apple size={12} className="text-orange-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Hunger</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.hunger)}
+                        {recoveryPreview.changes.hunger > 0 && <span className="text-yellow-400 ml-1">+{recoveryPreview.changes.hunger}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className={recoveryPreview.after.hunger > 60 ? 'text-orange-400' : 'text-gray-300'}>{Math.round(recoveryPreview.after.hunger)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className={`h-full transition-all ${recoveryPreview.after.hunger > 60 ? 'bg-orange-500' : 'bg-orange-400/70'}`} style={{ width: `${recoveryPreview.after.hunger}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thirst (goes up - caution) */}
+                <div className="flex items-center gap-2">
+                  <Droplets size={12} className="text-cyan-400" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-gray-300">Thirst</span>
+                      <span className="text-gray-400">
+                        {Math.round(recoveryPreview.current.thirst)}
+                        {recoveryPreview.changes.thirst > 0 && <span className="text-yellow-400 ml-1">+{recoveryPreview.changes.thirst}</span>}
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className={recoveryPreview.after.thirst > 60 ? 'text-cyan-400' : 'text-gray-300'}>{Math.round(recoveryPreview.after.thirst)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded overflow-hidden">
+                      <div className={`h-full transition-all ${recoveryPreview.after.thirst > 60 ? 'bg-cyan-500' : 'bg-cyan-400/70'}`} style={{ width: `${recoveryPreview.after.thirst}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tip about eating/drinking before rest */}
+              {(recoveryPreview.after.hunger > 60 || recoveryPreview.after.thirst > 60) && (
+                <div className="mt-2 text-[10px] text-yellow-400 italic">
+                  💡 Consider eating or drinking before resting
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2">

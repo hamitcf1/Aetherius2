@@ -444,6 +444,9 @@ const App: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
+  // Track last rest time to prevent immediate re-triggering of forced rest
+  const [lastRestTimestamp, setLastRestTimestamp] = useState<number>(0);
+  const REST_COOLDOWN_MS = 10000; // 10 seconds after resting before forced rest can trigger again
   // Optional preview options when opening the Bonfire (prefill type/hours)
   const [restPreviewOptions, setRestPreviewOptions] = useState<RestOptions | null>(null);
 
@@ -1905,6 +1908,8 @@ const App: React.FC = () => {
     // close any open bonfire UI once rest is confirmed
     setRestOpen(false);
     setRestPreviewOptions(null);
+    // Mark that we just rested to prevent immediate re-triggering of forced rest
+    setLastRestTimestamp(Date.now());
 
     // Calculate fatigue reduction based on rest type
     let fatigueReduction = 15; // outside (poor rest)
@@ -2583,7 +2588,9 @@ const App: React.FC = () => {
           });
 
           // Forced rest: auto-open Bonfire to compel a rest choice.
-          if (forcedRest && !restOpen) {
+          // Don't trigger if we just rested (cooldown) or if bonfire is already open
+          const restCooldownActive = Date.now() - lastRestTimestamp < REST_COOLDOWN_MS;
+          if (forcedRest && !restOpen && !restCooldownActive) {
             try {
               const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
               openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });

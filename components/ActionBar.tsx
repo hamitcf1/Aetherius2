@@ -98,9 +98,7 @@ const ActionBar: React.FC = () => {
   const { language, setLanguage, t } = useLocalization();
   
   const [open, setOpen] = useState(false);
-  const [showSnowOptions, setShowSnowOptions] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   
   // Music volume state
@@ -409,153 +407,6 @@ const ActionBar: React.FC = () => {
               </button>
             </div>
           )}
-          
-          {/* Weather Effect - cycle through snow/rain/sandstorm/clear */}
-          <div className="relative group">
-            <div className="flex gap-1">
-              <button 
-                onClick={isFeatureEnabled('snowEffect') ? () => {
-                  const weatherCycle: WeatherEffectType[] = ['snow', 'rain', 'sandstorm', 'none'];
-                  const currentIndex = weatherCycle.indexOf(weatherEffect);
-                  const nextIndex = (currentIndex + 1) % weatherCycle.length;
-                  setWeatherEffect(weatherCycle[nextIndex]);
-                } : undefined}
-                disabled={!isFeatureEnabled('snowEffect')}
-                className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-l font-bold ${
-                  isFeatureEnabled('snowEffect')
-                    ? weatherEffect === 'snow' 
-                      ? 'bg-blue-200 text-blue-900'
-                      : weatherEffect === 'rain'
-                        ? 'bg-cyan-200 text-cyan-900'
-                        : weatherEffect === 'sandstorm'
-                          ? 'bg-amber-200 text-amber-900'
-                          : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
-                    : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
-                }`}
-              >
-                {weatherEffect === 'snow' ? <Snowflake size={16} /> : 
-                 weatherEffect === 'rain' ? <CloudRain size={16} /> : 
-                 weatherEffect === 'sandstorm' ? <Wind size={16} /> :
-                 <CloudOff size={16} />}
-                {weatherEffect === 'snow' ? 'Snow Effect' : 
-                 weatherEffect === 'rain' ? 'Rain Effect' : 
-                 weatherEffect === 'sandstorm' ? 'Sandstorm' :
-                 'Weather Off'}
-              </button>
-              {isFeatureEnabled('snowEffect') && weatherEffect !== 'none' && (
-                <button
-                  onClick={() => setShowSnowOptions(s => !s)}
-                  className={`px-2 py-2 rounded-r border-l ${
-                    weatherEffect === 'snow' 
-                      ? 'bg-blue-200 text-blue-900 border-blue-300 hover:bg-blue-100'
-                      : 'bg-cyan-200 text-cyan-900 border-cyan-300 hover:bg-cyan-100'
-                  }`}
-                  title="Weather settings"
-                >
-                  <ChevronDown size={16} className={showSnowOptions ? 'rotate-180 transition-transform' : 'transition-transform'} />
-                </button>
-              )}
-            </div>
-            {/* Companion management button */}
-            <div className="mt-2">
-              <button onClick={openCompanions} className="w-full flex items-center gap-2 px-3 py-2 rounded font-bold bg-purple-700 text-white hover:bg-purple-600">
-                <Users size={16} /> Manage Companions
-              </button>
-            </div>
-            {/* Weather intensity options */}
-            {weatherEffect !== 'none' && showSnowOptions && isFeatureEnabled('snowEffect') && (
-              <div className="mt-2 p-2 bg-gray-800 rounded border border-skyrim-border">
-                <div className="text-xs text-skyrim-text mb-1">
-                  {weatherEffect === 'snow' ? 'Snow' : 'Rain'} Intensity
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {SNOW_INTENSITY_OPTIONS.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setWeatherIntensity(opt.value)}
-                      className={`px-2 py-1 text-xs rounded ${
-                        weatherIntensity === opt.value
-                          ? weatherEffect === 'snow' ? 'bg-blue-600 text-white' : 'bg-cyan-600 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {!isFeatureEnabled('snowEffect') && (
-              <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-lg">
-                {getFeatureLabel('snowEffect') || 'Work in Progress'}
-              </div>
-            )}
-          </div>
-
-
-
-          {/* Voice Settings */}
-          <div className="border-t border-skyrim-border/60 pt-3 mt-2">
-            <button
-              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
-              className="w-full flex items-center justify-between text-xs text-gray-500 font-bold mb-2"
-            >
-              <span className="flex items-center gap-1">
-                <Mic size={12} /> Voice Settings (TTS)
-              </span>
-              <ChevronDown size={14} className={`transition-transform ${showVoiceSettings ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {showVoiceSettings && (
-              <div className="space-y-2">
-                {/* Gender Selection */}
-                <div>
-                  <div className="text-[10px] text-gray-500 mb-1">Voice Gender</div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleVoiceGenderChange('male')}
-                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
-                        voiceGender === 'male'
-                          ? 'bg-blue-700 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      Male
-                    </button>
-                    <button
-                      onClick={() => handleVoiceGenderChange('female')}
-                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
-                        voiceGender === 'female'
-                          ? 'bg-pink-700 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      Female
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Voice Selection */}
-                <div>
-                  <div className="text-[10px] text-gray-500 mb-1">Voice Style</div>
-                  <select
-                    value={voiceName}
-                    onChange={(e) => handleVoiceNameChange(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 focus:border-skyrim-gold focus:outline-none"
-                  >
-                    <option value="">Default (Auto)</option>
-                    {getVoicesForLanguage(language)[voiceGender].map(voice => (
-                      <option key={voice.name} value={voice.name}>{voice.label}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <p className="text-[10px] text-gray-600 text-center italic">
-                  Voice settings apply to TTS narration
-                </p>
-              </div>
-            )}
-          </div>
 
           {/* Version and Credits */}
           <div className="border-t border-skyrim-border/60 pt-3 mt-2">
@@ -815,8 +666,50 @@ const ActionBar: React.FC = () => {
                     </button>
                   ))}
                 </div>
+                {/* Weather Intensity (when weather is active) */}
+                {weatherEffect !== 'none' && (
+                  <div className="mt-3">
+                    <label className="text-xs text-skyrim-text block mb-2">Intensity</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {SNOW_INTENSITY_OPTIONS.map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setWeatherIntensity(opt.value)}
+                          className={`px-2 py-1.5 text-xs rounded border transition-colors ${
+                            weatherIntensity === opt.value
+                              ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
+                              : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Companions */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Users size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-skyrim-gold uppercase">Companions</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  openCompanions();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-purple-600 bg-purple-700/20 text-purple-200 hover:bg-purple-700/40 transition-colors"
+              >
+                <Users size={14} />
+                <span>Manage Companions</span>
+              </button>
+              <p className="text-[10px] text-gray-500 mt-2 italic text-center">
+                Recruit, equip and manage your adventuring party
+              </p>
+            </div>
 
             {/* Close Button */}
             <button
