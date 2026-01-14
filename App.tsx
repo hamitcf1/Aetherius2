@@ -1901,6 +1901,27 @@ const App: React.FC = () => {
     // Determine equipment slot for items like jewelry
     const slot = getDefaultSlotForItem({ name: shopItem.name, type: shopItem.type } as any) || undefined;
 
+    // For weapons and apparel, create separate items per quantity (non-stackable by default)
+    if (shopItem.type === 'weapon' || shopItem.type === 'apparel') {
+      const itemsToCreate: any[] = [];
+      for (let i = 0; i < quantity; i++) {
+        itemsToCreate.push({
+          name: shopItem.name,
+          type: shopItem.type,
+          description: shopItem.description,
+          quantity: 1,
+          ...( { value: shopItem.price, slot } as any),
+          ...stats,
+          ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
+          __forceCreate: true,
+          createdAt: Date.now()
+        });
+      }
+      handleGameUpdate({ goldChange: -totalCost, newItems: itemsToCreate as any });
+      return;
+    }
+
+    // Default: keep stacked behavior for non-equipment items
     handleGameUpdate({
       goldChange: -totalCost,
       newItems: [{
@@ -1908,9 +1929,8 @@ const App: React.FC = () => {
         type: shopItem.type,
         description: shopItem.description,
         quantity,
-        // `value` and `slot` are intentionally cast to any to avoid strict GameStateUpdate shape
         ...( { value: shopItem.price, slot } as any ),
-        ...stats, // Include armor/damage if applicable
+        ...stats,
         ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
       } as any]
     });

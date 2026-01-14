@@ -61,11 +61,12 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
             const empoweredId = `${s.id}:high`;
             const empoweredLearned = learned.includes(empoweredId);
             const empoweredUnlocked = isSpellVariantUnlocked(character, empoweredId);
+            const isEmpoweredVariant = String(s.id).includes(':') || String(s.id).includes('_high') || String(s.id).toLowerCase().includes('empowered');
             return (
               <div key={s.id} className={`p-3 rounded border ${learnedFlag ? 'border-skyrim-gold bg-skyrim-paper/40' : 'border-skyrim-border bg-skyrim-paper/30'}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-skyrim-gold flex items-center gap-2">{s.name}{empoweredUnlocked && <span className="ml-2"><EmpoweredBadge small /></span>}</div>
+                    <div className="font-bold text-skyrim-gold flex items-center gap-2">{s.name}{isEmpoweredVariant && <span className="ml-2"><EmpoweredBadge small /></span>}</div>
                     <div className="text-xs text-skyrim-text">{s.description}</div>
                     {/* Empowered variant */}
                     {empoweredUnlocked ? (

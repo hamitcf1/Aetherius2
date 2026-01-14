@@ -8,9 +8,10 @@ const MAX_UPGRADE_APPAREL = 5;
 const RARITY_ORDER = ['common', 'uncommon', 'rare', 'mythic', 'epic'] as const;
 
 // Cost multipliers
-const BASE_COST_MULTIPLIER = 0.8; // base multiplier
+// Lower base multiplier to keep upgrade costs reasonable
+const BASE_COST_MULTIPLIER = 0.45; // base multiplier (reduced)
 const TYPE_MULTIPLIER: Record<string, number> = {
-  weapon: 1.1,
+  weapon: 1.05,
   apparel: 0.9
 };
 
@@ -52,8 +53,20 @@ export function getUpgradeCost(item: InventoryItem): number {
   const rarity = (item.rarity || 'common') as string;
   const rarityMul = RARITY_COST_MULTIPLIER[rarity] ?? 1.0;
 
-  // Exponential-ish scaling but gentle: base * type * (1 + 0.5 * level) * (1.1 ^ level)
-  const cost = Math.round(BASE_COST_MULTIPLIER * baseValue * typeMul * rarityMul * (1 + 0.45 * level) * Math.pow(1.08, level));
+  // Reduce scaling for common -> rare tiers so early upgrades remain affordable
+  const gentleRarities = ['common', 'uncommon', 'rare'];
+  let cost = 0;
+  if (gentleRarities.includes(rarity)) {
+    // Gentler scaling: reduced base and slower exponential growth
+    cost = Math.round((BASE_COST_MULTIPLIER * 0.6) * baseValue * typeMul * rarityMul * (1 + 0.3 * level) * Math.pow(1.03, level));
+  } else {
+    // For higher rarities use slightly stronger scaling but keep growth capped
+    cost = Math.round(BASE_COST_MULTIPLIER * baseValue * typeMul * rarityMul * (1 + 0.4 * level) * Math.pow(1.06, level));
+  }
+
+  // Soft cap to avoid astronomical upgrade prices in corner cases
+  const SOFT_CAP = 2000;
+  cost = Math.min(cost, SOFT_CAP);
   return Math.max(1, cost);
 }
 

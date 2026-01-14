@@ -42,9 +42,17 @@ export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; typ
     });
   } else {
     // 2) Otherwise sample from LOOT_TABLES by enemy.type (using effective table with boss overrides)
-    const table = getLootTableForEnemy(enemy.type, !!enemy.isBoss);
+    let table = getLootTableForEnemy(enemy.type, !!enemy.isBoss);
+    // If no table entries exist for the enemy type, fall back to a generic common table
+    if (!table || table.length === 0) {
+      table = [
+        { id: 'fallback_coins', name: 'Coin Pouch', type: 'misc', description: 'A small pouch of coins.', weight: 30, minQty: 3, maxQty: 20, rarity: 'common' },
+        { id: 'fallback_scraps', name: 'Scraps', type: 'misc', description: 'Odds and ends from the battlefield.', weight: 20, minQty: 1, maxQty: 3, rarity: 'common' },
+        { id: 'fallback_potion', name: 'Minor Health Potion', type: 'potion', description: 'Restores a little health.', weight: 6, minQty: 1, maxQty: 1, rarity: 'common' }
+      ];
+    }
     // Attempt multiple picks so enemies can drop several items; number of attempts scales mildly with level
-    const attempts = Math.max(1, Math.min(4, Math.floor(1 + (enemy.level || 1) / 3 + (enemy.isBoss ? 1 : 0))));
+    const attempts = Math.max(1, Math.min(6, Math.floor(1 + (enemy.level || 1) / 3 + (enemy.isBoss ? 1 : 0))));
     for (let i = 0; i < attempts; i++) {
       const pick = pickWeighted(table);
       if (!pick) continue;
