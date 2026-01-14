@@ -65,12 +65,12 @@ export function ModalWrapper({
 
   return (
     <div
-      className={`fixed inset-0 ${zIndex} bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center p-4 ${className}`}
+      className={`fixed inset-0 ${zIndex} bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto ${className}`}
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
     >
-      <div ref={contentRef} onClick={(e) => e.stopPropagation()}>
+      <div ref={contentRef} onClick={(e) => e.stopPropagation()} className="max-h-[95vh] overflow-y-auto my-auto">
         {children}
       </div>
     </div>

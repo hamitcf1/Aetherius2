@@ -1,0 +1,23 @@
+# Cloudflare Pages / Workers configuration
+# For TTS Voice API with R2 caching and KV quota tracking
+
+name = "skyrim-aetherius"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "./dist"
+
+# R2 Bucket for audio cache
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "rpg-audio-cache"
+
+# KV Namespace for usage tracking
+[[kv_namespaces]]
+binding = "TTS_USAGE"
+id = "44dd4891e91f4882a32f996173a15eac"
+
+# Environment variables (set in Cloudflare Dashboard for secrets)
+# GOOGLE_SERVICE_ACCOUNT_JSON - Set in Dashboard > Settings > Environment Variables
+
+[vars]
+# Non-secret environment variables can go here
+TTS_DAILY_LIMIT = "10000"

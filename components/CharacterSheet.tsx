@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Character, Milestone, Perk, InventoryItem, CustomQuest, JournalEntry, StoryChapter } from '../types';
-import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp } from 'lucide-react';
 import { generateCharacterProfileImage } from '../services/geminiService';
 import { RestModal, EatModal, DrinkModal, type RestOptions } from './SurvivalModals';
 import { formatSkyrimDateShort } from '../utils/skyrimCalendar';
@@ -9,6 +9,7 @@ import { DropdownSelector, getEasterEggName } from './GameFeatures';
 import SpellsModal from './SpellsModal';
 import { getSpellById } from '../services/spells';
 import { useAppContext } from '../AppContext';
+import { getXPForNextLevel, getXPProgress, formatXPDisplay } from '../utils/levelingSystem';
 
 interface CharacterSheetProps {
   character: Character;
@@ -622,27 +623,73 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
           </div>
 
           {/* Level and Experience */}
-            <div className="mb-6 bg-skyrim-paper/40 border border-skyrim-border p-4 rounded flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full border-2 border-skyrim-gold flex items-center justify-center bg-skyrim-paper relative shadow-[0_0_15px_rgba(192,160,98,0.2)]">
-                  <span className="text-2xl font-serif text-skyrim-gold">{character.level}</span>
-                  <div className="absolute -bottom-2 text-[10px] uppercase bg-black px-1 border border-skyrim-border rounded">Level</div>
+            <div className="mb-6 bg-skyrim-paper/40 border border-skyrim-border p-4 rounded">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                {/* Level Badge */}
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full border-2 border-skyrim-gold flex items-center justify-center bg-skyrim-paper relative shadow-[0_0_15px_rgba(192,160,98,0.2)]">
+                    <span className="text-2xl font-serif text-skyrim-gold">{character.level}</span>
+                    <div className="absolute -bottom-2 text-[10px] uppercase bg-black px-1 border border-skyrim-border rounded">Level</div>
+                  </div>
+                  
+                  {/* XP Progress Section */}
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp size={14} className="text-skyrim-gold" />
+                      <span className="text-xs text-skyrim-text uppercase tracking-widest">Experience</span>
+                    </div>
+                    
+                    {/* XP Progress Bar */}
+                    {(() => {
+                      const xpData = getXPProgress(character.experience || 0, character.level);
+                      return (
+                        <>
+                          <div className="relative w-48 sm:w-64 h-3 bg-black rounded-full overflow-hidden border border-skyrim-border/50">
+                            <div 
+                              className="absolute top-0 left-0 h-full bg-gradient-to-r from-skyrim-gold/80 to-skyrim-gold transition-all duration-500 ease-out"
+                              style={{ width: `${xpData.percentage}%` }}
+                            />
+                            {/* Glow effect */}
+                            <div 
+                              className="absolute top-0 left-0 h-full bg-skyrim-gold/30 blur-sm transition-all duration-500"
+                              style={{ width: `${xpData.percentage}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-skyrim-gold font-semibold">
+                              {xpData.current.toLocaleString()} / {xpData.required.toLocaleString()} XP
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              {Math.round(xpData.percentage)}%
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">
+                            Total: {xpData.totalXP.toLocaleString()} XP
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                   <div className="text-xs text-skyrim-text uppercase tracking-widest mb-1">Experience</div>
-                   <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={character.experience || 0}
-                    onChange={(e) => updateCharacter('experience', parseInt(e.target.value))}
-                    className="w-48 h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer" 
-                   />
+                
+                {/* Level Controls */}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateCharacter('level', Math.max(1, character.level - 1))} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">-</button>
+                  <button onClick={() => onRequestLevelUp ? onRequestLevelUp() : updateCharacter('level', character.level + 1)} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">+</button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => updateCharacter('level', Math.max(1, character.level - 1))} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center">-</button>
-                <button onClick={() => onRequestLevelUp ? onRequestLevelUp() : updateCharacter('level', character.level + 1)} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center">+</button>
+              
+              {/* Next Level Info */}
+              <div className="mt-3 pt-3 border-t border-skyrim-border/30">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                  <span>
+                    <span className="text-skyrim-text">Level {character.level + 1}</span> requires <span className="text-skyrim-gold">{getXPForNextLevel(character.level).toLocaleString()} XP</span>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Gold: <span className="text-yellow-500">{(character.gold || 0).toLocaleString()}</span>
+                  </span>
+                </div>
               </div>
             </div>
 

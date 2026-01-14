@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MinimalQuestModal } from './MinimalQuestModal';
 import { Character, InventoryItem, CustomQuest, JournalEntry, StoryChapter, GameStateUpdate } from '../types';
-import { Send, Loader2, Swords, User, Scroll, RefreshCw, Trash2, Settings, ChevronDown, ChevronUp, X, AlertTriangle, Users, Sun, Moon, Sunrise, Sunset, Clock, Map, Lock, Key, Flag } from 'lucide-react';
+import { Send, Loader2, Swords, User, Scroll, RefreshCw, Trash2, Settings, ChevronDown, ChevronUp, X, AlertTriangle, Users, Sun, Moon, Sunrise, Sunset, Clock, Map, Lock, Key, Flag, Type, Volume2, VolumeX, Mic, Square, Play, Pause } from 'lucide-react';
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
 import { isShield, isTwoHandedWeapon } from '../services/equipment';
 import { useAppContext } from '../AppContext';
@@ -17,6 +17,8 @@ import type { PreferredAIModel } from '../services/geminiService';
 import { getSimulationManager, processAISimulationUpdate, SimulationStateManager, NPC, PlayerFact } from '../services/stateManager';
 import { subscribeToCombatResolved } from '../services/events';
 import { getTransactionLedger, filterDuplicateTransactions } from '../services/transactionLedger';
+import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
+import { speak, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, type VoiceRole } from '../services/ttsService';
 
 interface ChatMessage {
   id: string;
@@ -25,6 +27,10 @@ interface ChatMessage {
   timestamp: number;
   updates?: GameStateUpdate;
 }
+
+// Chat text settings types
+type ChatFontSize = 'small' | 'medium' | 'large';
+type ChatFontWeight = 'normal' | 'medium' | 'bold';
 
 interface AdventureChatProps {
   userId?: string | null;
@@ -35,6 +41,10 @@ interface AdventureChatProps {
   journal: JournalEntry[];
   story: StoryChapter[];
   onUpdateState: (updates: GameStateUpdate) => void;
+  // Chat text settings
+  chatFontSize?: ChatFontSize;
+  chatFontWeight?: ChatFontWeight;
+  onChatSettingsChange?: (settings: { fontSize: ChatFontSize; fontWeight: ChatFontWeight }) => void;
 }
 
 const SYSTEM_PROMPT = `You are an immersive Game Master (GM) for a text-based Skyrim adventure. You are strictly a NARRATOR: describe scenes, NPCs, outcomes, and offer choices — but DO NOT make or apply mechanical changes. The game ENGINE is the only authority that applies items, gold, experience, potions, or stat changes. Adventure AI RESPONSES MUST BE NARRATIVE-ONLY. The player controls their character's actions.
@@ -523,6 +533,20 @@ IMPORTANT: The above simulation state shows:
 Maintain consistency with this state. Do not contradict it.`;
 };
 
+// Font size classes for chat text
+const FONT_SIZE_CLASSES: Record<ChatFontSize, string> = {
+  small: 'text-xs leading-relaxed',
+  medium: 'text-sm leading-relaxed',
+  large: 'text-base leading-loose'
+};
+
+// Font weight classes for chat text
+const FONT_WEIGHT_CLASSES: Record<ChatFontWeight, string> = {
+  normal: 'font-normal',
+  medium: 'font-medium',
+  bold: 'font-semibold'
+};
+
 export const AdventureChat: React.FC<AdventureChatProps> = ({
   userId,
   model,
@@ -531,7 +555,10 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   quests,
   journal,
   story,
-  onUpdateState
+  onUpdateState,
+  chatFontSize = 'medium',
+  chatFontWeight = 'normal',
+  onChatSettingsChange
 }) => {
   const { showToast, openBonfireMenu } = useAppContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -539,6 +566,9 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQuestModal, setShowQuestModal] = useState(false);
+  const [showTextSettings, setShowTextSettings] = useState(false);
+  const [localFontSize, setLocalFontSize] = useState<ChatFontSize>(chatFontSize);
+  const [localFontWeight, setLocalFontWeight] = useState<ChatFontWeight>(chatFontWeight);
   const [toastMessages, setToastMessages] = useState<{ id: string; message: string; type: string }[]>([]);
     // Show toast notification for new quest
     useEffect(() => {
@@ -559,6 +589,22 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       const timers = toastMessages.map(t => setTimeout(() => setToastMessages(msgs => msgs.filter(m => m.id !== t.id)), 5000));
       return () => { timers.forEach(clearTimeout); };
     }, [toastMessages]);
+
+  // Sync font settings from props
+  useEffect(() => {
+    setLocalFontSize(chatFontSize);
+    setLocalFontWeight(chatFontWeight);
+  }, [chatFontSize, chatFontWeight]);
+
+  // Save font settings when changed
+  const updateFontSettings = (size: ChatFontSize, weight: ChatFontWeight) => {
+    setLocalFontSize(size);
+    setLocalFontWeight(weight);
+    if (onChatSettingsChange) {
+      onChatSettingsChange({ fontSize: size, fontWeight: weight });
+    }
+  };
+
     // ToastNotification import (assume already exists)
     // import { ToastNotification } from './ToastNotification';
   const [autoApply, setAutoApply] = useState(true);
@@ -570,6 +616,24 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [localInventory, setLocalInventory] = useState<InventoryItem[]>(inventory || []);
   const [simulationWarnings, setSimulationWarnings] = useState<string[]>([]);
   const [rateLimitStats, setRateLimitStats] = useState(getRateLimitStats());
+  
+  // TTS (Text-to-Speech) state
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [ttsSpeaking, setTtsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  
+  // Subscribe to TTS state changes
+  useEffect(() => {
+    const unsubscribe = subscribeTTS((state) => {
+      setTtsPlaying(state.isPlaying);
+      setTtsSpeaking(state.isSpeaking);
+    });
+    return () => {
+      unsubscribe();
+      cleanupTTS();
+    };
+  }, []);
   
   // Lockpicking state
   const [showLockpicking, setShowLockpicking] = useState(false);
@@ -966,19 +1030,17 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     return () => clearTimeout(timer);
   }, [messages]);
 
-  // XP threshold for leveling - 100 XP per level
-  const XP_PER_LEVEL = 100;
-  
+  // Use escalating XP requirements from leveling system
   const buildContext = () => {
     if (!character) return '';
     
     // Get simulation context if available
     const simulationContext = simulationManagerRef.current?.buildContext() || '';
     
-    // Calculate XP progress toward next level
+    // Calculate XP progress toward next level using new leveling system
     const currentXP = character.experience || 0;
-    const xpForNextLevel = (character.level || 1) * XP_PER_LEVEL;
-    const xpProgress = currentXP % XP_PER_LEVEL;
+    const xpProgressData = getXPProgress(currentXP, character.level || 1);
+    const xpForNextLevel = getXPForNextLevel(character.level || 1);
     
     // Categorize food and drink items in inventory
     const foodItems = inventory.filter(i => i.type === 'food' && (i.quantity || 0) > 0);
@@ -999,7 +1061,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         level: character.level,
         experience: currentXP,
         xpToNextLevel: xpForNextLevel,
-        xpProgress: xpProgress,
+        xpProgress: xpProgressData.current,
+        xpProgressPercentage: Math.round(xpProgressData.percentage),
         gold: character.gold || 0,
         stats: character.stats,
         currentVitals: character.currentVitals || {
@@ -1813,7 +1876,32 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
             title="View Skyrim Map"
           >
-            <Map size={12} /> Map
+            <Map size={12} /> <span className="hidden sm:inline">Map</span>
+          </button>
+          <button
+            onClick={() => setShowTextSettings(!showTextSettings)}
+            className={`px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${showTextSettings ? 'bg-skyrim-gold/20 border-skyrim-gold' : ''}`}
+            title="Text Settings"
+          >
+            <Type size={12} /> <span className="hidden sm:inline">Text</span>
+          </button>
+          <button
+            onClick={() => {
+              setTtsEnabled(!ttsEnabled);
+              if (ttsEnabled) {
+                stopSpeaking();
+                setSpeakingMessageId(null);
+              }
+            }}
+            className={`px-2 py-1.5 border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${
+              ttsEnabled 
+                ? 'bg-green-900/30 border-green-600 text-green-400' 
+                : 'text-skyrim-text border-skyrim-border'
+            }`}
+            title={ttsEnabled ? 'Disable Voice' : 'Enable Voice'}
+          >
+            {ttsEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
+            <span className="hidden sm:inline">{ttsEnabled ? 'Voice On' : 'Voice'}</span>
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -2045,6 +2133,64 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         </div>
       )}
 
+      {/* Text Settings Panel */}
+      {showTextSettings && (
+        <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <Type size={14} className="text-skyrim-gold" />
+            <span className="text-xs text-skyrim-gold font-semibold uppercase">Text Settings</span>
+          </div>
+          
+          {/* Font Size */}
+          <div className="mb-3">
+            <label className="text-xs text-skyrim-text block mb-1.5">Font Size</label>
+            <div className="flex gap-1.5">
+              {(['small', 'medium', 'large'] as ChatFontSize[]).map(size => (
+                <button
+                  key={size}
+                  onClick={() => updateFontSettings(size, localFontWeight)}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                    localFontSize === size
+                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                  }`}
+                >
+                  {size.charAt(0).toUpperCase() + size.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Font Weight */}
+          <div>
+            <label className="text-xs text-skyrim-text block mb-1.5">Font Weight</label>
+            <div className="flex gap-1.5">
+              {(['normal', 'medium', 'bold'] as ChatFontWeight[]).map(weight => (
+                <button
+                  key={weight}
+                  onClick={() => updateFontSettings(localFontSize, weight)}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                    localFontWeight === weight
+                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                  }`}
+                >
+                  {weight.charAt(0).toUpperCase() + weight.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Preview */}
+          <div className="mt-3 pt-3 border-t border-skyrim-border/50">
+            <span className="text-[10px] text-gray-500 block mb-1">Preview:</span>
+            <p className={`text-gray-200 ${FONT_SIZE_CLASSES[localFontSize]} ${FONT_WEIGHT_CLASSES[localFontWeight]}`}>
+              The wind howls through the mountain pass as you approach the ancient ruins...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Chat Messages - flex-1 to fill available space */}
       <div 
         ref={chatContainerRef}
@@ -2064,31 +2210,83 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             </button>
           </div>
         ) : (
-          <div className="p-3 space-y-3">
+          <div className="p-2 sm:p-3 space-y-3">
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex gap-2 ${msg.role === 'player' ? 'flex-row-reverse' : ''}`}
               >
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                   msg.role === 'player' 
                     ? 'bg-blue-900/50 text-blue-400 border border-blue-700' 
                     : 'bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/50'
                 }`}>
                   {msg.role === 'player' ? <User size={14} /> : <Swords size={14} />}
                 </div>
-                <div className={`flex-1 max-w-[85%] ${msg.role === 'player' ? 'text-right' : ''}`}>
-                  <div className={`inline-block p-3 rounded-lg ${
+                <div className={`flex-1 max-w-[90%] sm:max-w-[85%] ${msg.role === 'player' ? 'text-right' : ''}`}>
+                  <div className={`inline-block p-2 sm:p-3 rounded-lg ${
                     msg.role === 'player'
                       ? 'bg-blue-900/30 border border-blue-800 text-gray-200'
                       : 'bg-skyrim-paper/60 border border-skyrim-border text-gray-200'
                   }`}>
-                    <p className="whitespace-pre-wrap font-serif text-sm leading-relaxed">{msg.content}</p>
+                    {/* Using sans-serif font for better readability with configurable size/weight */}
+                    <p className={`whitespace-pre-wrap ${FONT_SIZE_CLASSES[localFontSize]} ${FONT_WEIGHT_CLASSES[localFontWeight]}`}>{msg.content}</p>
+                    
+                    {/* TTS controls for GM messages */}
+                    {msg.role === 'gm' && ttsEnabled && (
+                      <div className="mt-2 pt-2 border-t border-skyrim-border/30 flex items-center gap-2">
+                        {speakingMessageId === msg.id && ttsSpeaking ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                if (ttsPlaying) {
+                                  pauseSpeaking();
+                                } else {
+                                  resumeSpeaking();
+                                }
+                              }}
+                              className="p-1.5 rounded bg-skyrim-gold/20 text-skyrim-gold hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors"
+                              title={ttsPlaying ? 'Pause' : 'Resume'}
+                            >
+                              {ttsPlaying ? <Pause size={12} /> : <Play size={12} />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                stopSpeaking();
+                                setSpeakingMessageId(null);
+                              }}
+                              className="p-1.5 rounded bg-red-900/30 text-red-400 hover:bg-red-700 hover:text-white transition-colors"
+                              title="Stop"
+                            >
+                              <Square size={12} />
+                            </button>
+                            <span className="text-xs text-skyrim-gold animate-pulse flex items-center gap-1">
+                              <Mic size={10} /> Speaking...
+                            </span>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const role = detectVoiceRole(msg.content, {
+                                isKhajiit: character?.race?.toLowerCase().includes('khajiit')
+                              });
+                              setSpeakingMessageId(msg.id);
+                              speak(msg.content, role, { enabled: true, autoPlay: true, volume: 0.8 });
+                            }}
+                            className="p-1.5 rounded bg-skyrim-paper/60 text-skyrim-text hover:bg-skyrim-gold/20 hover:text-skyrim-gold transition-colors flex items-center gap-1"
+                            title="Listen to this message"
+                          >
+                            <Volume2 size={12} />
+                            <span className="text-xs">Listen</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Clickable dialogue choices */}
                   {msg.role === 'gm' && Array.isArray(msg.updates?.choices) && (msg.updates?.choices?.length || 0) > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-1.5 sm:gap-2">
                       {msg.updates!.choices!.slice(0, 6).map((c, idx) => {
                         const playerText = (c?.playerText || c?.label || '').trim();
                         return (
@@ -2096,13 +2294,13 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
                             <button
                               onClick={() => sendPlayerText(playerText)}
                               disabled={loading}
-                              className="px-3 py-2 bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/40 rounded hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors text-sm font-sans disabled:opacity-50 flex items-center gap-2"
+                              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/40 rounded hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors text-xs sm:text-sm font-sans disabled:opacity-50 flex items-center gap-1 sm:gap-2"
                             >
-                              <span>{c?.label || 'Choose'}</span>
+                              <span className="truncate max-w-[150px] sm:max-w-none">{c?.label || 'Choose'}</span>
                               {/* Show preview cost badge if present */}
                               {c?.previewCost?.gold && (
-                                <span className="text-xs px-1.5 py-0.5 bg-yellow-900/40 text-yellow-400 rounded border border-yellow-700/50">
-                                  {c.previewCost.gold} gold
+                                <span className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 bg-yellow-900/40 text-yellow-400 rounded border border-yellow-700/50">
+                                  {c.previewCost.gold}g
                                 </span>
                               )}
                             </button>

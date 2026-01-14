@@ -409,6 +409,9 @@ export interface UserSettings {
   onboardingVersion?: number;
   createdAt?: number;
   updatedAt?: number;
+  // Adventure chat text settings
+  chatFontSize?: 'small' | 'medium' | 'large';
+  chatFontWeight?: 'normal' | 'medium' | 'bold';
 }
 
 const userSettingsDocRef = (uid: string) => {
@@ -432,6 +435,8 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
   const next: UserSettings = {
     onboardingVersion: settings.onboardingVersion ?? 1,
     onboardingCompleted: settings.onboardingCompleted ?? false,
+    chatFontSize: settings.chatFontSize ?? 'medium',
+    chatFontWeight: settings.chatFontWeight ?? 'normal',
     createdAt: settings.createdAt ?? now,
     updatedAt: now,
   };

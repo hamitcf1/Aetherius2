@@ -112,6 +112,7 @@ import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
 import { applyLevelUpToCharacter } from './utils/levelUpHelpers';
+import { getXPForNextLevel, getXPProgress, getTotalXPForLevel } from './utils/levelingSystem';
 import PerkTreeModal from './components/PerkTreeModal';
 import CompanionsModal from './components/CompanionsModal';
 import CompanionDialogueModal from './components/CompanionDialogueModal';
@@ -2746,9 +2747,7 @@ const App: React.FC = () => {
          }));
       }
 
-      // 6b. XP with Level-Up Check
-      const XP_PER_LEVEL = 100;
-
+      // 6b. XP with Level-Up Check (using escalating XP requirements)
       if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
         // If a level-up is already pending, don't queue another until resolved
         if (!pendingLevelUp) {
@@ -2758,12 +2757,13 @@ const App: React.FC = () => {
 
             const newXP = (c.experience || 0) + (updates.xpChange || 0);
             const currentLevel = c.level || 1;
-            const xpForNextLevel = currentLevel * XP_PER_LEVEL;
+            const xpForNextLevel = getXPForNextLevel(currentLevel);
+            const xpProgress = getXPProgress(newXP, currentLevel);
 
-            // Check if we leveled up
-            if (newXP >= xpForNextLevel) {
+            // Check if we leveled up (XP progress >= required for next level)
+            if (xpProgress.current >= xpForNextLevel) {
               const newLevel = currentLevel + 1;
-              const remainingXP = newXP - xpForNextLevel;
+              const remainingXP = newXP; // Keep total XP
 
               // Save pending level up to prompt user for choice
               setPendingLevelUp({
@@ -3614,6 +3614,23 @@ const App: React.FC = () => {
                 journal={getCharacterJournal()}
                 story={getCharacterStory()}
                 onUpdateState={handleGameUpdate}
+                chatFontSize={userSettings?.chatFontSize || 'medium'}
+                chatFontWeight={userSettings?.chatFontWeight || 'normal'}
+                onChatSettingsChange={async (settings) => {
+                  if (currentUser?.uid) {
+                    const next: UserSettings = {
+                      ...(userSettings || {}),
+                      chatFontSize: settings.fontSize,
+                      chatFontWeight: settings.fontWeight,
+                    };
+                    setUserSettings(next);
+                    try {
+                      await saveUserSettings(currentUser.uid, next);
+                    } catch (e) {
+                      console.warn('Failed to save chat settings:', e);
+                    }
+                  }
+                }}
               />
             )}
           </div>

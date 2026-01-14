@@ -203,73 +203,124 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
     }
   };
 
+  // Touch handling for mobile
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number; distance?: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setTouchStart({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
+    } else if (e.touches.length === 2) {
+      // Pinch zoom
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      setTouchStart({ x: pan.x, y: pan.y, distance });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    
+    if (e.touches.length === 1 && !touchStart.distance) {
+      // Pan
+      setPan({
+        x: e.touches[0].clientX - touchStart.x,
+        y: e.touches[0].clientY - touchStart.y
+      });
+    } else if (e.touches.length === 2 && touchStart.distance) {
+      // Pinch zoom
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const scale = distance / touchStart.distance;
+      setZoom(prev => Math.max(0.5, Math.min(3, prev * scale)));
+      setTouchStart({ ...touchStart, distance });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStart(null);
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/90 flex flex-col z-50">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-skyrim-border bg-skyrim-paper">
-        <div className="flex items-center gap-3">
-          <Compass className="text-skyrim-gold" size={28} />
-          <div>
-            <h2 className="text-2xl font-serif text-skyrim-gold tracking-wide">Map of Skyrim</h2>
+    <div className="fixed inset-0 bg-skyrim-dark/90 flex flex-col z-50 overflow-hidden">
+      {/* Header - Mobile Responsive */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2 sm:p-4 border-b border-skyrim-border bg-skyrim-paper gap-2 sm:gap-0">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <Compass className="text-skyrim-gold flex-shrink-0" size={24} />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-2xl font-serif text-skyrim-gold tracking-wide truncate">Map of Skyrim</h2>
             {currentLocation && (
-              <p className="text-sm text-skyrim-text">
-                Current Location: <span className="text-green-400 font-semibold">{currentLocation}</span>
+              <p className="text-xs sm:text-sm text-skyrim-text truncate">
+                Location: <span className="text-green-400 font-semibold">{currentLocation}</span>
               </p>
             )}
           </div>
+          {/* Close button visible on mobile at top right */}
+          <button onClick={onClose} className="sm:hidden p-2 text-skyrim-text hover:text-white flex-shrink-0">
+            <X size={24} />
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-skyrim-paper/50 rounded-lg p-1">
+        
+        {/* Controls - Scrollable on mobile */}
+        <div className="flex items-center gap-1 sm:gap-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+          {/* Filter buttons - compact on mobile */}
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-skyrim-paper/50 rounded-lg p-0.5 sm:p-1 flex-shrink-0">
             {['all', 'cities', 'dungeons', 'landmarks', ...(discoveredLocations.length > 0 ? ['discovered'] : [])].map(type => (
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
-                className={`px-3 py-1 rounded text-xs transition-colors ${filterType === type ? 'bg-skyrim-gold text-black font-bold' : 'text-skyrim-text hover:text-white'}`}
+                className={`px-2 sm:px-3 py-1 rounded text-[10px] sm:text-xs transition-colors whitespace-nowrap ${filterType === type ? 'bg-skyrim-gold text-black font-bold' : 'text-skyrim-text hover:text-white'}`}
               >
-                {type === 'discovered' ? `New (${discoveredLocations.length})` : type.charAt(0).toUpperCase() + type.slice(1)}
+                {type === 'discovered' ? `New` : type.charAt(0).toUpperCase() + type.slice(1)}
               </button>
             ))}
           </div>
-          <button onClick={() => setShowHolds(!showHolds)} className={`p-2 rounded transition-colors ${showHolds ? 'bg-skyrim-gold/20 text-skyrim-gold' : 'text-gray-500'}`} title="Show Hold Names">
-            {showHolds ? <Eye size={18} /> : <EyeOff size={18} />}
+          
+          {/* Icon buttons */}
+          <button onClick={() => setShowHolds(!showHolds)} className={`p-1.5 sm:p-2 rounded transition-colors flex-shrink-0 ${showHolds ? 'bg-skyrim-gold/20 text-skyrim-gold' : 'text-gray-500'}`} title="Show Hold Names">
+            {showHolds ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
-          <button onClick={() => setZoom(prev => Math.min(3, prev + 0.2))} className="p-2 bg-skyrim-paper/60 border border-skyrim-gold/50 rounded hover:bg-skyrim-gold/20">
-            <ZoomIn size={18} className="text-skyrim-gold" />
+          <button onClick={() => setZoom(prev => Math.min(3, prev + 0.2))} className="p-1.5 sm:p-2 bg-skyrim-paper/60 border border-skyrim-gold/50 rounded hover:bg-skyrim-gold/20 flex-shrink-0">
+            <ZoomIn size={16} className="text-skyrim-gold" />
           </button>
-          <button onClick={() => setZoom(prev => Math.max(0.5, prev - 0.2))} className="p-2 bg-skyrim-paper/60 border border-skyrim-gold/50 rounded hover:bg-skyrim-gold/20">
-            <ZoomOut size={18} className="text-skyrim-gold" />
+          <button onClick={() => setZoom(prev => Math.max(0.5, prev - 0.2))} className="p-1.5 sm:p-2 bg-skyrim-paper/60 border border-skyrim-gold/50 rounded hover:bg-skyrim-gold/20 flex-shrink-0">
+            <ZoomOut size={16} className="text-skyrim-gold" />
           </button>
-          <button onClick={() => setShowLabels(!showLabels)} className={`px-3 py-2 border rounded text-sm ${showLabels ? 'bg-skyrim-gold/20 border-skyrim-gold text-skyrim-gold' : 'border-skyrim-border text-skyrim-text'}`}>
+          <button onClick={() => setShowLabels(!showLabels)} className={`hidden sm:block px-3 py-2 border rounded text-sm flex-shrink-0 ${showLabels ? 'bg-skyrim-gold/20 border-skyrim-gold text-skyrim-gold' : 'border-skyrim-border text-skyrim-text'}`}>
             Labels
           </button>
           {currentLocationObj && (
-            <button onClick={() => setPan({ x: -(currentLocationObj.x - 50) * zoom * 8, y: -(currentLocationObj.y - 50) * zoom * 6 })} className="p-2 bg-skyrim-paper/60 border border-green-500/50 rounded hover:bg-green-500/20" title="Center on current location">
-              <Navigation size={18} className="text-green-400" />
+            <button onClick={() => setPan({ x: -(currentLocationObj.x - 50) * zoom * 8, y: -(currentLocationObj.y - 50) * zoom * 6 })} className="p-1.5 sm:p-2 bg-skyrim-paper/60 border border-green-500/50 rounded hover:bg-green-500/20 flex-shrink-0" title="Center on current location">
+              <Navigation size={16} className="text-green-400" />
             </button>
           )}
-          <button onClick={onClose} className="p-2 text-skyrim-text hover:text-white ml-2">
-            <X size={28} />
+          <button onClick={onClose} className="hidden sm:block p-2 text-skyrim-text hover:text-white flex-shrink-0">
+            <X size={24} />
           </button>
         </div>
       </div>
 
-      {/* Map Container */}
+      {/* Map Container - Touch support for mobile */}
       <div
         ref={mapContainerRef}
-        className="flex-1 overflow-hidden cursor-grab active:cursor-grabbing relative flex items-center justify-center"
+        className="flex-1 overflow-hidden cursor-grab active:cursor-grabbing relative flex items-center justify-center touch-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div 
           className="transition-transform duration-100"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}
         >
-          {/* Map wrapper with fixed aspect ratio - markers positioned relative to this */}
-          <div className="relative" style={{ width: '800px', height: '800px' }}>
+          {/* Map wrapper - responsive size */}
+          <div className="relative" style={{ width: 'min(800px, 100vw)', height: 'min(800px, 100vw)' }}>
             {/* Custom SVG Map */}
             <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full">
               <defs>
