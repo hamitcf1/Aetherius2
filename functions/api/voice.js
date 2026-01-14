@@ -104,14 +104,13 @@ async function generateGoogleJWT(serviceAccount) {
 
   const header = {
     alg: 'RS256',
-    typ: 'JWT',
-    kid: serviceAccount.private_key_id
+    typ: 'JWT'
   };
 
   const payload = {
     iss: serviceAccount.client_email,
     sub: serviceAccount.client_email,
-    aud: 'https://texttospeech.googleapis.com/',
+    aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: exp,
     scope: 'https://www.googleapis.com/auth/cloud-platform'
@@ -120,7 +119,13 @@ async function generateGoogleJWT(serviceAccount) {
   // Base64URL encode
   const base64UrlEncode = (obj) => {
     const json = JSON.stringify(obj);
-    const base64 = btoa(json);
+    // Use a Cloudflare-compatible base64 encoding
+    const bytes = new TextEncoder().encode(json);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   };
 
@@ -175,7 +180,9 @@ async function getGoogleAccessToken(serviceAccount) {
   });
 
   if (!response.ok) {
-    throw new Error(`OAuth failed: ${response.status}`);
+    const errorText = await response.text();
+    console.error('OAuth error response:', errorText);
+    throw new Error(`OAuth failed: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
@@ -311,7 +318,26 @@ export async function onRequest(context) {
       });
     }
 
-    const serviceAccount = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    let serviceAccount;
+    try {
+      serviceAccount = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    } catch (parseErr) {
+      console.error('Failed to parse service account JSON:', parseErr);
+      return new Response(JSON.stringify({ error: 'Invalid service account configuration' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Validate required fields
+    if (!serviceAccount.client_email || !serviceAccount.private_key) {
+      console.error('Service account missing required fields');
+      return new Response(JSON.stringify({ error: 'Invalid service account: missing required fields' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const accessToken = await getGoogleAccessToken(serviceAccount);
 
     // Step 4: Call Google TTS
