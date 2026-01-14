@@ -3,6 +3,8 @@ import type { InventoryItem, DifficultyLevel, WeatherState, StatusEffect, Compan
 import type { RestOptions } from './components/SurvivalModals';
 import type { ShopItem } from './components/ShopModal';
 
+export type WeatherEffectType = 'snow' | 'rain' | 'none';
+
 export interface AppContextType {
   handleManualSave: () => void;
   isSaving: boolean;
@@ -45,6 +47,9 @@ export interface AppContextType {
   setColorTheme: (theme: string) => void;
   showQuantityControls: boolean;
   setShowQuantityControls: (v: boolean) => void;
+  // Weather effects
+  weatherEffect: WeatherEffectType;
+  setWeatherEffect: (effect: WeatherEffectType) => void;
   // Companions management
   openCompanions: () => void;
 }

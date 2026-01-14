@@ -807,6 +807,21 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     setShowLockpicking(false);
   }, []);
 
+  // Listen for demo lockpick trigger event from console
+  useEffect(() => {
+    const handleDemoLockpick = (event: CustomEvent<{ difficulty: LockDifficulty; lockName: string }>) => {
+      const { difficulty, lockName } = event.detail;
+      setLockpickingDifficulty(difficulty);
+      setLockpickingName(lockName);
+      setShowLockpicking(true);
+    };
+
+    window.addEventListener('demo:triggerLockpick', handleDemoLockpick as EventListener);
+    return () => {
+      window.removeEventListener('demo:triggerLockpick', handleDemoLockpick as EventListener);
+    };
+  }, []);
+
   // ============================================================================
   // MAP & LOCATION TRACKING
   // ============================================================================

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson } from 'lucide-react';
-import SnowEffect, { SnowSettings } from './SnowEffect';
+import SnowEffect, { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { audioService } from '../services/audioService';
@@ -36,6 +36,8 @@ const ActionBar: React.FC = () => {
     colorTheme,
     setColorTheme,
     openCompanions,
+    weatherEffect,
+    setWeatherEffect,
   } = useAppContext();
   const [open, setOpen] = useState(false);
   const [snow, setSnow] = useState(false);
@@ -357,7 +359,7 @@ const ActionBar: React.FC = () => {
         </div>,
         document.body
       )}
-      {snow && <SnowEffect settings={{ intensity: snowIntensity }} theme={colorTheme} />}
+      {snow && weatherEffect !== 'none' && <SnowEffect settings={{ intensity: snowIntensity }} theme={colorTheme} weatherType={weatherEffect} />}
 
       {/* Guest Logout Warning Modal */}
       {showLogoutWarning && createPortal(

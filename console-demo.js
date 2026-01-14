@@ -543,6 +543,63 @@ window.demo.addRandomQuests = function(count = 2) {
 };
 
 // ============================================================================
+// LOCKPICKING TESTING
+// ============================================================================
+
+/**
+ * Trigger the lockpicking minigame for testing
+ * @param {string} difficulty - Lock difficulty: 'novice', 'apprentice', 'adept', 'expert', or 'master'
+ * @param {string} lockName - Optional name for the lock
+ */
+window.demo.lockpick = function(difficulty = 'adept', lockName) {
+  const validDifficulties = ['novice', 'apprentice', 'adept', 'expert', 'master'];
+  if (!validDifficulties.includes(difficulty)) {
+    console.error(`Invalid difficulty: "${difficulty}". Valid options: ${validDifficulties.join(', ')}`);
+    return;
+  }
+  
+  // Dispatch a custom event that AdventureChat can listen to
+  const event = new CustomEvent('demo:triggerLockpick', {
+    detail: {
+      difficulty: difficulty,
+      lockName: lockName || `Demo ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} Lock`
+    }
+  });
+  window.dispatchEvent(event);
+  
+  console.log(`🔐 Lockpicking minigame triggered with ${difficulty} difficulty`);
+  console.log('The minigame should appear if you have a character selected and are in the Adventure tab.');
+  return `Lockpicking "${lockName || difficulty + ' lock'}" initiated`;
+};
+
+/**
+ * Show lockpicking difficulty guide
+ */
+window.demo.lockpickHelp = function() {
+  const helpText = [
+    'Lockpicking Difficulty Guide',
+    '============================',
+    '',
+    'Difficulties (from easiest to hardest):',
+    '  - novice      - Very wide sweet spot, easy to crack',
+    '  - apprentice  - Slightly narrower, still manageable',
+    '  - adept       - Default difficulty, requires skill',
+    '  - expert      - Narrow sweet spot, challenging',
+    '  - master      - Very narrow, requires precision',
+    '',
+    'Usage:',
+    "  demo.lockpick('novice')          - Test with easy lock",
+    "  demo.lockpick('master')          - Test with hardest lock",
+    "  demo.lockpick('adept', 'Chest')  - Custom lock name",
+    '',
+    'Note: You need lockpicks in inventory to succeed!',
+    'Use demo.addRandomItems(5) to add items including lockpicks.'
+  ].join('\n');
+  console.log(helpText);
+  return helpText;
+};
+
+// ============================================================================
 // COMBAT TESTING
 // ============================================================================
 
@@ -831,6 +888,10 @@ window.demo.help = function() {
     '  - demo.simulateCombat()      Start a combat simulation with demo enemies',
     '  - demo.testCombatItems()     Test combat item usage',
     '',
+    'Lockpicking Testing:',
+    "  - demo.lockpick('adept')     Trigger lockpicking minigame (novice/apprentice/adept/expert/master)",
+    '  - demo.lockpickHelp()        Show lockpicking difficulty guide',
+    '',
     'Utilities:',
     '  - demo.getAppState()         Show current app state',
     '  - demo.clearDemoData()       Clear items/quests/journal/story for the active character',
@@ -843,6 +904,7 @@ window.demo.help = function() {
     '  - demo.createTestCharacter()',
     '  - demo.getAppState()',
     '  - demo.addPerkPoints(3)',
+    "  - demo.lockpick('master')",
     '',
     'Note: Most functions show suggested commands instead of directly modifying app state.'
   ].join('\n');

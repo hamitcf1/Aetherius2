@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Character, SKYRIM_RACES } from '../types';
-import { Play, Plus, Dice5, MessageSquare, Loader2, Sparkles, Send, FileText, ArrowLeft, Trash2, Skull, RotateCcw } from 'lucide-react';
+import { Play, Plus, Dice5, MessageSquare, Loader2, Sparkles, Send, FileText, ArrowLeft, Trash2, Skull, RotateCcw, Sun, Moon, Volume2, VolumeX, Settings, CloudRain, Snowflake, CloudOff } from 'lucide-react';
 import { generateCharacterProfile, chatWithScribe } from '../services/geminiService';
 import { isFeatureEnabled } from '../featureFlags';
 import { DropdownSelector } from './GameFeatures';
+import { audioService } from '../services/audioService';
+
+export type WeatherEffect = 'snow' | 'rain' | 'none';
 
 interface CharacterSelectProps {
   profileId: string | null;
@@ -14,6 +17,11 @@ interface CharacterSelectProps {
   onUpdateCharacter?: (characterId: string, newName: string) => void;
   onDeleteCharacter?: (characterId: string) => void;
   onMarkCharacterDead?: (characterId: string, isDead: boolean, deathCause?: string) => void;
+  // Settings props
+  colorTheme?: string;
+  onThemeChange?: (theme: string) => void;
+  weatherEffect?: WeatherEffect;
+  onWeatherChange?: (weather: WeatherEffect) => void;
 }
 
 const ARCHETYPES = [
@@ -34,9 +42,12 @@ const ARCHETYPE_OPTIONS = ARCHETYPES.map(archetype => ({ id: archetype, label: a
 
 export const CharacterSelect: React.FC<CharacterSelectProps> = ({ 
   profileId, characters, onSelectCharacter, onCreateCharacter, onLogout,
-  onUpdateCharacter, onDeleteCharacter, onMarkCharacterDead
+  onUpdateCharacter, onDeleteCharacter, onMarkCharacterDead,
+  colorTheme = 'default', onThemeChange, weatherEffect = 'snow', onWeatherChange
 }) => {
   const [creationMode, setCreationMode] = useState<'manual' | 'chat' | 'import'>('manual');
+  const [showSettings, setShowSettings] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(audioService.getConfig().musicEnabled);
   
   // Manual State
   const [newName, setNewName] = useState('');
@@ -181,11 +192,141 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
       }
   };
 
+  const handleToggleMusic = () => {
+    const newEnabled = !musicEnabled;
+    setMusicEnabled(newEnabled);
+    audioService.setMusicEnabled(newEnabled);
+  };
+
+  const handleToggleTheme = () => {
+    if (onThemeChange) {
+      onThemeChange(colorTheme === 'light' ? 'default' : 'light');
+    }
+  };
+
+  const handleCycleWeather = () => {
+    if (onWeatherChange) {
+      const weatherCycle: WeatherEffect[] = ['snow', 'rain', 'none'];
+      const currentIndex = weatherCycle.indexOf(weatherEffect);
+      const nextIndex = (currentIndex + 1) % weatherCycle.length;
+      onWeatherChange(weatherCycle[nextIndex]);
+    }
+  };
+
+  const getWeatherIcon = () => {
+    switch (weatherEffect) {
+      case 'snow': return <Snowflake size={16} />;
+      case 'rain': return <CloudRain size={16} />;
+      case 'none': return <CloudOff size={16} />;
+    }
+  };
+
+  const getWeatherLabel = () => {
+    switch (weatherEffect) {
+      case 'snow': return 'Snow';
+      case 'rain': return 'Rain';
+      case 'none': return 'Clear';
+    }
+  };
+
   const displayedCharacters = profileId ? characters.filter(c => c.profileId === profileId) : [];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-skyrim-dark bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
       <div className="w-full max-w-4xl p-4 sm:p-8 bg-skyrim-paper border border-skyrim-gold shadow-2xl rounded-lg flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+        
+        {/* Settings Bar */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
+            title="Settings"
+          >
+            <Settings size={16} />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+          
+          {/* Quick toggles always visible */}
+          <div className="flex items-center gap-2">
+            {/* Theme toggle */}
+            <button
+              onClick={handleToggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
+              title={colorTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            >
+              {colorTheme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+              <span className="hidden sm:inline">{colorTheme === 'light' ? 'Dark' : 'Light'}</span>
+            </button>
+            
+            {/* Music toggle */}
+            <button
+              onClick={handleToggleMusic}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
+              title={musicEnabled ? 'Mute Music' : 'Enable Music'}
+            >
+              {musicEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              <span className="hidden sm:inline">{musicEnabled ? 'Music On' : 'Music Off'}</span>
+            </button>
+            
+            {/* Weather toggle */}
+            {isFeatureEnabled('snowEffect') && onWeatherChange && (
+              <button
+                onClick={handleCycleWeather}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
+                title={`Weather: ${getWeatherLabel()}`}
+              >
+                {getWeatherIcon()}
+                <span className="hidden sm:inline">{getWeatherLabel()}</span>
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Expanded Settings Panel */}
+        {showSettings && (
+          <div className="mb-4 p-4 bg-skyrim-dark/30 border border-skyrim-border rounded-lg">
+            <h3 className="text-sm font-semibold text-skyrim-gold mb-3">Display & Audio Settings</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Theme Setting */}
+              <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
+                <div className="text-xs text-gray-400 mb-1">Theme</div>
+                <button
+                  onClick={handleToggleTheme}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
+                >
+                  {colorTheme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                  {colorTheme === 'light' ? 'Light Mode' : 'Dark Mode'}
+                </button>
+              </div>
+              
+              {/* Music Setting */}
+              <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
+                <div className="text-xs text-gray-400 mb-1">Background Music</div>
+                <button
+                  onClick={handleToggleMusic}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
+                >
+                  {musicEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  {musicEnabled ? 'Music Enabled' : 'Music Disabled'}
+                </button>
+              </div>
+              
+              {/* Weather Setting */}
+              {isFeatureEnabled('snowEffect') && onWeatherChange && (
+                <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
+                  <div className="text-xs text-gray-400 mb-1">Weather Effects</div>
+                  <button
+                    onClick={handleCycleWeather}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
+                  >
+                    {getWeatherIcon()}
+                    {getWeatherLabel()} Effect
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
             
         <h1 className="text-2xl sm:text-3xl font-serif text-skyrim-gold text-center mb-4 sm:mb-6 border-b border-skyrim-border pb-3 sm:pb-4">
                 Select Character

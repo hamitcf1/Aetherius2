@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, memo } from 'react';
 
 /**
- * Clean Snow/Blood Effect using CSS animations only.
+ * Clean Weather Effect using CSS animations only.
  * - GPU-accelerated transforms
  * - No visual bugs
  * - Configurable intensity
  * - Theme-aware (snow for most themes, blood for Dark Brotherhood)
+ * - Supports snow, rain, and blood (Dark Brotherhood) effects
  */
+
+export type WeatherEffectType = 'snow' | 'rain' | 'none';
 
 export interface SnowSettings {
   intensity: 'light' | 'normal' | 'heavy' | 'blizzard';
   enableMouseInteraction?: boolean;
   enableAccumulation?: boolean;
+  weatherType?: WeatherEffectType;
 }
 
 const INTENSITY_MAP = {
@@ -44,105 +48,214 @@ const generateParticles = (count: number): Particle[] => {
   }));
 };
 
-// CSS keyframes injected once
-const injectStyles = (isBloodEffect: boolean) => {
-  const styleId = isBloodEffect ? 'blood-particle-styles' : 'snowflake-styles';
-  if (document.getElementById(styleId)) return;
+// Generate rain drops (elongated and faster)
+const generateRaindrops = (count: number): Particle[] => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    size: 1 + Math.random() * 2, // Thinner
+    left: Math.random() * 100,
+    delay: Math.random() * 5,
+    duration: 0.8 + Math.random() * 0.8, // Much faster
+    opacity: 0.3 + Math.random() * 0.5,
+    drift: -5 + Math.random() * 10, // Less horizontal drift
+  }));
+};
 
-  const particleColor = isBloodEffect 
-    ? 'rgba(220, 20, 60, 0.9)' // Crimson red for blood - brighter and more visible
-    : '#fff'; // White for snow
-  
-  const glowColor = isBloodEffect
-    ? 'rgba(220, 20, 60, 0.4)' // Crimson red glow for blood - brighter
-    : 'rgba(255,255,255,0.3)'; // White glow for snow
+type ParticleType = 'snow' | 'rain' | 'blood';
+
+// CSS keyframes injected once
+const injectStyles = (particleType: ParticleType) => {
+  const styleId = `${particleType}-particle-styles`;
+  if (document.getElementById(styleId)) return;
 
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = `
-    @keyframes ${isBloodEffect ? 'bloodfall' : 'snowfall'} {
-      0% {
-        transform: translate3d(0, -10vh, 0) rotate(0deg);
+  
+  if (particleType === 'rain') {
+    style.textContent = `
+      @keyframes rainfall {
+        0% {
+          transform: translate3d(0, -10vh, 0);
+        }
+        100% {
+          transform: translate3d(var(--drift), 110vh, 0);
+        }
       }
-      100% {
-        transform: translate3d(var(--drift), 110vh, 0) rotate(${isBloodEffect ? '720deg' : '360deg'});
+
+      .raindrop {
+        position: fixed;
+        top: 0;
+        background: linear-gradient(to bottom, rgba(174, 194, 224, 0.8), rgba(174, 194, 224, 0.3));
+        border-radius: 0 0 50% 50%;
+        pointer-events: none;
+        will-change: transform;
+        animation: rainfall var(--duration) linear infinite;
+        animation-delay: var(--delay);
+        z-index: 9999;
       }
-    }
 
-    @keyframes ${isBloodEffect ? 'blood-particle-shimmer' : 'snowflake-shimmer'} {
-      0%, 100% { opacity: var(--base-opacity); }
-      50% { opacity: calc(var(--base-opacity) * 0.6); }
-    }
+      .rain-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 9999;
+      }
+    `;
+  } else if (particleType === 'blood') {
+    style.textContent = `
+      @keyframes bloodfall {
+        0% {
+          transform: translate3d(0, -10vh, 0) rotate(0deg);
+        }
+        100% {
+          transform: translate3d(var(--drift), 110vh, 0) rotate(720deg);
+        }
+      }
 
-    .${isBloodEffect ? 'blood-particle' : 'snowflake'} {
-      position: fixed;
-      top: 0;
-      background: ${isBloodEffect 
-        ? 'radial-gradient(circle, rgba(220, 20, 60, 0.9) 0%, rgba(220, 20, 60, 0.7) 40%, transparent 70%)'
-        : 'radial-gradient(circle, #fff 0%, rgba(255,255,255,0.8) 40%, transparent 70%)'};
-      border-radius: ${isBloodEffect ? '0%' : '50%'};
-      pointer-events: none;
-      will-change: transform;
-      animation: 
-        ${isBloodEffect ? 'bloodfall' : 'snowfall'} var(--duration) linear infinite,
-        ${isBloodEffect ? 'blood-particle-shimmer' : 'snowflake-shimmer'} 3s ease-in-out infinite;
-      animation-delay: var(--delay);
-      z-index: 9999;
-    }
+      @keyframes blood-particle-shimmer {
+        0%, 100% { opacity: var(--base-opacity); }
+        50% { opacity: calc(var(--base-opacity) * 0.6); }
+      }
 
-    .${isBloodEffect ? 'blood-container' : 'snow-container'} {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 9999;
-    }
-  `;
+      .blood-particle {
+        position: fixed;
+        top: 0;
+        background: radial-gradient(circle, rgba(220, 20, 60, 0.9) 0%, rgba(220, 20, 60, 0.7) 40%, transparent 70%);
+        border-radius: 0%;
+        pointer-events: none;
+        will-change: transform;
+        animation: 
+          bloodfall var(--duration) linear infinite,
+          blood-particle-shimmer 3s ease-in-out infinite;
+        animation-delay: var(--delay);
+        z-index: 9999;
+      }
+
+      .blood-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 9999;
+      }
+    `;
+  } else {
+    // Snow
+    style.textContent = `
+      @keyframes snowfall {
+        0% {
+          transform: translate3d(0, -10vh, 0) rotate(0deg);
+        }
+        100% {
+          transform: translate3d(var(--drift), 110vh, 0) rotate(360deg);
+        }
+      }
+
+      @keyframes snowflake-shimmer {
+        0%, 100% { opacity: var(--base-opacity); }
+        50% { opacity: calc(var(--base-opacity) * 0.6); }
+      }
+
+      .snowflake {
+        position: fixed;
+        top: 0;
+        background: radial-gradient(circle, #fff 0%, rgba(255,255,255,0.8) 40%, transparent 70%);
+        border-radius: 50%;
+        pointer-events: none;
+        will-change: transform;
+        animation: 
+          snowfall var(--duration) linear infinite,
+          snowflake-shimmer 3s ease-in-out infinite;
+        animation-delay: var(--delay);
+        z-index: 9999;
+      }
+
+      .snow-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 9999;
+      }
+    `;
+  }
+  
   document.head.appendChild(style);
 };
 
-const ParticleElement: React.FC<{ particle: Particle; isBloodEffect: boolean }> = memo(({ particle, isBloodEffect }) => (
-  <div
-    className={isBloodEffect ? 'blood-particle' : 'snowflake'}
-    style={{
-      left: `${particle.left}%`,
-      width: `${particle.size}px`,
-      height: `${particle.size}px`,
-      '--duration': `${particle.duration}s`,
-      '--delay': `${-particle.delay}s`,
-      '--drift': `${particle.drift}px`,
-      '--base-opacity': particle.opacity,
-      boxShadow: `0 0 ${particle.size * 2}px ${particle.size / 2}px ${isBloodEffect ? 'rgba(220, 20, 60, 0.4)' : 'rgba(255,255,255,0.3)'}`
-    } as React.CSSProperties}
-  />
-));
+const ParticleElement: React.FC<{ particle: Particle; particleType: ParticleType }> = memo(({ particle, particleType }) => {
+  const className = particleType === 'rain' ? 'raindrop' : particleType === 'blood' ? 'blood-particle' : 'snowflake';
+  const glowColor = particleType === 'blood' 
+    ? 'rgba(220, 20, 60, 0.4)' 
+    : particleType === 'rain' 
+      ? 'rgba(174, 194, 224, 0.3)' 
+      : 'rgba(255,255,255,0.3)';
+  
+  // Rain drops are elongated
+  const width = particleType === 'rain' ? particle.size : particle.size;
+  const height = particleType === 'rain' ? particle.size * 8 : particle.size;
+  
+  return (
+    <div
+      className={className}
+      style={{
+        left: `${particle.left}%`,
+        width: `${width}px`,
+        height: `${height}px`,
+        '--duration': `${particle.duration}s`,
+        '--delay': `${-particle.delay}s`,
+        '--drift': `${particle.drift}px`,
+        '--base-opacity': particle.opacity,
+        boxShadow: particleType !== 'rain' ? `0 0 ${particle.size * 2}px ${particle.size / 2}px ${glowColor}` : undefined
+      } as React.CSSProperties}
+    />
+  );
+});
 
 ParticleElement.displayName = 'ParticleElement';
 
 interface SnowEffectProps {
   settings?: Partial<SnowSettings>;
   theme?: string;
+  weatherType?: WeatherEffectType;
 }
 
-const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme }) => {
+const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherType = 'snow' }) => {
   const intensity = settings?.intensity || 'normal';
-  const particleCount = INTENSITY_MAP[intensity];
+  const baseParticleCount = INTENSITY_MAP[intensity];
   const isBloodEffect = theme === 'dark_brotherhood';
   
-  // Generate particles based on intensity
-  const particles = useMemo(() => generateParticles(particleCount), [particleCount]);
+  // Determine actual particle type
+  const particleType: ParticleType = isBloodEffect ? 'blood' : (weatherType === 'rain' ? 'rain' : 'snow');
+  
+  // Rain needs more particles for effect, but they're smaller so it's ok
+  const particleCount = particleType === 'rain' ? Math.floor(baseParticleCount * 1.5) : baseParticleCount;
+  
+  // Generate particles based on type and intensity
+  const particles = useMemo(() => {
+    return particleType === 'rain' ? generateRaindrops(particleCount) : generateParticles(particleCount);
+  }, [particleCount, particleType]);
 
   useEffect(() => {
-    injectStyles(isBloodEffect);
-  }, [isBloodEffect]);
+    injectStyles(particleType);
+  }, [particleType]);
+
+  const containerClass = particleType === 'rain' ? 'rain-container' : particleType === 'blood' ? 'blood-container' : 'snow-container';
 
   return (
-    <div className={isBloodEffect ? 'blood-container' : 'snow-container'} aria-hidden="true">
+    <div className={containerClass} aria-hidden="true">
       {particles.map((particle) => (
-        <ParticleElement key={particle.id} particle={particle} isBloodEffect={isBloodEffect} />
+        <ParticleElement key={particle.id} particle={particle} particleType={particleType} />
       ))}
     </div>
   );

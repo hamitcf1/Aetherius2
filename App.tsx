@@ -272,6 +272,23 @@ const App: React.FC = () => {
   const [statusEffects, setStatusEffects] = useState<StatusEffect[]>([]);
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [colorTheme, setColorTheme] = useState('default');
+  const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'none'>(() => {
+    // Load from localStorage
+    try {
+      const saved = localStorage.getItem('aetherius:weatherEffect');
+      if (saved && ['snow', 'rain', 'none'].includes(saved)) {
+        return saved as 'snow' | 'rain' | 'none';
+      }
+    } catch (e) {}
+    return 'snow';
+  });
+
+  // Save weather effect preference
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('aetherius:weatherEffect', weatherEffect);
+    } catch (e) {}
+  }, [weatherEffect]);
 
   // Apply theme variables (light / default)
   React.useEffect(() => {
@@ -3272,6 +3289,10 @@ const App: React.FC = () => {
               onUpdateCharacter={handleUpdateCharacter}
               onDeleteCharacter={handleDeleteCharacter}
               onMarkCharacterDead={handleMarkCharacterDead}
+              colorTheme={colorTheme}
+              onThemeChange={setColorTheme}
+              weatherEffect={weatherEffect}
+              onWeatherChange={setWeatherEffect}
           />
           {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
             <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
@@ -3345,6 +3366,8 @@ const App: React.FC = () => {
       setColorTheme,
       showQuantityControls,
       setShowQuantityControls,
+      weatherEffect,
+      setWeatherEffect,
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
