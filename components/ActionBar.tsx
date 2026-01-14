@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson } from 'lucide-react';
-import SnowEffect, { SnowSettings, WeatherEffectType } from './SnowEffect';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson } from 'lucide-react';
+import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { audioService } from '../services/audioService';
@@ -40,7 +40,6 @@ const ActionBar: React.FC = () => {
     setWeatherEffect,
   } = useAppContext();
   const [open, setOpen] = useState(false);
-  const [snow, setSnow] = useState(false);
   const [snowIntensity, setSnowIntensity] = useState<SnowIntensity>('normal');
   const [showSnowOptions, setShowSnowOptions] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
@@ -257,25 +256,43 @@ const ActionBar: React.FC = () => {
             </div>
           )}
           
-          {/* Snow Effect - show as disabled if feature not enabled */}
+          {/* Weather Effect - cycle through snow/rain/clear */}
           <div className="relative group">
             <div className="flex gap-1">
               <button 
-                onClick={isFeatureEnabled('snowEffect') ? () => setSnow((s) => !s) : undefined}
+                onClick={isFeatureEnabled('snowEffect') ? () => {
+                  const weatherCycle: WeatherEffectType[] = ['snow', 'rain', 'none'];
+                  const currentIndex = weatherCycle.indexOf(weatherEffect);
+                  const nextIndex = (currentIndex + 1) % weatherCycle.length;
+                  setWeatherEffect(weatherCycle[nextIndex]);
+                } : undefined}
                 disabled={!isFeatureEnabled('snowEffect')}
                 className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-l font-bold ${
                   isFeatureEnabled('snowEffect')
-                    ? (snow ? 'bg-blue-200 text-blue-900' : 'bg-blue-900 text-white hover:bg-blue-800')
+                    ? weatherEffect === 'snow' 
+                      ? 'bg-blue-200 text-blue-900'
+                      : weatherEffect === 'rain'
+                        ? 'bg-cyan-200 text-cyan-900'
+                        : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                     : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
                 }`}
               >
-                <Snowflake size={16} /> {snow ? 'Disable Snow Effect' : 'Snow Effect'}
+                {weatherEffect === 'snow' ? <Snowflake size={16} /> : 
+                 weatherEffect === 'rain' ? <CloudRain size={16} /> : 
+                 <CloudOff size={16} />}
+                {weatherEffect === 'snow' ? 'Snow Effect' : 
+                 weatherEffect === 'rain' ? 'Rain Effect' : 
+                 'Weather Off'}
               </button>
-              {isFeatureEnabled('snowEffect') && snow && (
+              {isFeatureEnabled('snowEffect') && weatherEffect !== 'none' && (
                 <button
                   onClick={() => setShowSnowOptions(s => !s)}
-                  className="px-2 py-2 bg-blue-200 text-blue-900 rounded-r border-l border-blue-300 hover:bg-blue-100"
-                  title="Snow settings"
+                  className={`px-2 py-2 rounded-r border-l ${
+                    weatherEffect === 'snow' 
+                      ? 'bg-blue-200 text-blue-900 border-blue-300 hover:bg-blue-100'
+                      : 'bg-cyan-200 text-cyan-900 border-cyan-300 hover:bg-cyan-100'
+                  }`}
+                  title="Weather settings"
                 >
                   <ChevronDown size={16} className={showSnowOptions ? 'rotate-180 transition-transform' : 'transition-transform'} />
                 </button>
@@ -287,10 +304,12 @@ const ActionBar: React.FC = () => {
                 <Users size={16} /> Manage Companions
               </button>
             </div>
-            {/* Snow intensity options */}
-            {snow && showSnowOptions && isFeatureEnabled('snowEffect') && (
+            {/* Weather intensity options */}
+            {weatherEffect !== 'none' && showSnowOptions && isFeatureEnabled('snowEffect') && (
               <div className="mt-2 p-2 bg-gray-800 rounded border border-skyrim-border">
-                <div className="text-xs text-skyrim-text mb-1">Snow Intensity</div>
+                <div className="text-xs text-skyrim-text mb-1">
+                  {weatherEffect === 'snow' ? 'Snow' : 'Rain'} Intensity
+                </div>
                 <div className="flex flex-wrap gap-1">
                   {SNOW_INTENSITY_OPTIONS.map(opt => (
                     <button
@@ -298,7 +317,7 @@ const ActionBar: React.FC = () => {
                       onClick={() => setSnowIntensity(opt.value)}
                       className={`px-2 py-1 text-xs rounded ${
                         snowIntensity === opt.value
-                          ? 'bg-blue-600 text-white'
+                          ? weatherEffect === 'snow' ? 'bg-blue-600 text-white' : 'bg-cyan-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                     >
@@ -359,7 +378,6 @@ const ActionBar: React.FC = () => {
         </div>,
         document.body
       )}
-      {snow && weatherEffect !== 'none' && <SnowEffect settings={{ intensity: snowIntensity }} theme={colorTheme} weatherType={weatherEffect} />}
 
       {/* Guest Logout Warning Modal */}
       {showLogoutWarning && createPortal(

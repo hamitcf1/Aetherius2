@@ -19,6 +19,8 @@ import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
 import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
+import SnowEffect from './components/SnowEffect';
+import type { SnowSettings } from './components/SnowEffect';
 import { 
   OfflineIndicator, 
   AutoSaveIndicator, 
@@ -3294,6 +3296,14 @@ const App: React.FC = () => {
               weatherEffect={weatherEffect}
               onWeatherChange={setWeatherEffect}
           />
+          {/* Global Weather Effect on login page */}
+          {weatherEffect !== 'none' && (
+            <SnowEffect 
+              settings={{ intensity: 'normal' }} 
+              theme={colorTheme} 
+              weatherType={weatherEffect} 
+            />
+          )}
           {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
             <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
           )}
@@ -3854,6 +3864,15 @@ const App: React.FC = () => {
           onClose={() => setShowConsole(false)}
           onExecuteCommand={handleConsoleCommand}
         />
+
+        {/* Global Weather Effect */}
+        {weatherEffect !== 'none' && (
+          <SnowEffect 
+            settings={{ intensity: 'normal' }} 
+            theme={colorTheme} 
+            weatherType={weatherEffect} 
+          />
+        )}
 
       </div>
     </AppContext.Provider>
