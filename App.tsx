@@ -564,7 +564,11 @@ const App: React.FC = () => {
     const handleBackquote = (e: KeyboardEvent) => {
       // Prefer code for layout independence, but also accept key values and legacy keyCodes
       const kc = (e as any).keyCode || (e as any).which;
-      const isBackquote = e.code === 'Backquote' || e.key === '`' || e.key === '~' || kc === 192;
+      // Support a few common key outputs for the physical key under Escape across layouts
+      // - Standard: ` (backquote) or ~
+      // - Legacy keyCode: 192
+      // - AZERTY/French layouts: 'é' or '²'
+      const isBackquote = e.code === 'Backquote' || e.key === '`' || e.key === '~' || e.key === 'é' || e.key === '²' || kc === 192;
       if (!isBackquote) return;
 
       const active = document.activeElement as HTMLElement | null;
@@ -581,11 +585,8 @@ const App: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleBackquote);
-    // Some environments dispatch the backquote on keyup - support that as well
-    window.addEventListener('keyup', handleBackquote);
     return () => {
       window.removeEventListener('keydown', handleBackquote);
-      window.removeEventListener('keyup', handleBackquote);
     };
   }, []);
 
