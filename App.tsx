@@ -19,6 +19,7 @@ import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
 import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
+import { QuestNotificationOverlay, QuestNotification } from './components/QuestNotification';
 import SnowEffect from './components/SnowEffect';
 import type { SnowSettings } from './components/SnowEffect';
 import { 
@@ -462,6 +463,20 @@ const App: React.FC = () => {
   const [toastMessages, setToastMessages] = useState<Array<{ id: string; message: string; type?: 'info' | 'success' | 'warning' | 'error'; color?: string; stat?: string; amount?: number }>>([]);
   const handleToastClose = useCallback((id: string) => {
     setToastMessages(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Quest Notifications (Skyrim-style announcements)
+  const [questNotifications, setQuestNotifications] = useState<QuestNotification[]>([]);
+  const handleQuestNotificationDismiss = useCallback((id: string) => {
+    setQuestNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+  const showQuestNotification = useCallback((notification: Omit<QuestNotification, 'id'>) => {
+    const id = uniqueId();
+    setQuestNotifications(prev => [...prev.slice(-2), { ...notification, id }]);
+    // Play quest complete sound for completed quests
+    if (notification.type === 'quest-completed') {
+      audioService.playSfx('quest_complete').catch(() => {});
+    }
   }, []);
 
   // Encumbrance calculation
@@ -2658,6 +2673,11 @@ const App: React.FC = () => {
           setQuests(prev => [...prev, ...addedQuests]);
           addedQuests.forEach(quest => {
             setDirtyEntities(prev => new Set([...prev, quest.id]));
+            // Show Skyrim-style quest notification
+            showQuestNotification({
+              type: 'quest-started',
+              questTitle: quest.title,
+            });
           });
       }
 
@@ -2665,6 +2685,7 @@ const App: React.FC = () => {
       if (updates.updateQuests) {
           let totalXpFromQuests = 0;
           let totalGoldFromQuests = 0;
+          const questNotificationsToShow: Array<Omit<QuestNotification, 'id'>> = [];
           
           setQuests(prev => prev.map(q => {
               if (q.characterId !== currentCharacterId) return q;
@@ -2677,13 +2698,26 @@ const App: React.FC = () => {
                       : q.objectives;
                   
                   // Apply quest rewards when completed
+                  let xpReward = 0;
+                  let goldReward = 0;
                   if (update.status === 'completed') {
                     // Use rewards from update, or fall back to quest's stored rewards
-                    const xpReward = update.xpAwarded ?? q.xpReward ?? 0;
-                    const goldReward = update.goldAwarded ?? q.goldReward ?? 0;
+                    xpReward = update.xpAwarded ?? q.xpReward ?? 0;
+                    goldReward = update.goldAwarded ?? q.goldReward ?? 0;
                     totalXpFromQuests += xpReward;
                     totalGoldFromQuests += goldReward;
                   }
+                  
+                  // Queue Skyrim-style quest notification
+                  const notificationType = update.status === 'completed' ? 'quest-completed' 
+                    : update.status === 'failed' ? 'quest-failed' 
+                    : 'quest-updated';
+                  questNotificationsToShow.push({
+                    type: notificationType,
+                    questTitle: q.title,
+                    xpAwarded: update.status === 'completed' ? xpReward : undefined,
+                    goldAwarded: update.status === 'completed' ? goldReward : undefined,
+                  });
                   
                   return { 
                       ...q, 
@@ -2694,6 +2728,11 @@ const App: React.FC = () => {
               }
               return q;
           }));
+          
+          // Show quest notifications (staggered so they don't all appear at once)
+          questNotificationsToShow.forEach((notif, index) => {
+            setTimeout(() => showQuestNotification(notif), index * 300);
+          });
           
           // Apply accumulated quest rewards to character
           if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
@@ -4116,6 +4155,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
         {/* Toast Notifications */}
         <ToastNotification messages={toastMessages} onClose={handleToastClose} />
+        {/* Quest Notifications (Skyrim-style) */}
+        <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
         {/* Update Notification */}
         <UpdateNotification position="bottom" />
 

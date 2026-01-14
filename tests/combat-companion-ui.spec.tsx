@@ -68,9 +68,9 @@ describe('CombatModal companion turn UI', () => {
     const controlText = await screen.findByText(/Control Buddy/i, {}, { timeout: 3000 });
     expect(controlText).toBeTruthy();
 
-    // There should be a button for the ability
-    const abilityButton = screen.getByText('Strike');
-    expect(abilityButton).toBeTruthy();
+    // There should be buttons for the ability (may appear multiple times in responsive layouts)
+    const abilityButtons = screen.getAllByText('Strike');
+    expect(abilityButtons.length).toBeGreaterThan(0);
 
     // Click skip to surrender the companion's turn (works without waiting for the roll animation)
     const skipButton = screen.getByText('Skip Companion Turn');
