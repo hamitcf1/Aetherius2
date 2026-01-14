@@ -1,10 +1,95 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
 import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade } from '../services/upgradeService';
 import { Sword, Shield, Coins } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
+import { audioService } from '../services/audioService';
+
+// Spark particle component for blacksmith upgrade effect
+const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTMLButtonElement | null> }> = ({ active, buttonRef }) => {
+  const [sparks, setSparks] = useState<Array<{ id: number; x: number; y: number; vx: number; vy: number; life: number; color: string }>>([]);
+  const animationRef = useRef<number | null>(null);
+  
+  useEffect(() => {
+    if (!active || !buttonRef.current) return;
+    
+    const rect = buttonRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    // Generate initial sparks
+    const initialSparks = Array.from({ length: 25 }, (_, i) => ({
+      id: i,
+      x: centerX,
+      y: centerY,
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.5) * 12 - 4,
+      life: 1,
+      color: Math.random() > 0.3 
+        ? `rgba(${255}, ${150 + Math.random() * 100}, ${Math.random() * 50}, 1)` // Orange/red
+        : `rgba(${255}, ${200 + Math.random() * 55}, ${100 + Math.random() * 100}, 1)` // Yellow/gold
+    }));
+    
+    setSparks(initialSparks);
+    
+    // Animate sparks
+    const animate = () => {
+      setSparks(prev => {
+        const updated = prev
+          .map(s => ({
+            ...s,
+            x: s.x + s.vx,
+            y: s.y + s.vy,
+            vy: s.vy + 0.3, // gravity
+            life: s.life - 0.025
+          }))
+          .filter(s => s.life > 0);
+        
+        if (updated.length === 0) {
+          animationRef.current = null;
+          return [];
+        }
+        
+        animationRef.current = requestAnimationFrame(animate);
+        return updated;
+      });
+    };
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [active, buttonRef]);
+  
+  if (sparks.length === 0) return null;
+  
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[100]">
+      {sparks.map(spark => (
+        <div
+          key={spark.id}
+          style={{
+            position: 'fixed',
+            left: spark.x,
+            top: spark.y,
+            width: `${4 + Math.random() * 4}px`,
+            height: `${4 + Math.random() * 4}px`,
+            background: spark.color,
+            borderRadius: '50%',
+            boxShadow: `0 0 ${6}px ${spark.color}, 0 0 ${12}px ${spark.color}`,
+            opacity: spark.life,
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      ))}
+    </div>
+  );
+};
 
 interface Props {
   open: boolean;
@@ -18,6 +103,8 @@ interface Props {
 export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold }: Props) {
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showSparks, setShowSparks] = useState(false);
+  const upgradeButtonRef = useRef<HTMLButtonElement>(null);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
@@ -40,6 +127,14 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
       return;
     }
 
+    // Play forge upgrade sound and anvil hit sound
+    audioService.playSoundEffect('anvil_hit');
+    setTimeout(() => audioService.playSoundEffect('forge_upgrade'), 100);
+    
+    // Trigger spark effect
+    setShowSparks(true);
+    setTimeout(() => setShowSparks(false), 50);
+
     // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
     // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.
     if ((selected.quantity || 0) > 1) {
@@ -48,10 +143,6 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
       const originalReduced = { ...selected, quantity: (selected.quantity || 1) - 1 } as InventoryItem;
 
       // Persist via global handler only (avoid local double-insert).
-      // We rely on `handleGameUpdate` to update the original stack and create
-      // a new, unique upgraded item (using __forceCreate) so the app state
-      // remains the single source of truth and we don't accidentally insert
-      // the same item twice.
       setGold(gold - cost);
       (window as any).app?.handleGameUpdate?.({ updatedItems: [originalReduced], newItems: [{ ...upgradedSingle, __forceCreate: true }] });
       showToast?.('Upgraded one item from the stack', 'success');
@@ -158,10 +249,18 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                  <button onClick={handleConfirm} className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold">Confirm Upgrade</button>
-                  <button onClick={onClose} className="px-4 py-2 bg-gray-600 text-white rounded">Cancel</button>
+                <div className="mt-4 flex flex-col sm:flex-row gap-2 relative">
+                  <button 
+                    ref={upgradeButtonRef}
+                    onClick={handleConfirm} 
+                    className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95"
+                  >
+                    Confirm Upgrade
+                  </button>
+                  <button onClick={onClose} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-all">Cancel</button>
                 </div>
+                {/* Spark particles for upgrade effect */}
+                <SparkParticles active={showSparks} buttonRef={upgradeButtonRef} />
               </div>
             )}
           </div>

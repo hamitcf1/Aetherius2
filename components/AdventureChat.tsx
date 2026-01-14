@@ -20,6 +20,7 @@ import { getTransactionLedger, filterDuplicateTransactions } from '../services/t
 import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
 import { speak, speakSample, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, getVoicesForLanguage, type VoiceRole, type VoiceSettings } from '../services/ttsService';
 import { useLocalization } from '../services/localization';
+import { getQuestChainForCharacter, generateQuestLinePrompt } from '../services/mainQuestLines';
 
 interface ChatMessage {
   id: string;
@@ -42,6 +43,10 @@ interface AdventureChatProps {
   journal: JournalEntry[];
   story: StoryChapter[];
   onUpdateState: (updates: GameStateUpdate) => void;
+  // Dungeon entry callback (explicit player intent)
+  onEnterDungeon?: (locationName: string) => void;
+  // If true, pause chat input (e.g., while a modal is open)
+  pauseChat?: boolean;
   // Chat text settings
   chatFontSize?: ChatFontSize;
   chatFontWeight?: ChatFontWeight;
@@ -50,23 +55,70 @@ interface AdventureChatProps {
 
 const SYSTEM_PROMPT = `You are an immersive Game Master (GM) for a text-based Skyrim adventure. You control the world and narrative. The player controls their character's actions.
 
-=== CRITICAL: GAME STATE UPDATES ARE REQUIRED ===
+=== CRITICAL: MAKE THE GAME EXCITING ===
 
-You MUST include game state changes in your JSON response when appropriate:
-- Player picks up, loots, or collects items → MUST use "newItems" to add them
-- Player spends or receives gold → MUST use "goldChange" 
-- Player consumes food/drink from inventory → MUST use "removedItems" AND "needsChange"
-- Player completes objectives → MUST use "updateQuests" or "xpChange"
-- Player defeats enemies → MUST use "xpChange" and/or "goldChange" for loot
-- Player takes damage → MUST use "vitalsChange"
-- Time passes → MUST use "timeAdvanceMinutes" and appropriate "needsChange"
+Your #1 job is to make the game FUN and ENGAGING. This means:
+- ENEMIES should appear regularly (bandits, wolves, draugr, skeletons, spiders, bears)
+- LOOT should be found in dungeons (chests, containers, bodies)
+- EVENTS should happen during travel (ambushes, discoveries, NPCs)
+- COMBAT should be frequent in dangerous areas
+- The player should NOT have to ask "any enemies?" - YOU should introduce them!
 
-WITHOUT THESE FIELDS, THE GAME ENGINE CANNOT UPDATE THE PLAYER'S STATE!
+=== PROACTIVE ENCOUNTER RULES (CRITICAL) ===
 
-AUTOMATIC ITEM COLLECTION:
-When player opens chests, loots bodies, or searches for items - AUTOMATICALLY add items via "newItems".
-Do NOT wait for player to say "I add items to inventory" - ADD THEM IMMEDIATELY.
-When describing "you find X, Y, Z" → newItems: [X, Y, Z]
+When player enters a DUNGEON (barrow, cave, ruin, fort, mine):
+- First 1-2 rooms: Light resistance (1-2 weak enemies OR traps)
+- Middle areas: Regular encounters every 2-3 rooms
+- Deep areas: Stronger enemies, mini-bosses
+- Boss room: Significant fight with good loot after
+
+When player TRAVELS on roads/wilderness:
+- Short travel (<30 min): 30% chance of encounter
+- Medium travel (30min-1hr): 60% chance of encounter  
+- Long travel (>1hr): 90% chance of encounter + something interesting happens
+- NEVER make player repeat "I travel to X" more than twice!
+
+ENCOUNTER TYPES (use variety):
+- Combat: Bandits, wolves, bears, spiders, hostile mages, undead
+- Discovery: Hidden chest, abandoned camp, interesting landmark
+- NPC: Traveler, merchant, patrol, person in need
+- Event: Weather change, strange sounds, tracks to follow
+
+=== GAME STATE UPDATES (REQUIRED) ===
+
+You MUST include game state changes in your JSON response:
+- Enemy encounters → Use "combatStart" for tactical fights
+- Quick fights (1 weak enemy) → Narrative + "xpChange" + "goldChange"
+- Found loot/chest → Describe it, then PLAYER chooses to loot (don't auto-add)
+- Player explicitly takes items → Use "newItems"
+- Gold found/spent → Use "goldChange"
+- Quests progress → Use "updateQuests" with xpAwarded/goldAwarded
+- Time passes → Use "timeAdvanceMinutes" and "needsChange"
+
+LOOT HANDLING (IMPORTANT):
+When player finds a chest or lootable container:
+1. DESCRIBE what they see inside
+2. Let player CHOOSE to take items
+3. When player says "I take X" or "loot all" → THEN use newItems
+
+Example chest discovery:
+{ "narrative": { "title": "Ancient Chest", "content": "You pry open the dusty chest. Inside you see a steel dagger, 45 gold coins, and a minor health potion." }, "choices": [{ "label": "Take everything", "playerText": "I take all the loot" }, { "label": "Take just the gold", "playerText": "I pocket the gold coins" }, { "label": "Leave it", "playerText": "I leave the chest alone" }] }
+
+Example when player takes loot:
+{ "narrative": { "title": "Loot Collected", "content": "You stuff the items into your pack." }, "newItems": [{ "name": "Steel Dagger", "type": "weapon", "damage": 8 }, { "name": "Minor Health Potion", "type": "potion" }], "goldChange": 45 }
+
+=== TRAVEL EFFICIENCY (STOP MAKING PLAYER REPEAT) ===
+
+When player says "I travel to [destination]":
+- SHORT distance (same hold): Arrive in ONE response
+- MEDIUM distance (adjacent hold): Arrive in 1-2 responses with ONE event
+- LONG distance (across Skyrim): 2-3 responses MAX with events
+
+NEVER make player say "I continue traveling" more than ONCE!
+If they're going somewhere, GET THEM THERE with interesting content along the way.
+
+BAD: Player says "Go to Bleak Falls Barrow" 5 times, nothing happens
+GOOD: Player says it once, you describe the journey with an encounter, they arrive
 
 === STARTING ADVENTURE & QUESTS (CRITICAL FOR NEW GAMES) ===
 
@@ -135,13 +187,24 @@ DESTINATION & OBJECTIVE CLARITY:
 - No ambiguous "you have arrived" language
 - Output current region AND objective status when location changes
 
-LONG TRAVEL CONTENT:
-- Travel > 1 in-game hour MUST include at least ONE: environmental hazard, random encounter, narrative vignette, player decision, or skill check
-- "No-event travel" is only allowed for short durations
+LONG TRAVEL CONTENT (MANDATORY):
+- ANY travel > 15 minutes MUST include at least ONE of:
+  * COMBAT encounter (bandits, wolves, hostile creatures)
+  * Discovery (hidden cache, interesting location, clue)
+  * NPC interaction (traveler, merchant, person in distress)
+  * Event (weather, tracks, sounds requiring decision)
+- "Empty travel" where nothing happens is FORBIDDEN
+- Get player to destination in 1-2 responses MAX, with content
+
+DUNGEON EXPLORATION PACING:
+- Dungeons should have enemies! Barrows have draugr, caves have bandits/animals
+- Every 2-3 areas explored should have SOMETHING (enemy, trap, loot, puzzle)
+- If player asks "any enemies?" - you FAILED to be proactive. Add enemies without being asked!
 
 IF UNCERTAIN:
 - Default to adding a consequence, not removing one
 - Default to explicit clarification, not ambiguity
+- Default to adding an encounter, not empty exploration
 
 You are not a storyteller. You are a game system that outputs narrative as a consequence of rules.
 
@@ -523,11 +586,21 @@ Return ONLY a JSON object:
   }
 }
 
-=== LOOT & ITEM EXAMPLES (MANDATORY) ===
+=== LOOT & ITEM EXAMPLES ===
 
-Example - Player opens a chest or loots a body:
+Example - Player FINDS a chest (describe contents, let player choose):
 {
-  "narrative": { "title": "Hidden Treasure", "content": "You pry open the chest and find valuables inside..." },
+  "narrative": { "title": "Hidden Treasure", "content": "You discover an old chest behind a fallen pillar. Inside you see a steel helmet, leather bracers, two health potions, and a pouch of gold coins (about 75 septims)." },
+  "choices": [
+    { "label": "Take everything", "playerText": "I take all the loot from the chest" },
+    { "label": "Take just the gold", "playerText": "I pocket only the gold coins" },
+    { "label": "Leave it", "playerText": "I leave the chest contents" }
+  ]
+}
+
+Example - Player TAKES loot (after they choose):
+{
+  "narrative": { "title": "Loot Collected", "content": "You stuff the items into your pack." },
   "newItems": [
     { "name": "Steel Helmet", "type": "apparel", "slot": "head", "armor": 12, "description": "A sturdy steel helmet", "quantity": 1 },
     { "name": "Leather Bracers", "type": "apparel", "slot": "hands", "armor": 6, "description": "Thick leather bracers", "quantity": 1 },
@@ -536,7 +609,7 @@ Example - Player opens a chest or loots a body:
   "goldChange": 75
 }
 
-Example - Player collects ingredients:
+Example - Player collects simple items (can auto-add for small things like flowers):
 {
   "narrative": { "title": "Gathering", "content": "You carefully harvest the mountain flowers..." },
   "newItems": [
@@ -669,13 +742,20 @@ Example - Meeting a new NPC:
 
 Only include fields that changed. The narrative field is always required.`;
 
-// Builds the enhanced system prompt with simulation context
-const buildSimulationSystemPrompt = (simulationContext: string): string => {
-  if (!simulationContext || simulationContext.trim() === '') {
-    return SYSTEM_PROMPT;
+// Builds the enhanced system prompt with simulation context and quest line
+const buildSimulationSystemPrompt = (simulationContext: string, character?: Character): string => {
+  let prompt = SYSTEM_PROMPT;
+  
+  // Add quest line prompt for the character's archetype
+  if (character) {
+    const questLinePrompt = generateQuestLinePrompt(character);
+    if (questLinePrompt) {
+      prompt += '\n' + questLinePrompt;
+    }
   }
   
-  return `${SYSTEM_PROMPT}
+  if (simulationContext && simulationContext.trim() !== '') {
+    prompt += `
 
 === ACTIVE SIMULATION STATE ===
 ${simulationContext}
@@ -688,6 +768,9 @@ IMPORTANT: The above simulation state shows:
 - What consequences are pending (ENFORCE THEM)
 
 Maintain consistency with this state. Do not contradict it.`;
+  }
+  
+  return prompt;
 };
 
 // Font size classes for chat text
@@ -759,6 +842,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   journal,
   story,
   onUpdateState,
+  onEnterDungeon,
+  pauseChat,
   chatFontSize = 'medium',
   chatFontWeight = 'normal',
   onChatSettingsChange
@@ -1329,7 +1414,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   // Get the dynamic system prompt with simulation context
   const getSystemPrompt = (): string => {
     const simulationContext = simulationManagerRef.current?.buildContext() || '';
-    return buildSimulationSystemPrompt(simulationContext);
+    return buildSimulationSystemPrompt(simulationContext, character);
   };
 
   const formatList = (items: string[], max: number) => {
@@ -1455,6 +1540,17 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const sendPlayerText = async (text: string) => {
     const trimmed = (text || '').trim();
     if (!trimmed || loading || !character) return;
+
+    // Detect explicit dungeon intent and short-circuit to open dungeon modal
+    try {
+      const dungeonIntent = trimmed.match(/(?:i want to clear|i will clear|i enter)\s+(.+?)\s+(?:dungeon|barrow|cave|ruin|fort|mine)/i);
+      if (dungeonIntent && dungeonIntent[1] && onEnterDungeon) {
+        const locationName = dungeonIntent[1].trim();
+        onEnterDungeon(locationName);
+        setInput('');
+        return;
+      }
+    } catch (e) {}
 
     // Check rate limiting
     if (isRateLimited()) {
@@ -3049,7 +3145,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             onChange={setInput}
             onSend={handleSend}
             placeholder="What do you do? (Enter to send)"
-            disabled={loading || messages.length === 0}
+            disabled={loading || messages.length === 0 || pauseChat}
             rows={1}
           />
           <button
@@ -3083,6 +3179,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         visitedLocations={visitedLocations}
         questLocations={questLocations}
         discoveredLocations={discoveredLocations}
+        onEnterDungeon={onEnterDungeon}
       />
     </div>
   );

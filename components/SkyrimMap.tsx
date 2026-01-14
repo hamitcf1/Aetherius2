@@ -76,6 +76,7 @@ interface SkyrimMapProps {
   visitedLocations?: string[];
   questLocations?: Array<{ name: string; questName: string }>;
   discoveredLocations?: DiscoveredLocation[]; // New locations discovered during gameplay
+  onEnterDungeon?: (locationName: string) => void; // Triggered when player clicks the explicit "Enter Dungeon" button
 }
 
 export const SkyrimMap: React.FC<SkyrimMapProps> = ({
@@ -85,6 +86,7 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
   visitedLocations = [],
   questLocations = [],
   discoveredLocations = [],
+  onEnterDungeon,
 }) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -580,6 +582,11 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
                 <span className="text-xs bg-yellow-900/50 text-yellow-400 px-2 py-1 rounded">
                   ⚔️ {questLocations.find(q => findLocationByName(q.name)?.id === selectedLocation.id)?.questName}
                 </span>
+              )}
+
+              {/* Explicit dungeon entry button - prevents accidental triggers */}
+              {selectedLocation.type === 'dungeon' && (
+                <button onClick={() => onEnterDungeon && onEnterDungeon(selectedLocation.name)} className="text-xs bg-red-900/60 text-red-300 px-2 py-1 rounded">Enter Dungeon</button>
               )}
             </div>
           </div>

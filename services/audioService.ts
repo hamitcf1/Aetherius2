@@ -2,24 +2,37 @@
 // This is the foundation for audio in the game. Sound files will be added later.
 
 export type SoundEffect = 
-  | 'purchase'      // When buying an item
-  | 'sell'          // When selling an item
-  | 'gold_gain'     // When gaining gold
-  | 'gold_spend'    // When spending gold
-  | 'item_pickup'   // When picking up an item
-  | 'item_equip'    // When equipping an item
-  | 'item_unequip'  // When unequipping an item
-  | 'level_up'      // When leveling up
-  | 'quest_complete'// When completing a quest
-  | 'quest_start'   // When starting a quest
-  | 'eat'           // When eating food
-  | 'drink'         // When drinking
-  | 'rest'          // When resting/sleeping
-  | 'menu_open'     // When opening a menu
-  | 'menu_close'    // When closing a menu
-  | 'button_click'  // Generic button click
-  | 'error'         // Error sound
-  | 'success';      // Success sound
+  | 'purchase'        // When buying an item
+  | 'sell'            // When selling an item
+  | 'gold_gain'       // When gaining gold
+  | 'gold_spend'      // When spending gold
+  | 'item_pickup'     // When picking up an item
+  | 'item_equip'      // When equipping an item
+  | 'item_unequip'    // When unequipping an item
+  | 'level_up'        // When leveling up
+  | 'quest_complete'  // When completing a quest
+  | 'quest_start'     // When starting a quest
+  | 'eat'             // When eating food
+  | 'drink'           // When drinking
+  | 'drink_potion'    // When drinking a potion
+  | 'rest'            // When resting/sleeping
+  | 'menu_open'       // When opening a menu
+  | 'menu_close'      // When closing a menu
+  | 'button_click'    // Generic button click
+  | 'error'           // Error sound
+  | 'success'         // Success sound
+  // Combat sounds
+  | 'attack_melee'    // Weapon melee attack
+  | 'attack_ranged'   // Bow/ranged attack
+  | 'attack_magic'    // Spell cast
+  | 'block'           // Blocking/defending
+  | 'shield_bash'     // Shield bash attack
+  | 'spell_impact'    // Spell hitting target
+  | 'hit_received'    // Taking damage
+  | 'enemy_death'     // Enemy defeated
+  // Blacksmith sounds
+  | 'forge_upgrade'   // Blacksmith upgrade success
+  | 'anvil_hit';      // Metal impact for forging
 
 export type MusicTrack = 
   | 'main_menu'     // Main menu music
@@ -60,12 +73,25 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   quest_start: `${BASE_PATH}/audio/sfx/quest_start.mp3`,
   eat: `${BASE_PATH}/audio/sfx/eat.mp3`,
   drink: `${BASE_PATH}/audio/sfx/drink.mp3`,
+  drink_potion: `${BASE_PATH}/audio/sfx/drink_potion.mp3`,
   rest: `${BASE_PATH}/audio/sfx/rest.mp3`,
   menu_open: `${BASE_PATH}/audio/sfx/menu_open.mp3`,
   menu_close: `${BASE_PATH}/audio/sfx/menu_close.mp3`,
   button_click: `${BASE_PATH}/audio/sfx/button_click.mp3`,
   error: `${BASE_PATH}/audio/sfx/error.mp3`,
   success: `${BASE_PATH}/audio/sfx/success.mp3`,
+  // Combat sounds
+  attack_melee: `${BASE_PATH}/audio/sfx/attack_melee.mp3`,
+  attack_ranged: `${BASE_PATH}/audio/sfx/attack_ranged.mp3`,
+  attack_magic: `${BASE_PATH}/audio/sfx/attack_magic.mp3`,
+  block: `${BASE_PATH}/audio/sfx/block.mp3`,
+  shield_bash: `${BASE_PATH}/audio/sfx/shield_bash.mp3`,
+  spell_impact: `${BASE_PATH}/audio/sfx/spell_impact.mp3`,
+  hit_received: `${BASE_PATH}/audio/sfx/hit_received.mp3`,
+  enemy_death: `${BASE_PATH}/audio/sfx/enemy_death.mp3`,
+  // Blacksmith sounds
+  forge_upgrade: `${BASE_PATH}/audio/sfx/forge_upgrade.mp3`,
+  anvil_hit: `${BASE_PATH}/audio/sfx/anvil_hit.mp3`,
 };
 
 // Music track paths (to be populated with actual music files)

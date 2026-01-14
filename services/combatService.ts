@@ -1245,7 +1245,8 @@ export const executeEnemyTurn = (
   state: CombatState,
   enemyId: string,
   playerStats: PlayerCombatStats,
-  natRoll?: number
+  natRoll?: number,
+  character?: Character
 ): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string } => {
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
@@ -1398,9 +1399,9 @@ export const executeEnemyTurn = (
     // pick a target enemy (default: first alive)
     const target = (newState.enemies || []).find(e => e.currentHealth > 0);
     if (!target) {
-      narrative = `${actor.name} has no valid targets.`;
-      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: 'wait', narrative, timestamp: Date.now() });
-      return { newState, newPlayerStats, narrative };
+      const noTargetNarrative = `${actor.name} has no valid targets.`;
+      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: 'wait', narrative: noTargetNarrative, timestamp: Date.now() });
+      return { newState, newPlayerStats, narrative: noTargetNarrative };
     }
 
     // Compute damage similarly to enemy attack but against the enemy target

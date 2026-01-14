@@ -30,7 +30,38 @@ import { BASE_PATH } from '../services/basePath';
 import { getEasterEggName } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 import ModalWrapper from './ModalWrapper';
+import { audioService } from '../services/audioService';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
+
+// Play combat sound based on action type
+const playCombatSound = (actionType: 'melee' | 'ranged' | 'magic' | 'shout' | 'block' | 'shield_bash' | 'hit' | 'enemy_death') => {
+  switch (actionType) {
+    case 'melee':
+      audioService.playSoundEffect('attack_melee');
+      break;
+    case 'ranged':
+      audioService.playSoundEffect('attack_ranged');
+      break;
+    case 'magic':
+      audioService.playSoundEffect('attack_magic');
+      break;
+    case 'shout':
+      audioService.playSoundEffect('attack_magic'); // Use magic sound for shouts
+      break;
+    case 'block':
+      audioService.playSoundEffect('block');
+      break;
+    case 'shield_bash':
+      audioService.playSoundEffect('shield_bash');
+      break;
+    case 'hit':
+      audioService.playSoundEffect('hit_received');
+      break;
+    case 'enemy_death':
+      audioService.playSoundEffect('enemy_death');
+      break;
+  }
+};
 
 interface CombatModalProps {
   character: Character;
@@ -574,7 +605,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         currentState,
         currentState.currentTurnActor,
         currentPlayerStats,
-        finalEnemyRoll
+        finalEnemyRoll,
+        character
       );
       
       currentState = newState;
@@ -690,6 +722,27 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     let newPlayerStats = execRes.newPlayerStats;
     const narrative = execRes.narrative;
     const usedItem = execRes.usedItem;
+
+    // Play combat sound based on action/ability type
+    if (action === 'attack' || action === 'ability') {
+      const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
+      const actionType = ability?.type || 'melee';
+      if (ability?.name?.toLowerCase().includes('bash')) {
+        playCombatSound('shield_bash');
+      } else if (ability?.name?.toLowerCase().includes('block') || action === 'defend') {
+        playCombatSound('block');
+      } else {
+        playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout');
+      }
+    } else if (action === 'defend') {
+      playCombatSound('block');
+    }
+
+    // Check if any enemies died from this action
+    const deadEnemies = newState.enemies.filter(e => e.currentHealth <= 0 && combatState.enemies.find(oe => oe.id === e.id && oe.currentHealth > 0));
+    if (deadEnemies.length > 0) {
+      playCombatSound('enemy_death');
+    }
 
     if (onNarrativeUpdate && narrative) {
       onNarrativeUpdate(narrative);

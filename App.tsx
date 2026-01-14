@@ -15,11 +15,15 @@ import { AdventureChat } from './components/AdventureChat';
 import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
+import DungeonModal from './components/DungeonModal';
+import { listDungeons } from './data/dungeonDefinitions';
+import dungeonService from './services/dungeonService';
 import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
 import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
 import { QuestNotificationOverlay, QuestNotification } from './components/QuestNotification';
+import { LevelUpNotificationOverlay, LevelUpNotificationData } from './components/LevelUpNotification';
 import SnowEffect from './components/SnowEffect';
 import type { SnowSettings } from './components/SnowEffect';
 import { 
@@ -382,6 +386,24 @@ const App: React.FC = () => {
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('adept');
   const [weather, setWeather] = useState<WeatherState>({ type: 'clear', intensity: 0, temperature: 10 });
   const [statusEffects, setStatusEffects] = useState<StatusEffect[]>([]);
+
+  // Tick down status effect durations every second and remove expired effects
+  React.useEffect(() => {
+    if (!statusEffects || statusEffects.length === 0) return;
+    const interval = setInterval(() => {
+      setStatusEffects(prev => {
+        if (!prev || prev.length === 0) return prev;
+        const decremented = prev.map(se => ({ ...se, duration: Math.max(0, (se.duration || 0) - 1) }));
+        const expired = decremented.filter(se => (se.duration || 0) <= 0);
+        const remaining = decremented.filter(se => (se.duration || 0) > 0);
+        if (expired.length) {
+          expired.forEach(e => showToast(`${e.name} expired`, 'info'));
+        }
+        return remaining;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [statusEffects.length]);
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [colorTheme, setColorTheme] = useState('default');
   const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'sandstorm' | 'none'>(() => {
@@ -445,6 +467,10 @@ const App: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
+  // Dungeon modal state
+  const [dungeonOpen, setDungeonOpen] = useState(false);
+  const [dungeonId, setDungeonId] = useState<string | null>(null);
+  const [dungeonReport, setDungeonReport] = useState<any | null>(null);
   // Track last rest time to prevent immediate re-triggering of forced rest
   // Use ref to avoid stale closure issues when checking within handleGameUpdate
   const lastRestTimestampRef = useRef<number>(0);
@@ -485,7 +511,19 @@ const App: React.FC = () => {
     // Play quest complete sound for completed quests
     if (notification.type === 'quest-completed') {
       audioService.playSoundEffect('quest_complete');
+    } else if (notification.type === 'quest-started') {
+      audioService.playSoundEffect('quest_start');
     }
+  }, []);
+
+  // Level Up Notifications (Skyrim-style visual announcement)
+  const [levelUpNotifications, setLevelUpNotifications] = useState<LevelUpNotificationData[]>([]);
+  const handleLevelUpNotificationDismiss = useCallback((id: string) => {
+    setLevelUpNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+  const showLevelUpNotification = useCallback((characterName: string, newLevel: number) => {
+    const id = uniqueId();
+    setLevelUpNotifications(prev => [...prev, { id, characterName, newLevel }]);
   }, []);
 
   // Encumbrance calculation
@@ -1980,6 +2018,10 @@ const App: React.FC = () => {
   // Eat a specific item - uses dynamic nutrition values
   const handleEatItem = (item: InventoryItem) => {
     if (!currentCharacterId || !activeCharacter) return;
+    
+    // Play eating sound
+    audioService.playSoundEffect('eat');
+    
     const nutrition = getFoodNutrition(item.name);
     // Attempt to parse vitals-like effects from the item (some foods may heal)
     const parsed = parseConsumableVitals(item);
@@ -2032,6 +2074,10 @@ const App: React.FC = () => {
   // Drink a specific item - uses dynamic nutrition values
   const handleDrinkItem = (item: InventoryItem) => {
     if (!currentCharacterId || !activeCharacter) return;
+    
+    // Play drinking sound
+    audioService.playSoundEffect('drink');
+    
     const nutrition = getDrinkNutrition(item.name);
     // Try to parse potential vitals from drink (some special drinks affect vitals)
     const parsed = parseConsumableVitals(item);
@@ -2075,6 +2121,9 @@ const App: React.FC = () => {
     if (!currentCharacterId || !activeCharacter) return;
 
     if (item.type === 'potion') {
+      // Play potion drinking sound
+      audioService.playSoundEffect('drink_potion');
+      
       const resolved = resolvePotionEffect(item);
 
       // If resolver produced a stat-based effect, apply vitals change
@@ -2484,16 +2533,11 @@ const App: React.FC = () => {
   const handleQuestComplete = (quest: any, xpReward: number, goldReward: number) => {
     if (!currentCharacterId || !activeCharacter) return;
     
-    // Apply XP and gold rewards
-    setCharacters(prev => prev.map(c => {
-      if (c.id !== currentCharacterId) return c;
-      setDirtyEntities(d => new Set([...d, c.id]));
-      return {
-        ...c,
-        experience: (c.experience || 0) + xpReward,
-        gold: (c.gold || 0) + goldReward
-      };
-    }));
+    // Apply XP and gold rewards via handleGameUpdate so level-up check is triggered
+    handleGameUpdate({
+      xpChange: xpReward,
+      goldChange: goldReward
+    });
     
     // Show quest notification
     showQuestNotification({
@@ -2553,6 +2597,42 @@ const App: React.FC = () => {
       tagged.forEach(entry => {
         setDirtyEntities(prev => new Set([...prev, entry.id]));
       });
+  };
+
+  // Dungeon reward handler
+  const handleApplyDungeonRewards = (rewards: { gold?: number; xp?: number; items?: any[] }) => {
+    if (!currentCharacterId || !activeCharacter) return;
+    const tx = `dungeon_${uniqueId()}`;
+    handleGameUpdate({ transactionId: tx, goldChange: rewards.gold || 0, xpChange: rewards.xp || 0, newItems: rewards.items || [] });
+    if ((rewards.gold || 0) > 0 || (rewards.xp || 0) > 0) {
+      showToast(`Gained ${rewards.gold || 0} gold and ${rewards.xp || 0} XP`, 'success');
+    }
+    if (rewards.items && rewards.items.length) {
+      showToast(`Found: ${rewards.items.map(i => i.name).join(', ')}`, 'success');
+    }
+  };
+
+  const handleApplyDungeonBuff = (effect: any) => {
+    if (!currentCharacterId || !activeCharacter) return;
+    const tx = `dungeon_buff_${uniqueId()}`;
+    handleGameUpdate({ transactionId: tx, statusEffects: [effect] });
+    setStatusEffects(prev => [...prev, effect]);
+    showToast(`Buff applied: ${effect.name}`, 'success');
+  };
+
+
+  // Open dungeon modal from map or explicit action
+  const handleEnterDungeonFromMap = (locationName: string) => {
+    const normalized = (locationName || '').toLowerCase().trim();
+    const d = listDungeons().find(dd => (dd.location || '').toLowerCase() === normalized || (dd.name || '').toLowerCase() === normalized || (dd.name || '').toLowerCase().includes(normalized) || (dd.location || '').toLowerCase().includes(normalized));
+    if (!d) {
+      showToast('No dungeon found at this location.', 'warning');
+      return;
+    }
+    setDungeonId(d.id);
+    setDungeonOpen(true);
+    // Pause ambient music and narration to avoid overlap with the dungeon experience
+    audioService.pauseMusic();
   };
 
   // AI Game Master Integration
@@ -2824,25 +2904,26 @@ const App: React.FC = () => {
             setTimeout(() => showQuestNotification(notif), index * 300);
           });
           
-          // Apply accumulated quest rewards to character
-          if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
+          // Apply accumulated quest gold rewards directly (XP will be deferred to trigger level-up check)
+          if (totalGoldFromQuests > 0) {
             setCharacters(prev => prev.map(c => {
               if (c.id !== currentCharacterId) return c;
-              return {
-                ...c,
-                experience: (c.experience || 0) + totalXpFromQuests,
-                gold: (c.gold || 0) + totalGoldFromQuests
-              };
+              setDirtyEntities(d => new Set([...d, c.id]));
+              return { ...c, gold: (c.gold || 0) + totalGoldFromQuests };
             }));
-            // Log quest reward application
+          }
+          // Log quest reward application
+          if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
             console.log(`Quest rewards applied: +${totalXpFromQuests} XP, +${totalGoldFromQuests} gold`);
             // Show immediate toast summarizing quest rewards
-            if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
-              const parts: string[] = [];
-              if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
-              if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
-              showToast(parts.join('  '), 'success');
-            }
+            const parts: string[] = [];
+            if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
+            if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
+            showToast(parts.join('  '), 'success');
+          }
+          // Defer XP to section 6b by adding to xpChange (enables level-up check)
+          if (totalXpFromQuests > 0) {
+            updates = { ...updates, xpChange: (updates.xpChange || 0) + totalXpFromQuests };
           }
       }
 
@@ -3109,6 +3190,15 @@ const App: React.FC = () => {
           }));
       }
 
+      // 5d. New status effects to add (buffs/debuffs)
+      if (updates.statusEffects && updates.statusEffects.length) {
+        const normalized = updates.statusEffects.map((s: any) => ({ id: s.id || `status_${uniqueId()}`, ...s }));
+        setStatusEffects(prev => [...prev, ...normalized]);
+        normalized.forEach((effect: any) => {
+          showToast(effect.description || `Effect applied: ${effect.name}`, 'success');
+        });
+      }
+
       // 5c. Combat Start - Initialize turn-based combat
       if (updates.combatStart && updates.combatStart.enemies?.length) {
         const combatData = updates.combatStart;
@@ -3164,6 +3254,9 @@ const App: React.FC = () => {
                 archetype: c.archetype,
                 previousXP: c.experience || 0,
               });
+
+              // Show Skyrim-style level up notification
+              showLevelUpNotification(c.name, newLevel);
 
               // Informally record XP gain but do not auto-apply level or stat bonuses
               setSaveMessage(`🎉 ${c.name} earned enough experience to level up — confirm to apply.`);
@@ -4021,6 +4114,8 @@ const App: React.FC = () => {
                 journal={getCharacterJournal()}
                 story={getCharacterStory()}
                 onUpdateState={handleGameUpdate}
+                onEnterDungeon={handleEnterDungeonFromMap}
+                pauseChat={dungeonOpen}
                 chatFontSize={userSettings?.chatFontSize || 'medium'}
                 chatFontWeight={userSettings?.chatFontWeight || 'normal'}
                 onChatSettingsChange={async (settings) => {
@@ -4063,6 +4158,23 @@ const App: React.FC = () => {
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImport={handleImportComplete}
+        />
+
+        {/* Dungeon Modal */}
+        <DungeonModal
+          open={dungeonOpen}
+          dungeonId={dungeonId}
+          activeCharacterId={currentCharacterId}
+          onClose={(result) => {
+            setDungeonOpen(false);
+            setDungeonId(null);
+            if (result?.rewards) handleApplyDungeonRewards(result.rewards);
+            if (result?.cleared) {
+              showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: `${result.cleared ? 'You cleared the dungeon.' : ''}`, type: 'quest-completed' });
+            }
+          }}
+          onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
+          onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
         />
 
         {/* Combat Modal - Full screen overlay when combat is active */}
@@ -4259,6 +4371,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <ToastNotification messages={toastMessages} onClose={handleToastClose} />
         {/* Quest Notifications (Skyrim-style) */}
         <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
+        {/* Level Up Notifications (Skyrim-style) */}
+        <LevelUpNotificationOverlay notifications={levelUpNotifications} onDismiss={handleLevelUpNotificationDismiss} />
         {/* Update Notification */}
         <UpdateNotification position="bottom" />
 

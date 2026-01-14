@@ -340,6 +340,9 @@ export interface GameStateUpdate {
     source?: { id?: string; name?: string };
   }>;
 
+  // New status effects (buffs/debuffs) to add to player's active status effects
+  statusEffects?: StatusEffect[];
+
   // New locations discovered during gameplay (added to map)
   discoveredLocations?: Array<{
     name: string;
@@ -500,7 +503,7 @@ export interface CombatEffect {
   chance?: number; // 0-100
 }
 
-export type LootRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
+// LootRarity is defined once at line 169 - do not duplicate
 
 export interface CombatEnemy {
   id: string;
@@ -726,4 +729,80 @@ export interface SessionRecord {
   messageCount: number;
   summary: string;
   highlights: string[];
+}
+
+// ============================================================================
+// DUNGEON MINIGAME SYSTEM TYPES
+// ============================================================================
+
+export type DungeonNodeType = 'combat' | 'elite' | 'boss' | 'rest' | 'reward' | 'event' | 'empty' | 'start';
+
+export interface DungeonNodeReward {
+  gold?: number;
+  xp?: number;
+  items?: Array<{ name: string; type: string; description?: string; quantity: number; rarity?: LootRarity }>;
+  buff?: { name: string; stat: 'health' | 'magicka' | 'stamina' | 'damage' | 'armor'; value: number; duration: number };
+}
+
+export interface DungeonNode {
+  id: string;
+  type: DungeonNodeType;
+  name: string;
+  description?: string;
+  x: number; // For tree visualization (0-100)
+  y: number; // For tree visualization (0-100)
+  connections: string[]; // IDs of nodes this connects to (forward only)
+  // Combat node specific
+  enemies?: CombatEnemy[];
+  // Event node specific
+  eventText?: string;
+  eventChoices?: Array<{ label: string; outcome: 'reward' | 'damage' | 'nothing'; value?: number }>;
+  // Rewards for completing this node
+  rewards?: DungeonNodeReward;
+  // Rest node specific
+  restAmount?: { health?: number; magicka?: number; stamina?: number };
+  // Difficulty scaling
+  difficulty?: number; // 1-5, affects enemy scaling
+}
+
+export interface DungeonDefinition {
+  id: string;
+  name: string;
+  description: string;
+  location: string; // Map location name
+  difficulty: 'easy' | 'medium' | 'hard' | 'legendary';
+  recommendedLevel: number;
+  nodes: DungeonNode[];
+  startNodeId: string;
+  bossNodeId: string;
+  // Dungeon-wide rewards for full clear
+  completionRewards: DungeonNodeReward;
+  // Theming
+  theme: 'nordic_tomb' | 'dwemer_ruin' | 'vampire_lair' | 'bandit_hideout' | 'forsworn_camp' | 'dragon_lair' | 'daedric_shrine' | 'ice_cave' | 'mine' | 'fort';
+  ambientDescription?: string;
+}
+
+export interface DungeonState {
+  active: boolean;
+  dungeonId: string;
+  currentNodeId: string;
+  visitedNodes: string[];
+  completedNodes: string[]; // Nodes where combat/event was resolved
+  playerVitals: {
+    currentHealth: number;
+    currentMagicka: number;
+    currentStamina: number;
+  };
+  companionVitals: Record<string, { currentHealth: number; maxHealth: number }>;
+  collectedRewards: {
+    gold: number;
+    xp: number;
+    items: Array<{ name: string; type: string; description?: string; quantity: number }>;
+  };
+  activeBuffs: Array<{ name: string; stat: string; value: number; nodesRemaining: number }>;
+  startTime: number;
+  // Combat within dungeon
+  currentCombat?: CombatState;
+  // Result tracking
+  result?: 'in_progress' | 'cleared' | 'fled' | 'defeated';
 }

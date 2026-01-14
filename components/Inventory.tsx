@@ -13,6 +13,7 @@ import { EncumbranceIndicator } from './StatusIndicators';
 import { DropdownSelector, SortSelector } from './GameFeatures';
 import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
 import { resolvePotionEffect } from '../services/potionResolver';
+import { audioService } from '../services/audioService';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
 
@@ -198,15 +199,12 @@ const InventoryItemCard: React.FC<{
                           </div>
                         )}
                         {item.type === 'potion' && (() => {
-                          const potionEffect = resolvePotionEffect(item.name);
-                          if (potionEffect) {
+                          const potionEffect = resolvePotionEffect(item);
+                          if (potionEffect && potionEffect.stat && potionEffect.amount) {
                             const effects: string[] = [];
-                            if (potionEffect.healthRestore) effects.push(`+${potionEffect.healthRestore} HP`);
-                            if (potionEffect.magickaRestore) effects.push(`+${potionEffect.magickaRestore} MP`);
-                            if (potionEffect.staminaRestore) effects.push(`+${potionEffect.staminaRestore} SP`);
-                            if (potionEffect.hungerReduction) effects.push(`-${potionEffect.hungerReduction} hunger`);
-                            if (potionEffect.thirstReduction) effects.push(`-${potionEffect.thirstReduction} thirst`);
-                            if (potionEffect.fatigueReduction) effects.push(`-${potionEffect.fatigueReduction} fatigue`);
+                            if (potionEffect.stat === 'health') effects.push(`+${potionEffect.amount} HP`);
+                            if (potionEffect.stat === 'magicka') effects.push(`+${potionEffect.amount} MP`);
+                            if (potionEffect.stat === 'stamina') effects.push(`+${potionEffect.amount} SP`);
                             return effects.length > 0 ? (
                               <div className="mt-1 text-xs text-purple-400 flex items-center gap-1">
                                 <Sparkles size={12} /> {effects.join(', ')}
@@ -476,6 +474,9 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
       return i;
     });
 
+    // Play equip sound
+    audioService.playSoundEffect('item_equip');
+
     setItems(updatedItems);
     setEquipModalOpen(false);
     setSelectedSlot(null);
@@ -483,6 +484,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
 
   // Unequip an item
   const unequipItem = (item: InventoryItem) => {
+    // Play unequip sound
+    audioService.playSoundEffect('item_unequip');
     updateItem({ ...item, equipped: false, slot: undefined, equippedBy: null });
   };
 

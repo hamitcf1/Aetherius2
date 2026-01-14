@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, memo } from 'react';
+import React, { useEffect, useMemo, memo, useState, useCallback, useRef } from 'react';
 
 /**
- * Clean Weather Effect using CSS animations only.
+ * Clean Weather Effect with optional mouse interaction.
  * - GPU-accelerated transforms
  * - No visual bugs
  * - Configurable intensity
  * - Theme-aware (snow for most themes, blood for Dark Brotherhood)
  * - Supports snow, rain, and blood (Dark Brotherhood) effects
+ * - Mouse interaction: particles repelled within cursor radius
  */
 
 export type WeatherEffectType = 'snow' | 'rain' | 'sandstorm' | 'none';
@@ -35,6 +36,18 @@ interface Particle {
   drift: number;
 }
 
+// Interactive particle with position and velocity for mouse physics
+interface InteractiveParticle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  baseVy: number;
+  size: number;
+  opacity: number;
+}
+
 // Generate particle data
 const generateParticles = (count: number): Particle[] => {
   return Array.from({ length: count }, (_, i) => ({
@@ -45,6 +58,26 @@ const generateParticles = (count: number): Particle[] => {
     duration: 8 + Math.random() * 12,
     opacity: 0.5 + Math.random() * 0.5,
     drift: -15 + Math.random() * 30,
+  }));
+};
+
+// Generate interactive particles for mouse physics
+const generateInteractiveParticles = (count: number, isRain: boolean = false): InteractiveParticle[] => {
+  // Rain falls faster than snow
+  const baseSpeed = isRain ? 4 : 1;
+  const speedVariance = isRain ? 3 : 2;
+  const sizeBase = isRain ? 1 : 2;
+  const sizeVariance = isRain ? 2 : 4;
+  
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight - window.innerHeight,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: baseSpeed + Math.random() * speedVariance,
+    baseVy: baseSpeed + Math.random() * speedVariance,
+    size: sizeBase + Math.random() * sizeVariance,
+    opacity: 0.5 + Math.random() * 0.5,
   }));
 };
 
@@ -295,8 +328,149 @@ interface SnowEffectProps {
   weatherType?: WeatherEffectType;
 }
 
+// Interactive Snow Effect with mouse physics
+const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: ParticleType }> = memo(({ particleCount, particleType }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<InteractiveParticle[]>([]);
+  const mouseRef = useRef({ x: -1000, y: -1000 });
+  const animationRef = useRef<number | null>(null);
+  
+  const MOUSE_RADIUS = 100;
+  const REPEL_FORCE = 3;
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    
+    // Initialize particles (rain falls faster)
+    particlesRef.current = generateInteractiveParticles(particleCount, particleType === 'rain');
+    
+    // Mouse tracking
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    // Get particle color based on type
+    const getParticleColor = (opacity: number) => {
+      switch (particleType) {
+        case 'blood':
+          return `rgba(220, 20, 60, ${opacity})`;
+        case 'rain':
+          return `rgba(174, 194, 224, ${opacity})`;
+        case 'sand':
+          return `rgba(194, 154, 108, ${opacity})`;
+        default:
+          return `rgba(255, 255, 255, ${opacity})`;
+      }
+    };
+    
+    // Animation loop
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      particlesRef.current.forEach(p => {
+        // Calculate distance from mouse
+        const dx = p.x - mouseRef.current.x;
+        const dy = p.y - mouseRef.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Apply repel force if within radius
+        if (dist < MOUSE_RADIUS && dist > 0) {
+          const force = (MOUSE_RADIUS - dist) / MOUSE_RADIUS * REPEL_FORCE;
+          p.vx += (dx / dist) * force;
+          p.vy += (dy / dist) * force;
+        }
+        
+        // Apply friction and gravity
+        p.vx *= 0.98;
+        p.vy = p.vy * 0.98 + 0.1;
+        
+        // Update position
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        // Wrap around screen
+        if (p.y > canvas.height + 10) {
+          p.y = -10;
+          p.x = Math.random() * canvas.width;
+          p.vx = (Math.random() - 0.5) * 0.5;
+          p.vy = p.baseVy;
+        }
+        if (p.x < -10) p.x = canvas.width + 10;
+        if (p.x > canvas.width + 10) p.x = -10;
+        
+        // Draw particle (rain is elongated, others are round)
+        if (particleType === 'rain') {
+          // Rain drops are elongated streaks
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x, p.y + p.size * 8);
+          ctx.strokeStyle = getParticleColor(p.opacity);
+          ctx.lineWidth = p.size / 2;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+          ctx.fillStyle = getParticleColor(p.opacity);
+          ctx.fill();
+          
+          // Add glow effect
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = getParticleColor(p.opacity * 0.3);
+          ctx.fill();
+        }
+      });
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    animate();
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [particleCount, particleType]);
+  
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex: 9999,
+      }}
+      aria-hidden="true"
+    />
+  );
+});
+
+InteractiveSnowEffect.displayName = 'InteractiveSnowEffect';
+
 const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherType = 'snow' }) => {
   const intensity = settings?.intensity || 'normal';
+  const enableMouseInteraction = settings?.enableMouseInteraction ?? false;
   const baseParticleCount = INTENSITY_MAP[intensity];
   const isBloodEffect = theme === 'dark_brotherhood';
   
@@ -313,7 +487,12 @@ const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherTy
       ? Math.floor(baseParticleCount * 2)
       : baseParticleCount;
   
-  // Generate particles based on type and intensity
+  // Use interactive canvas-based effect if mouse interaction is enabled (not for sandstorm)
+  if (enableMouseInteraction && particleType !== 'sand') {
+    return <InteractiveSnowEffect particleCount={particleCount} particleType={particleType} />;
+  }
+  
+  // Generate particles based on type and intensity (CSS-based)
   const particles = useMemo(() => {
     if (particleType === 'rain') return generateRaindrops(particleCount);
     if (particleType === 'sand') return generateSandParticles(particleCount);

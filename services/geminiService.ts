@@ -1050,7 +1050,7 @@ export const generateCharacterProfile = async (
 
 export const chatWithScribe = async (history: {role: 'user' | 'model', parts: [{ text: string }]}[], message: string) => {
     // chatWithScribe uses fallback but keeps chat context, so we try models sequentially
-    const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash'];
+    const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     
     for (const model of modelsToTry) {
         try {
@@ -1072,7 +1072,7 @@ export const chatWithScribe = async (history: {role: 'user' | 'model', parts: [{
             console.warn(`[chatWithScribe] Model ${model} failed:`, error?.message);
             if (isQuotaError(error)) {
                 const apiKey = getAvailableApiKey(isGemmaModel(model));
-                if (apiKey) markKeyExhausted(apiKey);
+                if (apiKey) markKeyCooldown(apiKey, DEFAULT_KEY_COOLDOWN_MS, 'quota');
             }
             continue;
         }
@@ -1082,7 +1082,7 @@ export const chatWithScribe = async (history: {role: 'user' | 'model', parts: [{
 };
 
 // Chat with a companion (in-character reply)
-export const chatWithCompanion = async (companion: { name: string; personality?: string; mood?: string }, message: string) => {
+export const chatWithCompanion = async (companion: { name: string; personality?: string; mood?: string; backstory?: string }, message: string) => {
   const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
   const systemInstruction = `You are ${companion.name}, a companion to the player in a Skyrim RPG. ${companion.backstory ? `Backstory: ${companion.backstory}.` : ''} Reply in-character as ${companion.name}. When the player mentions or asks about being your companion, acknowledge that you are the player's companion and briefly reference your backstory if available. Keep responses short, concise, and in the companion's voice. If the companion has a personality, reflect it briefly (e.g., loyal, gruff, cheerful). Do NOT provide JSON — return plain text only. Avoid suggesting mechanical changes or making worldstate modifications.`;
 
@@ -1098,7 +1098,7 @@ export const chatWithCompanion = async (companion: { name: string; personality?:
       console.warn(`[chatWithCompanion] ${model} failed:`, err?.message);
       if (isQuotaError(err)) {
         const apiKey = getAvailableApiKey(isGemmaModel(model));
-        if (apiKey) markKeyExhausted(apiKey);
+        if (apiKey) markKeyCooldown(apiKey, DEFAULT_KEY_COOLDOWN_MS, 'quota');
       }
       continue;
     }
