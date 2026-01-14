@@ -148,7 +148,7 @@ const SURVIVAL_THRESHOLDS = {
   warn: 60,
   severe: 80,
   critical: 100,
-  collapseSum: 160,
+  collapseSum: 180, // Increased from 160 - only force rest when truly exhausted
 } as const;
 
 const clampNeedValue = (n: number) => clamp(Number(n || 0), 0, 100);
@@ -449,7 +449,10 @@ const App: React.FC = () => {
   // Use ref to avoid stale closure issues when checking within handleGameUpdate
   const lastRestTimestampRef = useRef<number>(0);
   const [lastRestTimestamp, setLastRestTimestamp] = useState<number>(0);
-  const REST_COOLDOWN_MS = 10000; // 10 seconds after resting before forced rest can trigger again
+  const REST_COOLDOWN_MS = 30000; // 30 seconds after resting before forced rest can trigger again
+  // Track last forced rest trigger to prevent spam
+  const lastForcedRestRef = useRef<number>(0);
+  const FORCED_REST_COOLDOWN_MS = 60000; // 60 seconds between forced rest triggers
   // Optional preview options when opening the Bonfire (prefill type/hours)
   const [restPreviewOptions, setRestPreviewOptions] = useState<RestOptions | null>(null);
 
@@ -2477,6 +2480,69 @@ const App: React.FC = () => {
     }
   };
 
+  // Handle quest completion from QuestLog (manual completion)
+  const handleQuestComplete = (quest: any, xpReward: number, goldReward: number) => {
+    if (!currentCharacterId || !activeCharacter) return;
+    
+    // Apply XP and gold rewards
+    setCharacters(prev => prev.map(c => {
+      if (c.id !== currentCharacterId) return c;
+      setDirtyEntities(d => new Set([...d, c.id]));
+      return {
+        ...c,
+        experience: (c.experience || 0) + xpReward,
+        gold: (c.gold || 0) + goldReward
+      };
+    }));
+    
+    // Show quest notification
+    showQuestNotification({
+      type: 'quest-completed',
+      questTitle: quest.title,
+      xpAwarded: xpReward,
+      goldAwarded: goldReward,
+    });
+    
+    // Sometimes give item rewards based on quest difficulty and player level
+    const shouldGiveItem = Math.random() < 0.35; // 35% chance for item reward
+    if (shouldGiveItem && quest.difficulty) {
+      const playerLevel = activeCharacter.level || 1;
+      const difficultyMultiplier = { trivial: 0, easy: 0.2, medium: 0.4, hard: 0.6, legendary: 0.8 }[quest.difficulty as string] || 0.3;
+      const itemChance = difficultyMultiplier + (playerLevel * 0.02);
+      
+      if (Math.random() < itemChance) {
+        // Determine rarity based on level and difficulty
+        let rarity: 'common' | 'uncommon' | 'rare' | 'epic' = 'common';
+        const rarityRoll = Math.random();
+        if (playerLevel >= 20 && rarityRoll > 0.7) rarity = 'epic';
+        else if (playerLevel >= 10 && rarityRoll > 0.5) rarity = 'rare';
+        else if (playerLevel >= 5 && rarityRoll > 0.3) rarity = 'uncommon';
+        
+        // Generate a reward item
+        const itemTypes = ['weapon', 'apparel'];
+        const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+        const weapons = ['Iron Sword', 'Steel Sword', 'Dwarven Mace', 'Orcish Axe', 'Glass Dagger', 'Ebony Blade'];
+        const apparel = ['Iron Helmet', 'Steel Armor', 'Leather Boots', 'Hide Gauntlets', 'Glass Shield', 'Ebony Armor'];
+        
+        const itemList = itemType === 'weapon' ? weapons : apparel;
+        const itemIndex = Math.min(Math.floor(playerLevel / 5), itemList.length - 1);
+        const itemName = itemList[itemIndex];
+        
+        const rewardItem = {
+          name: itemName,
+          type: itemType,
+          description: `A reward for completing "${quest.title}"`,
+          quantity: 1,
+          rarity,
+          equipped: false,
+        };
+        
+        handleGameUpdate({ newItems: [rewardItem as any] });
+        showToast(`Quest reward: ${rarity} ${itemName}!`, 'success');
+      }
+    }
+  };
+
   const getCharacterStory = () => storyChapters.filter(s => s.characterId === currentCharacterId);
   
   const getCharacterJournal = () => journalEntries.filter((j: any) => j.characterId === currentCharacterId);
@@ -2594,12 +2660,18 @@ const App: React.FC = () => {
           });
 
           // Forced rest: auto-open Bonfire to compel a rest choice.
+          // Only trigger for CRITICAL fatigue (100), not for hunger/thirst combo
           // Don't trigger if we just rested (cooldown) or if bonfire is already open
           // Also skip if this update itself is a rest action (negative fatigue change)
           const restCooldownActive = Date.now() - lastRestTimestampRef.current < REST_COOLDOWN_MS;
+          const forcedRestCooldownActive = Date.now() - lastForcedRestRef.current < FORCED_REST_COOLDOWN_MS;
           const isRestAction = Number((explicitNeedsChange as any).fatigue || 0) < 0;
-          if (forcedRest && !restOpen && !restCooldownActive && !isRestAction) {
+          // Only force rest when fatigue is critical (100), not based on hunger+thirst
+          const shouldForceRest = nextNeedsSnap.fatigue >= SURVIVAL_THRESHOLDS.critical;
+          
+          if (shouldForceRest && !restOpen && !restCooldownActive && !forcedRestCooldownActive && !isRestAction) {
             try {
+              lastForcedRestRef.current = Date.now();
               const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
               openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });
               showToast('You are collapsing from exhaustion. Rest is mandatory.', 'warning');
@@ -2625,22 +2697,25 @@ const App: React.FC = () => {
           const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
           const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
 
+          // Round to 1 decimal place to avoid floating point precision issues
+          const roundNeed = (n: number) => Math.round(n * 10) / 10;
+          
           const nextNeeds = {
-            hunger: clamp(
+            hunger: roundNeed(clamp(
               Number(currentNeeds.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
               0,
               100
-            ),
-            thirst: clamp(
+            )),
+            thirst: roundNeed(clamp(
               Number(currentNeeds.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
               0,
               100
-            ),
-            fatigue: clamp(
+            )),
+            fatigue: roundNeed(clamp(
               Number(currentNeeds.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
               0,
               100
-            ),
+            )),
           };
 
           setDirtyEntities(d => new Set([...d, c.id]));
@@ -3912,7 +3987,12 @@ const App: React.FC = () => {
               />
             )}
             {activeTab === TABS.QUESTS && (
-              <QuestLog quests={getCharacterQuests()} setQuests={setCharacterQuests} onDelete={handleDeleteQuest} />
+              <QuestLog 
+                quests={getCharacterQuests()} 
+                setQuests={setCharacterQuests} 
+                onDelete={handleDeleteQuest}
+                onQuestComplete={handleQuestComplete}
+              />
             )}
             {activeTab === TABS.STORY && (
               <StoryLog 

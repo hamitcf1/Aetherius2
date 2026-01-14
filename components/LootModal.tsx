@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import RarityBadge from './RarityBadge';
 import { CombatState } from '../types';
 
@@ -11,6 +11,16 @@ interface LootModalProps {
 export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onConfirm }) => {
   const pending = combatState.pendingLoot || [];
   const [selected, setSelected] = useState<Record<string, number>>({});
+
+  // ESC key handler
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onCancel();
+  }, [onCancel]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const toggleItem = (name: string, qty = 1) => {
     setSelected(prev => {
@@ -38,8 +48,11 @@ export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onC
   const gold = combatState.pendingRewards?.gold || 0;
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm">
-      <div className="bg-stone-900 rounded-lg p-4 w-full max-w-xl border border-skyrim-border">
+    <div 
+      className="fixed inset-0 z-60 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="bg-stone-900 rounded-lg p-4 w-full max-w-xl border border-skyrim-border" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-amber-100 mb-2">Loot Phase</h3>
         <p className="text-sm text-stone-400 mb-1">Select items to loot from defeated enemies, or skip looting entirely.</p>
         <div className="flex gap-3 items-center text-sm text-amber-200 mb-3">

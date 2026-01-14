@@ -9,11 +9,12 @@ interface QuestLogProps {
   quests: CustomQuest[];
   setQuests: (quests: CustomQuest[]) => void;
   onDelete?: (questId: string) => void;
+  onQuestComplete?: (quest: CustomQuest, xp: number, gold: number) => void;
 }
 
 type SortOption = 'newest' | 'oldest' | 'title_az' | 'title_za';
 
-export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete }) => {
+export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete, onQuestComplete }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -118,6 +119,8 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete 
   };
 
   const updateStatus = (id: string, status: 'active' | 'completed' | 'failed') => {
+      const questToUpdate = quests.find(q => q.id === id);
+      
       setQuests(quests.map(q => {
           if (q.id === id) {
               // If quest is completed, mark all objectives as completed too
@@ -133,6 +136,13 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete 
           }
           return q;
       }));
+      
+      // If quest was completed, grant rewards
+      if (status === 'completed' && questToUpdate && onQuestComplete) {
+          const xpReward = questToUpdate.xpReward ?? 50; // Default 50 XP if not set
+          const goldReward = questToUpdate.goldReward ?? 100; // Default 100 gold if not set
+          onQuestComplete(questToUpdate, xpReward, goldReward);
+      }
   };
 
   const addObjective = (questId: string, text: string) => {

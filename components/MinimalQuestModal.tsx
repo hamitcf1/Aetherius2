@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { CustomQuest } from '../types';
 import { Flag, MapPin, Clock, CheckCircle, X } from 'lucide-react';
 
@@ -9,10 +9,24 @@ interface MinimalQuestModalProps {
 }
 
 export const MinimalQuestModal: React.FC<MinimalQuestModalProps> = ({ quests, open, onClose }) => {
+  // ESC key handler
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, handleKeyDown]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm">
-      <div className="bg-skyrim-paper border border-skyrim-gold/40 rounded-lg shadow-2xl w-full max-w-md p-4 relative animate-in zoom-in-95 duration-200">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-skyrim-paper border border-skyrim-gold/40 rounded-lg shadow-2xl w-full max-w-md p-4 relative animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onClose}
           className="absolute top-2 right-2 text-skyrim-text hover:text-red-400 transition-colors"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Spell, getAllSpells, getLearnedSpellIds, learnSpell, getSpellById, isSpellVariantUnlocked } from '../services/spells';
 import { Character } from '../types';
 import { Zap, Book, Check } from 'lucide-react';
@@ -13,6 +13,16 @@ interface SpellsModalProps {
 export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, onLearn }) => {
   const [all, setAll] = useState<Spell[]>([]);
   const [learned, setLearned] = useState<string[]>([]);
+
+  // ESC key handler
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   useEffect(() => {
     const base = getAllSpells();
@@ -59,8 +69,11 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm p-4">
-      <div className="bg-skyrim-paper border border-skyrim-gold rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-skyrim-paper border border-skyrim-gold rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-serif text-skyrim-gold flex items-center gap-2"><Zap /> Spells</h3>
           <button title="Close the spells window" onClick={onClose} className="px-2 py-1 bg-gray-700 rounded text-white">Close</button>

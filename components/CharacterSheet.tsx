@@ -240,7 +240,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
     const dayNumber = Math.max(1, Number(time.day || 1));
     const fmtTime = `${String(Math.max(0, Math.min(23, Number(time.hour || 0)))).padStart(2, '0')}:${String(Math.max(0, Math.min(59, Number(time.minute || 0)))).padStart(2, '0')}`;
     const fmtDate = formatSkyrimDateShort(dayNumber);
-    const clampNeed = (n: any) => Math.max(0, Math.min(100, Number(n || 0)));
+    // Round needs to integer for display (fixes floating point precision issues)
+    const clampNeed = (n: any) => Math.round(Math.max(0, Math.min(100, Number(n || 0))));
 
   const addMilestone = () => {
       if (!newMilestone.trim()) return;
