@@ -164,6 +164,11 @@ export async function speak(
         body: JSON.stringify({ text: truncatedText, role })
       });
 
+      if (response.status === 404) {
+        // API not available (local dev without wrangler)
+        throw new Error('Voice API not available. Run "npm run dev:full" for TTS support.');
+      }
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || `TTS failed: ${response.status}`);

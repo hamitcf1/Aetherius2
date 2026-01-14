@@ -27,14 +27,17 @@
     "jsdom": "^27.4.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "wrangler": "^4.59.1"
   },
   "scripts": {
     "dev": "vite",
+    "dev:full": "npm run build && wrangler pages dev dist --compatibility-date=2024-01-01",
     "migrate:potions": "node scripts/migrate_potions.js",
     "build": "vite build",
     "preview": "vite preview",
     "simulate:adventure": "node scripts/simulate_adventure_sanitize.js",
-    "test": "vitest"
+    "test": "vitest",
+    "deploy": "npm run build && wrangler pages deploy dist"
   }
 }
