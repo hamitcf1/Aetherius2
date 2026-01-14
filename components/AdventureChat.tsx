@@ -18,7 +18,7 @@ import { getSimulationManager, processAISimulationUpdate, SimulationStateManager
 import { subscribeToCombatResolved } from '../services/events';
 import { getTransactionLedger, filterDuplicateTransactions } from '../services/transactionLedger';
 import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
-import { speak, speakSample, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, type VoiceRole, type VoiceSettings } from '../services/ttsService';
+import { speak, speakSample, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, getVoicesForLanguage, type VoiceRole, type VoiceSettings } from '../services/ttsService';
 import { useLocalization } from '../services/localization';
 
 interface ChatMessage {
@@ -659,9 +659,10 @@ const VoiceStyleSelector: React.FC<{
   gender: 'male' | 'female';
   currentVoice: string;
   onSelect: (voice: string) => void;
-}> = ({ gender, currentVoice, onSelect }) => {
+  language?: string;
+}> = ({ gender, currentVoice, onSelect, language = 'en' }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const voices = VOICE_OPTIONS[gender] || [];
+  const voices = getVoicesForLanguage(language)[gender] || [];
   const current = voices.find(v => v.name === currentVoice);
 
   return (
@@ -670,7 +671,7 @@ const VoiceStyleSelector: React.FC<{
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold transition-colors"
       >
-        <span className="flex-1 text-left truncate">{current?.label || 'Default'}</span>
+        <span className="flex-1 text-left truncate">{current?.label || 'Default (Auto)'}</span>
         <ChevronDown size={12} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       
@@ -680,7 +681,7 @@ const VoiceStyleSelector: React.FC<{
             onClick={() => { onSelect(''); setIsOpen(false); }}
             className={`w-full px-2 py-1.5 text-left text-xs flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${!currentVoice ? 'text-skyrim-gold' : 'text-skyrim-text'}`}
           >
-            Default
+            Default (Auto)
             {!currentVoice && <span className="text-skyrim-gold">✓</span>}
           </button>
           {voices.map(voice => (
@@ -2528,6 +2529,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               <VoiceStyleSelector
                 gender={voiceSettings.gender}
                 currentVoice={voiceSettings.voiceName || ''}
+                language={language}
                 onSelect={(voiceName) => {
                   const newSettings = { ...voiceSettings, voiceName: voiceName || undefined };
                   setVoiceSettings(newSettings);

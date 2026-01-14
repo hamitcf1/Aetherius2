@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     INITIAL_CHARACTER_TEMPLATE, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
     DifficultyLevel, WeatherState, StatusEffect, Companion
@@ -88,6 +88,7 @@ import {
   // Companions & Loadouts
   loadUserCompanions,
   saveUserCompanions,
+  deleteUserCompanions,
   loadUserLoadouts,
   saveUserLoadout,
   deleteUserLoadout,
@@ -445,6 +446,8 @@ const App: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [restOpen, setRestOpen] = useState(false);
   // Track last rest time to prevent immediate re-triggering of forced rest
+  // Use ref to avoid stale closure issues when checking within handleGameUpdate
+  const lastRestTimestampRef = useRef<number>(0);
   const [lastRestTimestamp, setLastRestTimestamp] = useState<number>(0);
   const REST_COOLDOWN_MS = 10000; // 10 seconds after resting before forced rest can trigger again
   // Optional preview options when opening the Bonfire (prefill type/hours)
@@ -478,7 +481,7 @@ const App: React.FC = () => {
     setQuestNotifications(prev => [...prev.slice(-2), { ...notification, id }]);
     // Play quest complete sound for completed quests
     if (notification.type === 'quest-completed') {
-      audioService.playSfx('quest_complete').catch(() => {});
+      audioService.playSoundEffect('quest_complete');
     }
   }, []);
 
@@ -1909,7 +1912,10 @@ const App: React.FC = () => {
     setRestOpen(false);
     setRestPreviewOptions(null);
     // Mark that we just rested to prevent immediate re-triggering of forced rest
-    setLastRestTimestamp(Date.now());
+    // Update both the ref (for immediate checks) and state (for re-renders)
+    const now = Date.now();
+    lastRestTimestampRef.current = now;
+    setLastRestTimestamp(now);
 
     // Calculate fatigue reduction based on rest type
     let fatigueReduction = 15; // outside (poor rest)
@@ -2589,8 +2595,10 @@ const App: React.FC = () => {
 
           // Forced rest: auto-open Bonfire to compel a rest choice.
           // Don't trigger if we just rested (cooldown) or if bonfire is already open
-          const restCooldownActive = Date.now() - lastRestTimestamp < REST_COOLDOWN_MS;
-          if (forcedRest && !restOpen && !restCooldownActive) {
+          // Also skip if this update itself is a rest action (negative fatigue change)
+          const restCooldownActive = Date.now() - lastRestTimestampRef.current < REST_COOLDOWN_MS;
+          const isRestAction = Number((explicitNeedsChange as any).fatigue || 0) < 0;
+          if (forcedRest && !restOpen && !restCooldownActive && !isRestAction) {
             try {
               const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
               openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });
@@ -4154,7 +4162,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 
                 // Apply updates and additions
                 if (toUpdate.length > 0) {
-                  handleGameUpdate({ updatedItems: toUpdate });
+                  handleGameUpdate({ updatedItems: toUpdate } as any);
                 }
                 if (toAdd.length > 0) {
                   handleGameUpdate({ newItems: toAdd as any });
