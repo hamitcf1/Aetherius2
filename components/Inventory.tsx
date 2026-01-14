@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, EquipmentSlot } from '../types';
-import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowDownToLine as ArrowDownToLineAlt, ArrowUpFromLine as ArrowUpFromLineAlt, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff } from 'lucide-react';
+import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowDownToLine as ArrowDownToLineAlt, ArrowUpFromLine as ArrowUpFromLineAlt, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff, Heart, Zap, Sparkles } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
@@ -11,6 +11,8 @@ import { useAppContext } from '../AppContext';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { EncumbranceIndicator } from './StatusIndicators';
 import { DropdownSelector, SortSelector } from './GameFeatures';
+import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
+import { resolvePotionEffect } from '../services/potionResolver';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
 
@@ -183,6 +185,35 @@ const InventoryItemCard: React.FC<{
                               </span>
                             </div>
                           );
+                        })()}
+                        {/* Consumable effects display */}
+                        {item.type === 'food' && (
+                          <div className="mt-1 text-xs text-green-400 flex items-center gap-1">
+                            <Apple size={12} /> {getFoodNutritionDisplay(item.name)}
+                          </div>
+                        )}
+                        {item.type === 'drink' && (
+                          <div className="mt-1 text-xs text-blue-400 flex items-center gap-1">
+                            <Droplets size={12} /> {getDrinkNutritionDisplay(item.name)}
+                          </div>
+                        )}
+                        {item.type === 'potion' && (() => {
+                          const potionEffect = resolvePotionEffect(item.name);
+                          if (potionEffect) {
+                            const effects: string[] = [];
+                            if (potionEffect.healthRestore) effects.push(`+${potionEffect.healthRestore} HP`);
+                            if (potionEffect.magickaRestore) effects.push(`+${potionEffect.magickaRestore} MP`);
+                            if (potionEffect.staminaRestore) effects.push(`+${potionEffect.staminaRestore} SP`);
+                            if (potionEffect.hungerReduction) effects.push(`-${potionEffect.hungerReduction} hunger`);
+                            if (potionEffect.thirstReduction) effects.push(`-${potionEffect.thirstReduction} thirst`);
+                            if (potionEffect.fatigueReduction) effects.push(`-${potionEffect.fatigueReduction} fatigue`);
+                            return effects.length > 0 ? (
+                              <div className="mt-1 text-xs text-purple-400 flex items-center gap-1">
+                                <Sparkles size={12} /> {effects.join(', ')}
+                              </div>
+                            ) : null;
+                          }
+                          return null;
                         })()}
                         <div className="flex gap-2 mt-2 flex-wrap">
                             {canEquip && (

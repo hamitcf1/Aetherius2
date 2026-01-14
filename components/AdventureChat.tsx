@@ -50,6 +50,33 @@ interface AdventureChatProps {
 
 const SYSTEM_PROMPT = `You are an immersive Game Master (GM) for a text-based Skyrim adventure. You are strictly a NARRATOR: describe scenes, NPCs, outcomes, and offer choices — but DO NOT make or apply mechanical changes. The game ENGINE is the only authority that applies items, gold, experience, potions, or stat changes. Adventure AI RESPONSES MUST BE NARRATIVE-ONLY. The player controls their character's actions.
 
+=== STARTING ADVENTURE & QUESTS (CRITICAL FOR NEW GAMES) ===
+
+IF THIS IS THE FIRST MESSAGE (no adventure history):
+1. Create an IMMEDIATE compelling hook - the player should start with action or mystery
+2. ALWAYS include a starting quest in newQuests with proper rewards
+3. Introduce an NPC who gives context and direction
+4. The opening should match the character's archetype (warrior = combat, thief = heist, mage = mystery)
+
+MAIN QUEST LINE (Every character should have one):
+If the character has NO main quests, introduce one organically:
+- Tie it to the character's background/archetype
+- Main quests should have multiple stages (objectives)
+- Main quest rewards: xpReward: 100-500, goldReward: 200-1000
+- Mark as questType: "main"
+
+QUEST REWARDS (MANDATORY):
+ALL quests MUST have xpReward and goldReward:
+- Trivial quest: xpReward: 15-25, goldReward: 25-50
+- Easy quest: xpReward: 30-50, goldReward: 50-150
+- Medium quest: xpReward: 50-100, goldReward: 100-300
+- Hard quest: xpReward: 100-200, goldReward: 250-500
+- Legendary quest: xpReward: 200-500, goldReward: 500-2000
+
+WHEN QUEST IS COMPLETED:
+- Include xpAwarded and goldAwarded in updateQuests
+- Example: { "title": "Quest Name", "status": "completed", "xpAwarded": 75, "goldAwarded": 200 }
+
 === GAMEPLAY CONSISTENCY ENFORCEMENT (CRITICAL - HIGHEST PRIORITY) ===
 
 You MUST strictly follow these rules. They override ALL other instructions.
@@ -444,9 +471,10 @@ Return ONLY a JSON object:
   "currentLocation": "Location name if the player moved to a new location (e.g., Whiterun, Riverwood, etc.)",
   "newItems": [{ "name": "Item", "type": "weapon|apparel|potion|misc|key|food|drink|camping|ingredient", "description": "...", "quantity": 1, "armor": 0, "damage": 0, "slot": "head|chest|hands|feet|weapon|offhand|ring|necklace" }],
   "removedItems": [{ "name": "Item", "quantity": 1 }],
-  "newQuests": [{ "title": "Quest", "description": "...", "location": "...", "dueDate": "...", "objectives": [{ "description": "...", "completed": false }] }],
-  "updateQuests": [{ "title": "Quest Title", "status": "completed" }],
+  "newQuests": [{ "title": "Quest", "description": "...", "location": "...", "dueDate": "...", "objectives": [{ "description": "...", "completed": false }], "questType": "main|side|misc|bounty", "difficulty": "easy|medium|hard", "xpReward": 50, "goldReward": 100 }],
+  "updateQuests": [{ "title": "Quest Title", "status": "completed", "xpAwarded": 50, "goldAwarded": 100 }],
   "goldChange": 0,
+  "xpChange": 0,
   "transactionId": "optional_unique_id_for_purchases",
   "statUpdates": {},
   "timeAdvanceMinutes": 0,
@@ -1440,12 +1468,125 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         setSimulationWarnings(prev => [...prev, 'Adventure response contained mechanical details which were removed to preserve engine authority.']);
       }
 
+      // =====================================================================
+      // GAME_SYSTEM_CHANGES enforcement (engine-side augmentation)
+      // - Objective & destination clarity formatting
+      // - Long travel must produce at least one event/decision with state impact
+      // =====================================================================
+      const computePrimaryObjectiveStatus = (loc?: string): string => {
+        const active = (quests || []).filter(q => q.status === 'active');
+        if (!active.length) return 'Objective status: none';
+
+        const primary = active.find(q => q.questType === 'main') || active[0];
+        const objectives = primary.objectives || [];
+        const completedCount = objectives.filter(o => o.completed).length;
+        const allCompleted = objectives.length > 0 && completedCount === objectives.length;
+        const anyCompleted = completedCount > 0;
+        const isLocated = Boolean(primary.location && loc && String(loc).toLowerCase().includes(String(primary.location).toLowerCase()));
+
+        let state: 'not_started' | 'in_progress' | 'located' | 'completed' | 'failed' = 'not_started';
+        if (primary.status === 'failed') state = 'failed';
+        else if (primary.status === 'completed' || allCompleted) state = 'completed';
+        else if (isLocated) state = 'located';
+        else if (anyCompleted) state = 'in_progress';
+
+        return `Objective status: ${state} — ${primary.title}`;
+      };
+
+      const withMandatoryLocationBlock = (base: string, loc?: string): string => {
+        if (!loc) return base;
+        const block = `Region reached: ${loc}\n${computePrimaryObjectiveStatus(loc)}`;
+        // Avoid duplicating if the model already complied.
+        if ((base || '').includes('Region reached:') && (base || '').includes('Objective status:')) return base;
+        return `${(base || '').trim()}\n\n${block}`.trim();
+      };
+
+      const makeTravelEventVignette = (toLoc: string): { text: string; needsDelta: Partial<{ hunger: number; thirst: number; fatigue: number }> } => {
+        const roll = Math.random();
+        if (roll < 0.33) {
+          return {
+            text: `*On the road to ${toLoc}, the weather turns against you.* A bitter gust drives grit into your eyes and forces you to pick your footing with care. You press on, but it costs you more than time.`,
+            needsDelta: { fatigue: 2, thirst: 1 }
+          };
+        }
+        if (roll < 0.66) {
+          return {
+            text: `*The long walk to ${toLoc} is not empty.* You spot fresh tracks crossing the path and a half-crushed bundle of dried grass—sign of someone passing recently. You can follow the trail, or keep your pace and ignore it.`,
+            needsDelta: { fatigue: 2 }
+          };
+        }
+        return {
+          text: `*Hours of travel demand their due.* Your shoulders ache beneath your pack as you near ${toLoc}, and you feel the thin edge of hunger and thirst creeping in.`,
+          needsDelta: { hunger: 1, thirst: 1, fatigue: 1 }
+        };
+      };
+
+      const locationChanged = Boolean(result.currentLocation && result.currentLocation !== currentLocation);
+      const travelMinutes = Number(result.timeAdvanceMinutes || 0);
+      const mediumOrLongTravel = travelMinutes >= 30 && locationChanged;
+      const isLongTravel = travelMinutes >= 60 && locationChanged;
+      const hasInteractiveEvent = Boolean(
+        (result.choices && result.choices.length) ||
+        result.combatStart ||
+        (result.discoveredLocations && result.discoveredLocations.length) ||
+        (result.simulationUpdate && (result.simulationUpdate as any).sceneStart) ||
+        (result.tags && (result.tags as any).length)
+      );
+
+      let finalContent = sanitizedContent;
+      let finalResult: GameStateUpdate = result;
+
+      if (locationChanged) {
+        finalContent = withMandatoryLocationBlock(finalContent, result.currentLocation);
+      }
+
+      const questTouched = Boolean((result.updateQuests && result.updateQuests.length) || (result.newQuests && result.newQuests.length));
+      if (!locationChanged && questTouched) {
+        const locForStatus = result.currentLocation || currentLocation;
+        finalContent = withMandatoryLocationBlock(finalContent, locForStatus);
+      }
+
+      if (mediumOrLongTravel && !hasInteractiveEvent) {
+        const vignette = makeTravelEventVignette(String(result.currentLocation || currentLocation || 'the next place'));
+        finalContent = `${finalContent}\n\n${vignette.text}`.trim();
+
+        // Add a small needs impact so long travel is never purely descriptive.
+        const existing = (result.needsChange || {}) as any;
+        const longTravelBonus = isLongTravel ? { fatigue: 1, thirst: 1 } : {};
+        const injectedChoices = [
+          {
+            label: 'Follow the sign',
+            playerText: 'I follow the tracks/trail cautiously and see where they lead.',
+            topic: 'travel_event'
+          },
+          {
+            label: 'Keep moving',
+            playerText: 'I ignore it and keep my pace, staying alert but not detouring.',
+            topic: 'travel_event'
+          }
+        ];
+        finalResult = {
+          ...result,
+          choices: Array.isArray((result as any).choices) && (result as any).choices.length ? (result as any).choices : injectedChoices,
+          needsChange: {
+            ...existing,
+            hunger: typeof vignette.needsDelta.hunger === 'number' ? (Number(existing.hunger || 0) + vignette.needsDelta.hunger) : existing.hunger,
+            thirst: typeof vignette.needsDelta.thirst === 'number'
+              ? (Number(existing.thirst || 0) + vignette.needsDelta.thirst + Number((longTravelBonus as any).thirst || 0))
+              : (typeof (longTravelBonus as any).thirst === 'number' ? (Number(existing.thirst || 0) + Number((longTravelBonus as any).thirst || 0)) : existing.thirst),
+            fatigue: typeof vignette.needsDelta.fatigue === 'number'
+              ? (Number(existing.fatigue || 0) + vignette.needsDelta.fatigue + Number((longTravelBonus as any).fatigue || 0))
+              : (typeof (longTravelBonus as any).fatigue === 'number' ? (Number(existing.fatigue || 0) + Number((longTravelBonus as any).fatigue || 0)) : existing.fatigue),
+          }
+        };
+      }
+
       const gmMessage: ChatMessage = {
         id: Math.random().toString(36).substr(2, 9),
         role: 'gm',
-        content: sanitizedContent || 'The winds of fate are silent...',
+        content: finalContent || 'The winds of fate are silent...',
         timestamp: Date.now(),
-        updates: result
+        updates: finalResult
       };
 
       setMessages(prev => [...prev, gmMessage]);

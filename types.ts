@@ -185,6 +185,13 @@ export interface CustomQuest {
   dueDate?: string; // New field
   createdAt: number;
   completedAt?: number;
+  // Rewards for completing the quest
+  xpReward?: number;
+  goldReward?: number;
+  // Quest type for main quest line
+  questType?: 'main' | 'side' | 'misc' | 'bounty';
+  // Difficulty level (affects rewards)
+  difficulty?: 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary';
 }
 
 export interface StoryChapter {
@@ -296,8 +303,17 @@ export interface GameStateUpdate {
     location?: string;
     dueDate?: string;
     objectives?: Array<{ description: string; completed?: boolean }>;
+    questType?: 'main' | 'side' | 'misc' | 'bounty';
+    difficulty?: 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary';
+    xpReward?: number;
+    goldReward?: number;
   }>;
-  updateQuests?: Array<{ title: string; status: 'completed' | 'failed' | 'active' }>;
+  updateQuests?: Array<{ 
+    title: string; 
+    status: 'completed' | 'failed' | 'active';
+    xpAwarded?: number;
+    goldAwarded?: number;
+  }>;
   newItems?: Array<{ name: string; type: string; description: string; quantity: number }>;
   removedItems?: Array<{ name: string; quantity: number }>;
   statUpdates?: Partial<Stats>;
@@ -490,6 +506,10 @@ export interface CombatEnemy {
   id: string;
   name: string;
   type: 'humanoid' | 'beast' | 'undead' | 'daedra' | 'dragon' | 'automaton';
+  // Explicit enemy state tracking (required by GAME_SYSTEM_CHANGES)
+  health_state?: 'healthy' | 'wounded' | 'incapacitated' | 'dead';
+  morale_state?: 'steady' | 'shaken' | 'broken';
+  combat_state?: 'dead' | 'fled' | 'surrendered' | 'incapacitated' | 'still_hostile';
   level: number;
   maxHealth: number;
   currentHealth: number;

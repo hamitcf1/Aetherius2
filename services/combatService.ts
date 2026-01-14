@@ -273,6 +273,53 @@ export const calculatePlayerCombatStats = (
   // Alteration affects magic resist
   magicResist = Math.floor(getSkillLevel('Alteration') * 0.2);
 
+  // ============================================================================
+  // SURVIVAL NEEDS PENALTIES (GAME_SYSTEM_CHANGES)
+  // Needs are stored on a 0-100 scale.
+  // ============================================================================
+  try {
+    const needs: any = (character as any).needs || {};
+    const hunger = Math.max(0, Math.min(100, Number(needs.hunger || 0)));
+    const thirst = Math.max(0, Math.min(100, Number(needs.thirst || 0)));
+    const fatigue = Math.max(0, Math.min(100, Number(needs.fatigue || 0)));
+
+    // Archetype enforcement (GAME_SYSTEM_CHANGES #9): endurance-focused builds
+    // delay penalties slightly, but never remove them.
+    const archetype = String((character as any).archetype || '').toLowerCase();
+    const enduranceFocused = archetype.includes('warrior') || archetype.includes('paladin');
+    const thresholdOffset = enduranceFocused ? 10 : 0;
+    const mildThreshold = Math.min(95, 60 + thresholdOffset);
+    const severeThreshold = Math.min(98, 80 + thresholdOffset);
+
+    // Mild penalties at 60+, severe at 80+, critical at 100.
+    const applyTiered = (value: number, mild: number, severe: number, critical: number) => {
+      if (value >= 100) return critical;
+      if (value >= severeThreshold) return severe;
+      if (value >= mildThreshold) return mild;
+      return 0;
+    };
+
+    const combatPenalty =
+      applyTiered(hunger, 0.05, 0.15, 0.35) +
+      applyTiered(thirst, 0.03, 0.10, 0.25) +
+      applyTiered(fatigue, 0.07, 0.20, 0.45);
+
+    const dodgePenalty =
+      (hunger >= mildThreshold ? 5 : 0) +
+      (fatigue >= mildThreshold ? 8 : 0) +
+      (fatigue >= severeThreshold ? 8 : 0);
+
+    const critPenalty = thirst >= severeThreshold ? 2 : thirst >= mildThreshold ? 1 : 0;
+
+    // Apply penalties (clamped).
+    weaponDamage = Math.max(1, Math.floor(weaponDamage * Math.max(0.4, 1 - combatPenalty)));
+    dodgeChance = Math.max(0, dodgeChance - dodgePenalty);
+    critChance = Math.max(0, critChance - critPenalty);
+    magicResist = Math.max(0, magicResist - (thirst >= severeThreshold ? 5 : 0));
+  } catch (e) {
+    // Needs are optional; ignore errors.
+  }
+
   // === COMBAT PERK BONUSES ===
   
   // Armor rating perks (light armor vs heavy armor - check which type is equipped)
@@ -599,6 +646,9 @@ export const initializeCombat = (
     currentMagicka: enemy.maxMagicka,
     currentStamina: enemy.maxStamina,
     activeEffects: [],
+    health_state: enemy.health_state || 'healthy',
+    morale_state: enemy.morale_state || 'steady',
+    combat_state: enemy.combat_state || 'still_hostile',
     // Health regeneration is no longer applied passively; regenerated health mechanics were removed intentionally.
     // Ensure rewards and loot exist to avoid empty loot phases
     xpReward: typeof enemy.xpReward === 'number' ? enemy.xpReward : computeEnemyXP(enemy as CombatEnemy),
@@ -1605,10 +1655,26 @@ export const advanceTurn = (state: CombatState): CombatState => {
 
 export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStats): CombatState => {
   const newState = { ...state };
-  
-  // Check if all enemies are defeated
-  const allEnemiesDefeated = newState.enemies.every(e => e.currentHealth <= 0);
-  if (allEnemiesDefeated) {
+
+  // Normalize/derive explicit enemy states from health when missing.
+  newState.enemies = (newState.enemies || []).map(e => {
+    const isDead = (e.currentHealth || 0) <= 0;
+    const combat_state = e.combat_state || (isDead ? 'dead' : 'still_hostile');
+    const health_state = e.health_state || (isDead ? 'dead' : (e.currentHealth || 0) < (e.maxHealth || 1) * 0.5 ? 'wounded' : 'healthy');
+    const morale_state = e.morale_state || 'steady';
+    // If dead by HP, ensure combat_state reflects that.
+    const finalCombatState = isDead ? 'dead' : combat_state;
+    const finalHealthState = isDead ? 'dead' : health_state;
+    return { ...e, combat_state: finalCombatState, health_state: finalHealthState, morale_state } as CombatEnemy;
+  });
+
+  // Combat is only considered "victory"/loot-ready if NO enemy remains still_hostile.
+  const anyStillHostile = (newState.enemies || []).some(e => {
+    const cs = (e as any).combat_state || ((e.currentHealth || 0) <= 0 ? 'dead' : 'still_hostile');
+    return cs === 'still_hostile';
+  });
+
+  if (!anyStillHostile) {
     // Move into loot phase. Do not grant rewards yet — collect possible drops and wait for player selection.
     newState.active = false;
     newState.lootPending = true;

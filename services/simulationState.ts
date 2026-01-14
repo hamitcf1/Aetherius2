@@ -466,6 +466,21 @@ export function recordPlayerFact(
   source: PlayerFact['source'],
   disclosedTo: string[] = []
 ): void {
+  // Ensure playerFacts exists (defensive migration for older saves)
+  if (!state.playerFacts || typeof state.playerFacts !== 'object') {
+    (state as any).playerFacts = {
+      identity: {},
+      situation: {},
+      relationships: {},
+      claims: {}
+    } satisfies PlayerFactMemory;
+  }
+
+  // Ensure the category exists (defensive)
+  if (!state.playerFacts[category]) {
+    state.playerFacts[category] = {};
+  }
+  
   state.playerFacts[category][key] = {
     key,
     value,
@@ -477,6 +492,7 @@ export function recordPlayerFact(
 }
 
 export function hasPlayerFact(state: SimulationState, key: string): boolean {
+  if (!state.playerFacts || typeof state.playerFacts !== 'object') return false;
   for (const category of Object.values(state.playerFacts)) {
     if (key in category) return true;
   }
@@ -484,6 +500,7 @@ export function hasPlayerFact(state: SimulationState, key: string): boolean {
 }
 
 export function getPlayerFact(state: SimulationState, key: string): PlayerFact | undefined {
+  if (!state.playerFacts || typeof state.playerFacts !== 'object') return undefined;
   for (const category of Object.values(state.playerFacts)) {
     if (key in category) return category[key];
   }
@@ -491,6 +508,7 @@ export function getPlayerFact(state: SimulationState, key: string): PlayerFact |
 }
 
 export function disclosFactToNPC(state: SimulationState, factKey: string, npcId: string): void {
+  if (!state.playerFacts || typeof state.playerFacts !== 'object') return;
   for (const category of Object.values(state.playerFacts)) {
     if (factKey in category) {
       const fact = category[factKey];
@@ -506,6 +524,55 @@ export function disclosFactToNPC(state: SimulationState, factKey: string, npcId:
       return;
     }
   }
+}
+
+export function normalizeSimulationState(raw: any, characterIdOverride?: string): SimulationState {
+  const characterId =
+    characterIdOverride ||
+    (typeof raw?.characterId === 'string' ? raw.characterId : undefined) ||
+    'unknown';
+
+  const base = createInitialSimulationState(characterId);
+  if (!raw || typeof raw !== 'object') return base;
+
+  const normalized: SimulationState = {
+    ...base,
+    ...raw,
+    characterId,
+    npcs: raw.npcs && typeof raw.npcs === 'object' ? raw.npcs : {},
+    currentScene: raw.currentScene ?? null,
+    sceneHistory: Array.isArray(raw.sceneHistory) ? raw.sceneHistory : [],
+    pendingConsequences: Array.isArray(raw.pendingConsequences) ? raw.pendingConsequences : [],
+    playerFacts: {
+      identity: raw.playerFacts?.identity && typeof raw.playerFacts.identity === 'object' ? raw.playerFacts.identity : {},
+      situation: raw.playerFacts?.situation && typeof raw.playerFacts.situation === 'object' ? raw.playerFacts.situation : {},
+      relationships: raw.playerFacts?.relationships && typeof raw.playerFacts.relationships === 'object' ? raw.playerFacts.relationships : {},
+      claims: raw.playerFacts?.claims && typeof raw.playerFacts.claims === 'object' ? raw.playerFacts.claims : {}
+    },
+    worldAuthority: {
+      ...base.worldAuthority,
+      ...(raw.worldAuthority && typeof raw.worldAuthority === 'object' ? raw.worldAuthority : {}),
+      locations:
+        raw.worldAuthority?.locations && typeof raw.worldAuthority.locations === 'object'
+          ? raw.worldAuthority.locations
+          : base.worldAuthority.locations,
+      factions:
+        raw.worldAuthority?.factions && typeof raw.worldAuthority.factions === 'object'
+          ? raw.worldAuthority.factions
+          : base.worldAuthority.factions,
+      titles: Array.isArray(raw.worldAuthority?.titles) ? raw.worldAuthority.titles : base.worldAuthority.titles,
+      customAdditions: {
+        ...base.worldAuthority.customAdditions,
+        ...(raw.worldAuthority?.customAdditions && typeof raw.worldAuthority.customAdditions === 'object'
+          ? raw.worldAuthority.customAdditions
+          : {})
+      }
+    },
+    lastUpdated: typeof raw.lastUpdated === 'number' ? raw.lastUpdated : base.lastUpdated,
+    version: typeof raw.version === 'number' ? raw.version : base.version
+  };
+
+  return normalized;
 }
 
 // ============================================================================
@@ -648,8 +715,7 @@ export function serializeSimulationState(state: SimulationState): string {
 export function deserializeSimulationState(json: string): SimulationState | null {
   try {
     const parsed = JSON.parse(json);
-    // Migration logic can be added here based on version
-    return parsed as SimulationState;
+    return normalizeSimulationState(parsed);
   } catch {
     return null;
   }

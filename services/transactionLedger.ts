@@ -221,10 +221,15 @@ export function filterDuplicateTransactions(
 
   // If any of them will be applied, record the transaction to avoid duplicates
   if (!wasFiltered && update.transactionId) {
+    const recordedItems = [
+        ...(update.newItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: true })) || []),
+        ...(update.removedItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: false })) || [])
+    ];
+
     ledger.recordTransaction(update.transactionId, {
       goldAmount: update.goldChange,
       xpAmount: update.xpChange,
-      items: update.newItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: true })) || []
+      items: recordedItems
     });
   }
 

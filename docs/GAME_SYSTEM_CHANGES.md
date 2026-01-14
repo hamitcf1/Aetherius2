@@ -9,6 +9,23 @@ Compliance: Required, not advisory
 
 ---
 
+## ✅ IMPLEMENTATION STATUS (Updated 2026-01-14)
+
+| # | Item | Status | Location |
+|---|------|--------|----------|
+| 1 | Multi-enemy combat resolution | ✅ Done | `services/combatService.ts` — `checkCombatEnd` |
+| 2 | Explicit enemy state tracking | ✅ Done | `types.ts` — `CombatEnemy`, `services/combatService.ts` — `initializeCombat` |
+| 3 | Survival stats gameplay impact | ✅ Done | `services/combatService.ts` — `calculatePlayerCombatStats`, `App.tsx` — `computeSurvivalEffects` |
+| 4 | Forced rest & collapse states | ✅ Done | `App.tsx` — `computeSurvivalEffects` + `handleGameUpdate` forced-rest enforcement |
+| 5 | Long travel content | ✅ Done | `components/AdventureChat.tsx` — `makeTravelEventVignette` + injected choices |
+| 6 | Travel event generator | ✅ Done | `components/AdventureChat.tsx` — `mediumOrLongTravel` enforcement |
+| 7 | Objective & destination clarity | ✅ Done | `components/AdventureChat.tsx` — `withMandatoryLocationBlock` |
+| 8 | Objective state machine | ✅ Done | `components/AdventureChat.tsx` — `computePrimaryObjectiveStatus` |
+| 9 | Character archetype enforcement | ✅ Done | `services/combatService.ts` — archetype threshold offsets |
+| 10 | Fail-fast validation | ✅ Done | System prompt in `AdventureChat.tsx`, engine-level enforcement |
+
+---
+
 ## 0. GLOBAL ENFORCEMENT RULE
 
 If any rule in this document would be violated:

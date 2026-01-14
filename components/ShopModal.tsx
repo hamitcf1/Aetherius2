@@ -6,6 +6,8 @@ import type { InventoryItem } from '../types';
 import { playSoundEffect } from '../services/audioService';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { SortSelector } from './GameFeatures';
+import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
+
 
 export interface ShopItem {
   id: string;
@@ -711,6 +713,27 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                               </span>
                             );
                           })()}
+                          {/* Show nutrition/effects for food/drink/potions */}
+                          {item.type === 'food' && (
+                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
+                            </span>
+                          )}
+                          {item.type === 'drink' && (
+                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
+                            </span>
+                          )}
+                          {item.type === 'potion' && (
+                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                              <FlaskConical size={10} />
+                              {item.subtype === 'health' ? 'Restores Health' : 
+                               item.subtype === 'magicka' ? 'Restores Magicka' : 
+                               item.subtype === 'stamina' ? 'Restores Stamina' : 
+                               item.description.includes('Restores') ? 'Restorative' : 
+                               'Potion Effect'}
+                            </span>
+                          )}
                         </div>
                         <p className="text-gray-500 text-xs truncate">{item.description}</p>
                       </div>
@@ -799,6 +822,27 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                                   <Shield size={10} /> {item.armor}
                                 </span>
                               )}
+                            </span>
+                          )}
+                          {/* Show nutrition/effects for food/drink/potions */}
+                          {item.type === 'food' && (
+                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
+                            </span>
+                          )}
+                          {item.type === 'drink' && (
+                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
+                            </span>
+                          )}
+                          {item.type === 'potion' && (
+                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                              <FlaskConical size={10} />
+                              {item.subtype === 'health' ? 'Restores Health' : 
+                               item.subtype === 'magicka' ? 'Restores Magicka' : 
+                               item.subtype === 'stamina' ? 'Restores Stamina' : 
+                               item.description.includes('Restores') ? 'Restorative' : 
+                               'Potion Effect'}
                             </span>
                           )}
                           {item.equipped && (

@@ -36,7 +36,8 @@ import {
   validateTitle,
   buildSimulationContext,
   serializeSimulationState,
-  deserializeSimulationState
+  deserializeSimulationState,
+  normalizeSimulationState
 } from './simulationState';
 
 // Re-export types for convenience
@@ -102,7 +103,7 @@ export class SimulationStateManager {
         const { loadSimulationState } = await import('./firestore');
         const loaded = await loadSimulationState(this.userId, this.characterId);
         if (loaded) {
-          this.state = loaded as SimulationState;
+          this.state = normalizeSimulationState(loaded, this.characterId);
           return;
         }
       } catch (e) {

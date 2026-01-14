@@ -7,7 +7,6 @@ import { GameStateUpdate, GeneratedCharacterData } from "../types";
 const AVAILABLE_MODELS = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-3-flash',
   'gemma-3-12b',
   'gemma-3-1b',
   'gemma-3-27b',
@@ -21,7 +20,6 @@ type AvailableModel = typeof AVAILABLE_MODELS[number];
 const TEXT_MODEL_FALLBACK_CHAIN: AvailableModel[] = [
   'gemini-2.5-flash-lite',  // Fastest, lowest resource usage
   'gemini-2.5-flash',       // Balanced performance
-  'gemini-3-flash',         // Latest Gemini 3
   'gemma-3-27b',           // Largest Gemma model
   'gemma-3-12b',           // Large Gemma model
   'gemma-3-4b',            // Medium Gemma model
@@ -32,7 +30,6 @@ const TEXT_MODEL_FALLBACK_CHAIN: AvailableModel[] = [
 const IMAGE_MODEL_FALLBACK_CHAIN: AvailableModel[] = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-3-flash',
 ];
 
 export type PreferredAIModel = AvailableModel;
@@ -40,7 +37,6 @@ export type PreferredAIModel = AvailableModel;
 export const PREFERRED_AI_MODELS: Array<{ id: PreferredAIModel; label: string }> = [
   { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Fastest)' },
   { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Balanced)' },
-  { id: 'gemini-3-flash', label: 'Gemini 3 Flash (Latest)' },
   { id: 'gemma-3-27b', label: 'Gemma 3 27B (Largest)' },
   { id: 'gemma-3-12b', label: 'Gemma 3 12B (Large)' },
   { id: 'gemma-3-4b', label: 'Gemma 3 4B (Medium)' },
@@ -111,9 +107,29 @@ const getAllApiKeys = (): string[] => {
   return keys;
 };
 
-// Track exhausted API keys to avoid retrying them
-const exhaustedApiKeys = new Set<string>();
-const keyExhaustionTimeout = 60000; // Reset after 1 minute
+// Track API key and model cooldowns to avoid rapid thrashing on 429 / overload.
+// Keyed by full key string (never logged in full).
+const apiKeyCooldownUntil = new Map<string, number>();
+const modelCooldownUntil = new Map<string, number>();
+
+const DEFAULT_KEY_COOLDOWN_MS = 60000;
+const DEFAULT_MODEL_COOLDOWN_MS = 15000;
+
+const isCoolingDown = (untilMs?: number): boolean => (untilMs || 0) > Date.now();
+
+const getCooldownRemainingMs = (untilMs?: number): number => Math.max(0, (untilMs || 0) - Date.now());
+
+const markKeyCooldown = (key: string, cooldownMs: number, reason?: string) => {
+  const ms = Math.max(1000, Math.floor(cooldownMs || DEFAULT_KEY_COOLDOWN_MS));
+  apiKeyCooldownUntil.set(key, Date.now() + ms);
+  console.warn(`[Gemini Service] Key ...${key.slice(-4)} cooling down for ${Math.ceil(ms / 1000)}s${reason ? ` (${reason})` : ''}.`);
+};
+
+const markModelCooldown = (model: string, cooldownMs: number, reason?: string) => {
+  const ms = Math.max(1000, Math.floor(cooldownMs || DEFAULT_MODEL_COOLDOWN_MS));
+  modelCooldownUntil.set(model, Date.now() + ms);
+  console.warn(`[Gemini Service] Model ${model} cooling down for ${Math.ceil(ms / 1000)}s${reason ? ` (${reason})` : ''}.`);
+};
 
 // ============================================================================
 // RATE LIMITING
@@ -429,18 +445,9 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
   };
 };
 
-const markKeyExhausted = (key: string) => {
-  exhaustedApiKeys.add(key);
-  console.warn(`[Gemini Service] Key ...${key.slice(-4)} marked exhausted. Will recover in 60 seconds.`);
-  setTimeout(() => {
-    exhaustedApiKeys.delete(key);
-    console.log(`[Gemini Service] Key ...${key.slice(-4)} recovered from exhaustion.`);
-  }, keyExhaustionTimeout);
-};
-
 const getApiKeyStatus = (): { total: number; available: number; exhausted: number } => {
   const allKeys = getAllApiKeys();
-  const exhausted = allKeys.filter(key => exhaustedApiKeys.has(key)).length;
+  const exhausted = allKeys.filter(key => isCoolingDown(apiKeyCooldownUntil.get(key))).length;
   return {
     total: allKeys.length,
     available: allKeys.length - exhausted,
@@ -451,12 +458,12 @@ const getApiKeyStatus = (): { total: number; available: number; exhausted: numbe
 const getAvailableApiKey = (forGemma: boolean = false): string | null => {
   if (forGemma) {
     const gemmaKey = getGemmaApiKey();
-    if (gemmaKey && !exhaustedApiKeys.has(gemmaKey)) return gemmaKey;
+    if (gemmaKey && !isCoolingDown(apiKeyCooldownUntil.get(gemmaKey))) return gemmaKey;
   }
   
   const allKeys = getAllApiKeys();
   for (const key of allKeys) {
-    if (!exhaustedApiKeys.has(key)) return key;
+    if (!isCoolingDown(apiKeyCooldownUntil.get(key))) return key;
   }
   return null;
 };
@@ -536,6 +543,26 @@ const isQuotaError = (error: any): boolean => {
   );
 };
 
+const extractRetryDelayMs = (error: any): number | null => {
+  // Try structured shapes first
+  const seconds =
+    Number((error as any)?.retryDelay?.seconds) ||
+    Number((error as any)?.details?.retryDelay?.seconds) ||
+    Number((error as any)?.details?.[0]?.retryDelay?.seconds) ||
+    Number((error as any)?.error?.details?.[0]?.retryDelay?.seconds);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.ceil(seconds * 1000);
+
+  // Fall back to regex over the serialized error
+  const raw = String(error?.message || '') + '\n' + String(error?.toString?.() || '');
+  // Common formats: "retryDelay": {"seconds": 12} or retryDelay: 12
+  const m = raw.match(/retryDelay[^\d]*(\d+(?:\.\d+)?)/i);
+  if (m) {
+    const parsed = Number(m[1]);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.ceil(parsed * 1000);
+  }
+  return null;
+};
+
 const isRetryableError = (error: any): boolean => {
   const msg = String(error?.message || '').toLowerCase();
   const raw = String(error?.toString?.() || '').toLowerCase();
@@ -586,6 +613,10 @@ const executeWithFallback = async <T>(
   const errors: Array<{ model: string; error: any }> = [];
   
   for (const model of modelsToTry) {
+    if (isCoolingDown(modelCooldownUntil.get(model))) {
+      console.warn(`[Gemini Service] Skipping cooling-down model ${model} (${Math.ceil(getCooldownRemainingMs(modelCooldownUntil.get(model)) / 1000)}s remaining)`);
+      continue;
+    }
     // Use all available keys for both Gemini and Gemma models
     const allKeys = getAllApiKeys();
     const keyStatus = getApiKeyStatus();
@@ -593,9 +624,16 @@ const executeWithFallback = async <T>(
     
     let modelNotFound = false;
     
+    let sawQuotaOrOverload = false;
+
     for (const apiKey of allKeys) {
-      if (!apiKey || exhaustedApiKeys.has(apiKey)) {
-        console.log(`[Gemini Service] Skipping exhausted/empty key`);
+      if (!apiKey) {
+        console.log(`[Gemini Service] Skipping empty key`);
+        continue;
+      }
+      const keyUntil = apiKeyCooldownUntil.get(apiKey);
+      if (isCoolingDown(keyUntil)) {
+        console.log(`[Gemini Service] Skipping cooling-down key ...${apiKey.slice(-4)} (${Math.ceil(getCooldownRemainingMs(keyUntil) / 1000)}s remaining)`);
         continue;
       }
       
@@ -617,23 +655,35 @@ const executeWithFallback = async <T>(
         }
         
         if (isQuotaError(error)) {
-          markKeyExhausted(apiKey);
-          console.warn(`[Gemini Service] API key ...${apiKey.slice(-4)} exhausted, trying next key...`);
+          sawQuotaOrOverload = true;
+          const retryMs = extractRetryDelayMs(error) ?? DEFAULT_KEY_COOLDOWN_MS;
+          markKeyCooldown(apiKey, retryMs, 'quota');
+          console.warn(`[Gemini Service] API key ...${apiKey.slice(-4)} rate-limited, trying next key...`);
           // Continue to next key, don't break
           continue;
         }
-        
-        if (!isRetryableError(error)) {
-          // Non-retryable error for this key, try next key
-          console.warn(`[Gemini Service] Non-retryable error, trying next key...`);
+
+        // Overload / temporary failures: cooldown key briefly to avoid hammering
+        if (isRetryableError(error)) {
+          sawQuotaOrOverload = true;
+          const retryMs = extractRetryDelayMs(error) ?? DEFAULT_MODEL_COOLDOWN_MS;
+          markKeyCooldown(apiKey, Math.min(DEFAULT_KEY_COOLDOWN_MS, retryMs), 'retryable');
           continue;
         }
+        
+        // Non-retryable error for this key, try next key
+        console.warn(`[Gemini Service] Non-retryable error, trying next key...`);
+        continue;
       }
     }
     
     // If model wasn't found, it already broke out. Otherwise, all keys exhausted for this model.
     if (!modelNotFound) {
-      console.warn(`[Gemini Service] All keys exhausted for model ${model}, trying next model...`);
+      if (sawQuotaOrOverload) {
+        // If we saw quota/overload across keys, give the model a short cooldown.
+        markModelCooldown(model, DEFAULT_MODEL_COOLDOWN_MS, 'all-keys-throttled');
+      }
+      console.warn(`[Gemini Service] All keys unavailable for model ${model}, trying next model...`);
     }
   }
   
@@ -645,7 +695,7 @@ const executeWithFallback = async <T>(
 
   // Provide more helpful error message
   if (errorMessage.includes('quota') || errorMessage.includes('429')) {
-    throw new Error('All API keys have exceeded their quota limits. Please wait a few minutes before trying again, or add new API keys with available quota.');
+    throw new Error('All API keys are currently rate-limited or out of quota. Please wait a bit and try again, or add new API keys with available quota.');
   } else if (errorMessage.includes('403') || errorMessage.includes('PERMISSION_DENIED')) {
     throw new Error('API key access denied. Some keys may be invalid, leaked, or have insufficient permissions. Please check your API keys.');
   } else {

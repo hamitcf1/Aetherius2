@@ -142,6 +142,108 @@ const calcNeedFromTime = (minutes: number, perMinute: number) => {
   return Math.round(raw * 10) / 10;
 };
 
+const SURVIVAL_THRESHOLDS = {
+  warn: 60,
+  severe: 80,
+  critical: 100,
+  collapseSum: 160,
+} as const;
+
+const clampNeedValue = (n: number) => clamp(Number(n || 0), 0, 100);
+
+const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue: number }) => {
+  const hunger = clampNeedValue(needs.hunger);
+  const thirst = clampNeedValue(needs.thirst);
+  const fatigue = clampNeedValue(needs.fatigue);
+  const sum = hunger + thirst;
+
+  const forcedRest = fatigue >= SURVIVAL_THRESHOLDS.critical || sum >= SURVIVAL_THRESHOLDS.collapseSum;
+
+  const effects: StatusEffect[] = [];
+
+  if (hunger >= SURVIVAL_THRESHOLDS.severe) {
+    effects.push({
+      id: 'survival_hunger_severe',
+      name: 'Starving',
+      type: 'debuff',
+      icon: '🍖',
+      description: 'Weakness and slowed reactions. Fighting and travel suffer until you eat.',
+      effects: [{ stat: 'combat', modifier: -0.2 }]
+    });
+  } else if (hunger >= SURVIVAL_THRESHOLDS.warn) {
+    effects.push({
+      id: 'survival_hunger_warn',
+      name: 'Hungry',
+      type: 'debuff',
+      icon: '🍞',
+      description: 'Your body demands food. Stamina and focus start to slip.',
+      effects: [{ stat: 'combat', modifier: -0.1 }]
+    });
+  }
+
+  if (thirst >= SURVIVAL_THRESHOLDS.severe) {
+    effects.push({
+      id: 'survival_thirst_severe',
+      name: 'Dehydrated',
+      type: 'debuff',
+      icon: '💧',
+      description: 'Your endurance is failing. Fatigue rises faster until you drink.',
+      effects: [{ stat: 'endurance', modifier: -0.2 }]
+    });
+  } else if (thirst >= SURVIVAL_THRESHOLDS.warn) {
+    effects.push({
+      id: 'survival_thirst_warn',
+      name: 'Thirsty',
+      type: 'debuff',
+      icon: '🥤',
+      description: 'Dry mouth and dull senses. You need water soon.',
+      effects: [{ stat: 'endurance', modifier: -0.1 }]
+    });
+  }
+
+  if (fatigue >= SURVIVAL_THRESHOLDS.critical) {
+    effects.push({
+      id: 'survival_fatigue_critical',
+      name: 'Collapsed',
+      type: 'debuff',
+      icon: '💤',
+      description: 'You can barely stay conscious. Rest is mandatory.',
+      effects: [{ stat: 'actions', modifier: -1 }]
+    });
+  } else if (fatigue >= SURVIVAL_THRESHOLDS.severe) {
+    effects.push({
+      id: 'survival_fatigue_severe',
+      name: 'Exhausted',
+      type: 'debuff',
+      icon: '😵',
+      description: 'Your limbs feel heavy. Combat and travel are heavily penalized.',
+      effects: [{ stat: 'combat', modifier: -0.25 }]
+    });
+  } else if (fatigue >= SURVIVAL_THRESHOLDS.warn) {
+    effects.push({
+      id: 'survival_fatigue_warn',
+      name: 'Tired',
+      type: 'debuff',
+      icon: '🕯️',
+      description: 'Slower reactions and reduced endurance.',
+      effects: [{ stat: 'combat', modifier: -0.1 }]
+    });
+  }
+
+  if (!forcedRest && sum >= SURVIVAL_THRESHOLDS.collapseSum - 10) {
+    effects.push({
+      id: 'survival_edge',
+      name: 'On the Edge',
+      type: 'debuff',
+      icon: '⚠️',
+      description: 'Hunger and thirst are compounding. Keep pushing and you will collapse.',
+      effects: [{ stat: 'actions', modifier: -0.5 }]
+    });
+  }
+
+  return { forcedRest, effects };
+};
+
 const addMinutesToTime = (time: { day: number; hour: number; minute: number }, minutesToAdd: number) => {
   const safe = {
     day: Math.max(1, Number(time?.day || 1)),
@@ -1869,6 +1971,7 @@ const App: React.FC = () => {
     }
 
     handleGameUpdate({
+      transactionId: `eat_${uniqueId()}`,
       timeAdvanceMinutes: 10,
       needsChange: { 
         hunger: -nutrition.hungerReduction, 
@@ -1911,6 +2014,7 @@ const App: React.FC = () => {
     }
 
     handleGameUpdate({
+      transactionId: `drink_${uniqueId()}`,
       timeAdvanceMinutes: 5,
       needsChange: { 
         thirst: -nutrition.thirstReduction,
@@ -1958,6 +2062,7 @@ const App: React.FC = () => {
             if (resolved.stat === 'stamina') vitalsChange.currentStamina = newVitals.currentStamina - (activeCharacter.currentVitals?.currentStamina ?? activeCharacter.stats.stamina);
 
             handleGameUpdate({
+              transactionId: `potion_${uniqueId()}`,
               vitalsChange,
               removedItems: [{ name: item.name, quantity: 1 }]
             });
@@ -1978,10 +2083,16 @@ const App: React.FC = () => {
 
         // Cure disease / poison
         if (name.includes('cure') && (name.includes('disease') || desc.includes('disease'))) {
-          handleGameUpdate({ removedItems: [{ name: item.name, quantity: 1 }] });
+          handleGameUpdate({ 
+            transactionId: `potion_cure_disease_${uniqueId()}`,
+            removedItems: [{ name: item.name, quantity: 1 }]
+          });
           showToast(`Cured diseases.`, 'success');
         } else if (name.includes('cure') && (name.includes('poison') || desc.includes('poison'))) {
-          handleGameUpdate({ removedItems: [{ name: item.name, quantity: 1 }] });
+          handleGameUpdate({
+            transactionId: `potion_cure_poison_${uniqueId()}`,
+            removedItems: [{ name: item.name, quantity: 1 }]
+          });
           showToast(`Cured poison.`, 'success');
 
         // Invisibility
@@ -1998,7 +2109,10 @@ const App: React.FC = () => {
             effects: [] as any[],
           };
           setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({ removedItems: [{ name: item.name, quantity: 1 }] });
+          handleGameUpdate({ 
+            transactionId: `potion_invis_${uniqueId()}`,
+            removedItems: [{ name: item.name, quantity: 1 }] 
+          });
           showToast(`You are invisible for ${duration} seconds.`, 'success');
 
         // Resistances (e.g., Resist Fire 50% for 60 seconds)
@@ -2018,7 +2132,10 @@ const App: React.FC = () => {
             effects: pct ? [{ stat: which, modifier: pct }] as any[] : [] as any[],
           };
           setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({ removedItems: [{ name: item.name, quantity: 1 }] });
+          handleGameUpdate({
+            transactionId: `potion_resist_${uniqueId()}`,
+            removedItems: [{ name: item.name, quantity: 1 }]
+          });
           showToast(effect.description, 'success');
 
         } else {
@@ -2034,6 +2151,7 @@ const App: React.FC = () => {
     } else if (item.type === 'ingredient') {
       // Ingredients might be used for crafting, but for now just consume
       handleGameUpdate({
+        transactionId: `ingredient_${uniqueId()}`,
         removedItems: [{ name: item.name, quantity: 1 }]
       });
       showToast(`Used ${item.name}`, 'info');
@@ -2416,6 +2534,54 @@ const App: React.FC = () => {
       const explicitNeedsChange = updates.needsChange || {};
 
       if (timeAdvance !== 0 || (explicitNeedsChange && Object.keys(explicitNeedsChange).length)) {
+        // Predict next needs immediately so we can enforce penalties and forced-rest rules.
+        try {
+          const currentTimeSnap = (activeCharacter as any).time || INITIAL_CHARACTER_TEMPLATE.time;
+          const currentNeedsSnap = (activeCharacter as any).needs || INITIAL_CHARACTER_TEMPLATE.needs;
+          const hungerFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.hungerPerMinute);
+          const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
+          const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
+          const nextNeedsSnap = {
+            hunger: clamp(
+              Number(currentNeedsSnap.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
+              0,
+              100
+            ),
+            thirst: clamp(
+              Number(currentNeedsSnap.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
+              0,
+              100
+            ),
+            fatigue: clamp(
+              Number(currentNeedsSnap.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
+              0,
+              100
+            ),
+          };
+
+          const { forcedRest, effects: survivalEffects } = computeSurvivalEffects(nextNeedsSnap);
+
+          // Update status effects (survival effects are derived; preserve other effects).
+          setStatusEffects(prev => {
+            const nonSurvival = (prev || []).filter(e => !String(e.id || '').startsWith('survival_'));
+            return [...nonSurvival, ...survivalEffects];
+          });
+
+          // Forced rest: auto-open Bonfire to compel a rest choice.
+          if (forcedRest && !restOpen) {
+            try {
+              const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
+              openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });
+              showToast('You are collapsing from exhaustion. Rest is mandatory.', 'warning');
+            } catch (e) {
+              // If Bonfire fails to open for any reason, at least warn.
+              showToast('You are collapsing from exhaustion. Find rest immediately.', 'warning');
+            }
+          }
+        } catch (e) {
+          // Do not block progression on UI-only survival effect failures.
+        }
+
         setCharacters(prev => prev.map(c => {
           if (c.id !== currentCharacterId) return c;
 
@@ -2467,7 +2633,7 @@ const App: React.FC = () => {
           setDirtyEntities(prev => new Set([...prev, chapter.id]));
       }
 
-      // 2. New Quests
+      // 2. New Quests (with rewards)
       if (updates.newQuests) {
           const addedQuests = updates.newQuests.map(q => ({
               id: uniqueId(),
@@ -2482,7 +2648,12 @@ const App: React.FC = () => {
                 completed: Boolean(o.completed)
               })),
               status: 'active' as const,
-              createdAt: Date.now()
+              createdAt: Date.now(),
+              // Store quest rewards and type
+              questType: q.questType || 'side',
+              difficulty: q.difficulty || 'medium',
+              xpReward: q.xpReward || 50,
+              goldReward: q.goldReward || 100
           }));
           setQuests(prev => [...prev, ...addedQuests]);
           addedQuests.forEach(quest => {
@@ -2490,8 +2661,11 @@ const App: React.FC = () => {
           });
       }
 
-      // 3. Update Quests
+      // 3. Update Quests (with reward application)
       if (updates.updateQuests) {
+          let totalXpFromQuests = 0;
+          let totalGoldFromQuests = 0;
+          
           setQuests(prev => prev.map(q => {
               if (q.characterId !== currentCharacterId) return q;
               const update = updates.updateQuests?.find(u => u.title.toLowerCase() === q.title.toLowerCase());
@@ -2501,6 +2675,16 @@ const App: React.FC = () => {
                   const updatedObjectives = update.status === 'completed' 
                       ? q.objectives.map(obj => ({ ...obj, completed: true }))
                       : q.objectives;
+                  
+                  // Apply quest rewards when completed
+                  if (update.status === 'completed') {
+                    // Use rewards from update, or fall back to quest's stored rewards
+                    const xpReward = update.xpAwarded ?? q.xpReward ?? 0;
+                    const goldReward = update.goldAwarded ?? q.goldReward ?? 0;
+                    totalXpFromQuests += xpReward;
+                    totalGoldFromQuests += goldReward;
+                  }
+                  
                   return { 
                       ...q, 
                       status: update.status, 
@@ -2510,6 +2694,20 @@ const App: React.FC = () => {
               }
               return q;
           }));
+          
+          // Apply accumulated quest rewards to character
+          if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
+            setCharacters(prev => prev.map(c => {
+              if (c.id !== currentCharacterId) return c;
+              return {
+                ...c,
+                experience: (c.experience || 0) + totalXpFromQuests,
+                gold: (c.gold || 0) + totalGoldFromQuests
+              };
+            }));
+            // Log quest reward application
+            console.log(`Quest rewards applied: +${totalXpFromQuests} XP, +${totalGoldFromQuests} gold`);
+          }
       }
 
       // 4. New Items
