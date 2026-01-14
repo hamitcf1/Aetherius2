@@ -597,11 +597,14 @@ export const executePlayerAction = (
       // Adjust cost by level/skills
       const effectiveCost = adjustAbilityCost(character, ability);
       if (ability.type === 'magic') {
-        if (newPlayerStats.currentMagicka < effectiveCost) {
-          narrative = `Not enough magicka for ${ability.name}!`;
-          break;
+        const availableMagicka = newPlayerStats.currentMagicka || 0;
+        // Spend as much magicka as available up to the effective cost. If none available, cast at base damage.
+        const magickaSpent = Math.max(0, Math.min(availableMagicka, effectiveCost));
+        if (magickaSpent > 0) {
+          newPlayerStats.currentMagicka = Math.max(0, availableMagicka - magickaSpent);
         }
-        newPlayerStats.currentMagicka -= effectiveCost;
+        // Attach magickaSpent to ability so damage scaling can use it later
+        (ability as any).__magickaSpent = magickaSpent;
       } else {
         const available = newPlayerStats.currentStamina || 0;
         if (available <= 0) {
@@ -676,7 +679,22 @@ export const executePlayerAction = (
 
       // Determine damage tier multipliers based on rollTier
       const tierMultipliers: Record<string, number> = { low: 0.6, mid: 1.0, high: 1.25, crit: 1.75 };
-      const baseDamage = ability.damage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
+      // For magic abilities, allow damage to scale with magicka spent and player level.
+      let abilityDamage = ability.damage || 0;
+      if (ability.type === 'magic') {
+        const magSpent = (ability as any).__magickaSpent || 0;
+        const playerLevel = character?.level || 1;
+        // Per-level multiplier (small incremental growth)
+        const levelMultiplier = 1 + Math.max(0, (playerLevel - 1)) * 0.03; // 3% per level
+        if (magSpent <= 0) {
+          // No magicka: apply base damage only (do not apply level multiplier)
+          abilityDamage = ability.damage || 0;
+        } else {
+          const ratio = effectiveCost > 0 ? (magSpent / effectiveCost) : 1;
+          abilityDamage = Math.max(1, Math.floor((ability.damage || 0) * levelMultiplier * ratio));
+        }
+      }
+      const baseDamage = abilityDamage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
       const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
       const scaledBase = Math.max(1, Math.floor(baseDamage * staminaMultiplier * tierMult));
       const { damage, hitLocation } = computeDamageFromNat(scaledBase, 12, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);

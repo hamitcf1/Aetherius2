@@ -15,8 +15,16 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
   const [learned, setLearned] = useState<string[]>([]);
 
   useEffect(() => {
-    setAll(getAllSpells());
-    setLearned(getLearnedSpellIds(character.id));
+    const base = getAllSpells();
+    const learnedIds = getLearnedSpellIds(character.id);
+    // Include any learned empowered/high variants as separate entries so they appear in the UI
+    const baseIds = new Set(base.map(s => s.id));
+    const extras = learnedIds
+      .filter(id => !baseIds.has(id))
+      .map(id => getSpellById(id))
+      .filter(Boolean) as Spell[];
+    setAll([...base, ...extras]);
+    setLearned(learnedIds);
   }, [character.id]);
 
   const handleLearn = (id: string) => {
@@ -40,7 +48,12 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
 
     const ok = learnSpell(character.id, id);
     if (ok) {
-      setLearned(getLearnedSpellIds(character.id));
+      const updatedLearned = getLearnedSpellIds(character.id);
+      setLearned(updatedLearned);
+      // If learning an empowered/high variant, ensure it's shown in the list
+      if ((!all || !all.find(s => s.id === id)) && getSpellById(id)) {
+        setAll(prev => [...prev, getSpellById(id)!]);
+      }
       onLearn?.(id);
     }
   };
@@ -58,22 +71,24 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
             const learnedFlag = learned.includes(s.id);
             const perkCost = s.perkCost || 1;
             const canAfford = (character.perkPoints || 0) >= perkCost;
-            const empoweredId = `${s.id}:high`;
+            const isEmpoweredVariant = String(s.id).includes(':') || String(s.id).includes('_high') || String(s.id).toLowerCase().includes('empowered');
+            const baseId = (String(s.id).split(/[:_]/)[0]) as string;
+            const empoweredId = `${baseId}:high`;
             const empoweredLearned = learned.includes(empoweredId);
             const empoweredUnlocked = isSpellVariantUnlocked(character, empoweredId);
-            const isEmpoweredVariant = String(s.id).includes(':') || String(s.id).includes('_high') || String(s.id).toLowerCase().includes('empowered');
+            const baseLearned = learned.includes(baseId);
             return (
               <div key={s.id} className={`p-3 rounded border ${learnedFlag ? 'border-skyrim-gold bg-skyrim-paper/40' : 'border-skyrim-border bg-skyrim-paper/30'}`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-bold text-skyrim-gold flex items-center gap-2">{s.name}{isEmpoweredVariant && <span className="ml-2"><EmpoweredBadge small /></span>}</div>
                     <div className="text-xs text-skyrim-text">{s.description}</div>
-                    {/* Empowered variant */}
-                    {empoweredUnlocked ? (
+                    {/* Empowered variant info (only for base spells) */}
+                    {!isEmpoweredVariant && (empoweredUnlocked ? (
                       <div className="text-xs text-stone-400 mt-1">Empowered variant available</div>
                     ) : (
                       <div className="text-xs text-stone-500 italic mt-1">Empowered variant locked (requires level {((s.prerequisites?.level || 1) + 5)} or the Empower perk)</div>
-                    )}
+                    ))}
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-blue-300">Magicka: {s.cost}</div>
@@ -83,8 +98,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                         Learn
                       </button>
                     )}
-                    {/* Empowered learn button: only show if base spell is already learned */}
-                    {learnedFlag && !empoweredLearned && empoweredUnlocked && (
+                    {/* Empowered learn button: only show on base spells when base is learned */}
+                    {!isEmpoweredVariant && baseLearned && !empoweredLearned && empoweredUnlocked && (
                       <button title={`Learn empowered variant (cost ${getSpellById(empoweredId)?.perkCost || 10} perks)`} onClick={() => handleLearn(empoweredId)} className="mt-2 ml-2 px-2 py-1 rounded bg-amber-600 text-black text-xs">Learn Empowered</button>
                     )}
                     {!empoweredUnlocked && (
