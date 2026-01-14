@@ -12,34 +12,58 @@ export interface VoiceSettings {
   voiceName?: string;
   pitch?: number; // -20 to +20 semitones
   speakingRate?: number; // 0.5 to 2.0
+  language?: string; // Language code (e.g., 'en', 'tr')
 }
 
-// Available voice options (matching the API)
-export const VOICE_OPTIONS = {
-  male: [
-    { name: 'en-US-Wavenet-A', label: 'Young Male' },
-    { name: 'en-US-Wavenet-B', label: 'Deep Male' },
-    { name: 'en-US-Wavenet-D', label: 'Mature Male' },
-    { name: 'en-US-Wavenet-I', label: 'Older Male' },
-    { name: 'en-US-Wavenet-J', label: 'Warm Male' },
-    { name: 'en-US-Neural2-A', label: 'Natural Male' },
-    { name: 'en-US-Neural2-D', label: 'Clear Male' },
-    { name: 'en-US-Neural2-I', label: 'Expressive Male' },
-    { name: 'en-US-Neural2-J', label: 'Conversational Male' },
-  ],
-  female: [
-    { name: 'en-US-Wavenet-C', label: 'Warm Female' },
-    { name: 'en-US-Wavenet-E', label: 'Young Female' },
-    { name: 'en-US-Wavenet-F', label: 'Atmospheric Female' },
-    { name: 'en-US-Wavenet-G', label: 'Soft Female' },
-    { name: 'en-US-Wavenet-H', label: 'Bright Female' },
-    { name: 'en-US-Neural2-C', label: 'Natural Female' },
-    { name: 'en-US-Neural2-E', label: 'Clear Female' },
-    { name: 'en-US-Neural2-F', label: 'Expressive Female' },
-    { name: 'en-US-Neural2-G', label: 'Conversational Female' },
-    { name: 'en-US-Neural2-H', label: 'Warm Neural Female' },
-  ]
+// Available voice options per language (matching the API)
+export const VOICE_OPTIONS: Record<string, { male: Array<{ name: string; label: string }>; female: Array<{ name: string; label: string }> }> = {
+  en: {
+    male: [
+      { name: 'en-US-Wavenet-A', label: 'Young Male' },
+      { name: 'en-US-Wavenet-B', label: 'Deep Male' },
+      { name: 'en-US-Wavenet-D', label: 'Mature Male' },
+      { name: 'en-US-Wavenet-I', label: 'Older Male' },
+      { name: 'en-US-Wavenet-J', label: 'Warm Male' },
+      { name: 'en-US-Neural2-A', label: 'Natural Male' },
+      { name: 'en-US-Neural2-D', label: 'Clear Male' },
+      { name: 'en-US-Neural2-I', label: 'Expressive Male' },
+      { name: 'en-US-Neural2-J', label: 'Conversational Male' },
+    ],
+    female: [
+      { name: 'en-US-Wavenet-C', label: 'Warm Female' },
+      { name: 'en-US-Wavenet-E', label: 'Young Female' },
+      { name: 'en-US-Wavenet-F', label: 'Atmospheric Female' },
+      { name: 'en-US-Wavenet-G', label: 'Soft Female' },
+      { name: 'en-US-Wavenet-H', label: 'Bright Female' },
+      { name: 'en-US-Neural2-C', label: 'Natural Female' },
+      { name: 'en-US-Neural2-E', label: 'Clear Female' },
+      { name: 'en-US-Neural2-F', label: 'Expressive Female' },
+      { name: 'en-US-Neural2-G', label: 'Conversational Female' },
+      { name: 'en-US-Neural2-H', label: 'Warm Neural Female' },
+    ]
+  },
+  tr: {
+    male: [
+      { name: 'tr-TR-Wavenet-B', label: 'Turkish Male' },
+      { name: 'tr-TR-Wavenet-E', label: 'Turkish Male 2' },
+      { name: 'tr-TR-Standard-B', label: 'Turkish Standard Male' },
+      { name: 'tr-TR-Standard-E', label: 'Turkish Standard Male 2' },
+    ],
+    female: [
+      { name: 'tr-TR-Wavenet-A', label: 'Turkish Female' },
+      { name: 'tr-TR-Wavenet-C', label: 'Turkish Female 2' },
+      { name: 'tr-TR-Wavenet-D', label: 'Turkish Female 3' },
+      { name: 'tr-TR-Standard-A', label: 'Turkish Standard Female' },
+      { name: 'tr-TR-Standard-C', label: 'Turkish Standard Female 2' },
+      { name: 'tr-TR-Standard-D', label: 'Turkish Standard Female 3' },
+    ]
+  }
 };
+
+// Helper to get voices for a specific language (defaults to English)
+export function getVoicesForLanguage(language: string = 'en'): { male: Array<{ name: string; label: string }>; female: Array<{ name: string; label: string }> } {
+  return VOICE_OPTIONS[language] || VOICE_OPTIONS.en;
+}
 
 // Current voice settings (persisted to localStorage)
 let currentVoiceSettings: VoiceSettings = loadVoiceSettings();

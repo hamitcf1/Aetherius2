@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings } from 'lucide-react';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings, Globe, SlidersHorizontal } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { audioService } from '../services/audioService';
 import { ThemeSelector, AIModelSelector } from './GameFeatures';
-import { VOICE_OPTIONS, getVoiceSettings, saveVoiceSettings, type VoiceSettings } from '../services/ttsService';
+import { VOICE_OPTIONS, getVoiceSettings, saveVoiceSettings, getVoicesForLanguage, type VoiceSettings } from '../services/ttsService';
+import { useLocalization, AVAILABLE_LANGUAGES, type Language } from '../services/localization';
 
 type SnowIntensity = SnowSettings['intensity'];
 
@@ -44,10 +45,19 @@ const ActionBar: React.FC = () => {
     userSettings,
     updateUserSettings,
   } = useAppContext();
+  
+  // Localization
+  const { language, setLanguage, t } = useLocalization();
+  
   const [open, setOpen] = useState(false);
   const [showSnowOptions, setShowSnowOptions] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  
+  // Music volume state
+  const [musicVolume, setMusicVolume] = useState(() => audioService.getConfig().musicVolume);
+  const [soundVolume, setSoundVolume] = useState(() => audioService.getConfig().soundEffectsVolume);
   
   // Voice settings state - load from ttsService (which has localStorage fallback)
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => getVoiceSettings().gender || 'male');
@@ -104,6 +114,17 @@ const ActionBar: React.FC = () => {
     setMusicEnabled(newState);
     audioService.setMusicEnabled(newState);
     updateUserSettings?.({ musicEnabled: newState });
+  };
+  
+  // Volume handlers
+  const handleMusicVolumeChange = (volume: number) => {
+    setMusicVolume(volume);
+    audioService.setMusicVolume(volume);
+  };
+  
+  const handleSoundVolumeChange = (volume: number) => {
+    setSoundVolume(volume);
+    audioService.setSoundEffectsVolume(volume);
   };
   
   // Ref for the button to align dropdown
@@ -228,6 +249,18 @@ const ActionBar: React.FC = () => {
             zIndex: 1000
           }}
         >
+          {/* Settings Button - Opens comprehensive settings modal */}
+          <button
+            onClick={() => {
+              setShowSettingsModal(true);
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-skyrim-gold/20 to-skyrim-gold/10 border border-skyrim-gold rounded font-bold text-skyrim-gold hover:from-skyrim-gold/30 hover:to-skyrim-gold/20 transition-all"
+          >
+            <SlidersHorizontal size={16} /> Settings
+            <span className="ml-auto text-xs text-skyrim-text/60">{AVAILABLE_LANGUAGES.find(l => l.code === language)?.flag}</span>
+          </button>
+          
           {typeof setAiModel === 'function' && (
             <div className="flex flex-col gap-1">
               <div className="text-xs text-gray-500 font-bold">AI Model</div>
@@ -495,7 +528,7 @@ const ActionBar: React.FC = () => {
                     className="w-full px-2 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 focus:border-skyrim-gold focus:outline-none"
                   >
                     <option value="">Default (Auto)</option>
-                    {VOICE_OPTIONS[voiceGender].map(voice => (
+                    {getVoicesForLanguage(language)[voiceGender].map(voice => (
                       <option key={voice.name} value={voice.name}>{voice.label}</option>
                     ))}
                   </select>
@@ -562,6 +595,207 @@ const ActionBar: React.FC = () => {
                 Exit Anyway
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && createPortal(
+        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+          <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-serif text-skyrim-gold flex items-center gap-2">
+                <SlidersHorizontal size={20} /> {t('common.settings')}
+              </h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-skyrim-text hover:text-skyrim-gold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Language Selection */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Globe size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-skyrim-gold uppercase">{t('settings.language')}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {AVAILABLE_LANGUAGES.map(lang => (
+                  <button
+                    key={lang.code}
+                    onClick={() => setLanguage(lang.code)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded border transition-colors ${
+                      language === lang.code
+                        ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
+                        : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
+                    }`}
+                  >
+                    <span className="text-lg">{lang.flag}</span>
+                    <span>{lang.nativeName}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Audio Settings */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Music2 size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-skyrim-gold uppercase">Audio</span>
+              </div>
+              
+              {/* Music Volume */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-skyrim-text flex items-center gap-2">
+                    <Music size={14} /> {t('settings.music')}
+                  </label>
+                  <span className="text-xs text-skyrim-gold">{Math.round(musicVolume * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleToggleMusic}
+                    className={`p-2 rounded ${musicEnabled ? 'bg-green-700 text-white' : 'bg-gray-700 text-gray-400'}`}
+                  >
+                    {musicEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={musicVolume}
+                    onChange={(e) => handleMusicVolumeChange(parseFloat(e.target.value))}
+                    className="flex-1 accent-skyrim-gold"
+                    disabled={!musicEnabled}
+                  />
+                </div>
+              </div>
+              
+              {/* Sound Effects Volume */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-skyrim-text flex items-center gap-2">
+                    <Volume2 size={14} /> {t('settings.sound')}
+                  </label>
+                  <span className="text-xs text-skyrim-gold">{Math.round(soundVolume * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleToggleSound}
+                    className={`p-2 rounded ${soundEnabled ? 'bg-green-700 text-white' : 'bg-gray-700 text-gray-400'}`}
+                  >
+                    {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={soundVolume}
+                    onChange={(e) => handleSoundVolumeChange(parseFloat(e.target.value))}
+                    className="flex-1 accent-skyrim-gold"
+                    disabled={!soundEnabled}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Voice Settings */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Mic size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-skyrim-gold uppercase">Voice (TTS)</span>
+              </div>
+              
+              {/* Voice Gender */}
+              <div className="mb-3">
+                <label className="text-xs text-skyrim-text block mb-2">Voice Gender</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleVoiceGenderChange('male')}
+                    className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                      voiceGender === 'male'
+                        ? 'bg-blue-700 text-white border-blue-600'
+                        : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-blue-600'
+                    }`}
+                  >
+                    Male
+                  </button>
+                  <button
+                    onClick={() => handleVoiceGenderChange('female')}
+                    className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                      voiceGender === 'female'
+                        ? 'bg-pink-700 text-white border-pink-600'
+                        : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-pink-600'
+                    }`}
+                  >
+                    Female
+                  </button>
+                </div>
+              </div>
+              
+              {/* Voice Style */}
+              <div>
+                <label className="text-xs text-skyrim-text block mb-2">Voice Style</label>
+                <select
+                  value={voiceName}
+                  onChange={(e) => handleVoiceNameChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border focus:border-skyrim-gold focus:outline-none"
+                >
+                  <option value="">Default (Auto)</option>
+                  {getVoicesForLanguage(language)[voiceGender].map(voice => (
+                    <option key={voice.name} value={voice.name}>{voice.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <p className="text-[10px] text-gray-500 mt-2 italic">
+                Voice language will match your selected language ({AVAILABLE_LANGUAGES.find(l => l.code === language)?.nativeName})
+              </p>
+            </div>
+
+            {/* Weather Effects (if enabled) */}
+            {isFeatureEnabled('snowEffect') && (
+              <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Snowflake size={16} className="text-skyrim-gold" />
+                  <span className="text-sm font-bold text-skyrim-gold uppercase">{t('settings.weather')}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: 'snow', icon: <Snowflake size={14} />, label: t('settings.weatherSnow') },
+                    { value: 'rain', icon: <CloudRain size={14} />, label: t('settings.weatherRain') },
+                    { value: 'sandstorm', icon: <Wind size={14} />, label: 'Sandstorm' },
+                    { value: 'none', icon: <CloudOff size={14} />, label: t('settings.weatherClear') },
+                  ].map(w => (
+                    <button
+                      key={w.value}
+                      onClick={() => setWeatherEffect(w.value as WeatherEffectType)}
+                      className={`flex flex-col items-center gap-1 px-2 py-2 rounded border text-xs transition-colors ${
+                        weatherEffect === w.value
+                          ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
+                          : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
+                      }`}
+                    >
+                      {w.icon}
+                      <span>{w.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Close Button */}
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              className="w-full px-4 py-3 bg-skyrim-gold text-skyrim-dark font-bold rounded hover:bg-yellow-400 transition-colors"
+            >
+              {t('common.close')}
+            </button>
           </div>
         </div>,
         document.body

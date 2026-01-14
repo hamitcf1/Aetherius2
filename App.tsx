@@ -121,6 +121,7 @@ import CompanionsModal from './components/CompanionsModal';
 import CompanionDialogueModal from './components/CompanionDialogueModal';
 import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
+import { useLocalization } from './services/localization';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
 
@@ -229,6 +230,9 @@ interface AppGameState {
 }
 
 const App: React.FC = () => {
+  // Localization
+  const { t } = useLocalization();
+  
   // Authentication State
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -3579,12 +3583,12 @@ const App: React.FC = () => {
               </div>
               <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-x-auto scrollbar-hide max-w-[calc(100vw-140px)] sm:max-w-none">
                 {[
-                        { id: TABS.CHARACTER, icon: User, label: 'Hero' },
-                    { id: TABS.INVENTORY, icon: Package, label: 'Equipment' },
-                    { id: TABS.ADVENTURE, icon: Swords, label: 'Adventure' },
-                    { id: TABS.QUESTS, icon: Scroll, label: 'Quests' },
-                    { id: TABS.STORY, icon: Feather, label: 'Story' },
-                    { id: TABS.JOURNAL, icon: BookOpen, label: 'Journal' },
+                        { id: TABS.CHARACTER, icon: User, label: t('nav.hero') },
+                    { id: TABS.INVENTORY, icon: Package, label: t('nav.equipment') },
+                    { id: TABS.ADVENTURE, icon: Swords, label: t('nav.adventure') },
+                    { id: TABS.QUESTS, icon: Scroll, label: t('nav.quests') },
+                    { id: TABS.STORY, icon: Feather, label: t('nav.story') },
+                    { id: TABS.JOURNAL, icon: BookOpen, label: t('nav.journal') },
                 ].map(tab => (
                   <button
                       key={tab.id}

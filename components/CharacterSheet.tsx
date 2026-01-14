@@ -11,6 +11,7 @@ import { getSpellById } from '../services/spells';
 import { useAppContext } from '../AppContext';
 import { getXPForNextLevel, getXPProgress, formatXPDisplay } from '../utils/levelingSystem';
 import { isFeatureEnabled } from '../featureFlags';
+import { useLocalization } from '../services/localization';
 
 interface CharacterSheetProps {
   character: Character;
@@ -186,6 +187,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   onRequestLevelUp,
   onOpenPerkTree
 }) => {
+  // Localization
+  const { t } = useLocalization();
+  
   const [newMilestone, setNewMilestone] = useState('');
   const [newMilestoneLevel, setNewMilestoneLevel] = useState(1);
   const [newPerkName, setNewPerkName] = useState('');
@@ -630,14 +634,14 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full border-2 border-skyrim-gold flex items-center justify-center bg-skyrim-paper relative shadow-[0_0_15px_rgba(192,160,98,0.2)]">
                     <span className="text-2xl font-serif text-skyrim-gold">{character.level}</span>
-                    <div className="absolute -bottom-2 text-[10px] uppercase bg-black px-1 border border-skyrim-border rounded">Level</div>
+                    <div className="absolute -bottom-2 text-[10px] uppercase bg-black px-1 border border-skyrim-border rounded">{t('character.level')}</div>
                   </div>
                   
                   {/* XP Progress Section */}
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <TrendingUp size={14} className="text-skyrim-gold" />
-                      <span className="text-xs text-skyrim-text uppercase tracking-widest">Experience</span>
+                      <span className="text-xs text-skyrim-text uppercase tracking-widest">{t('character.experience')}</span>
                     </div>
                     
                     {/* XP Progress Bar */}
@@ -684,11 +688,11 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="mt-3 pt-3 border-t border-skyrim-border/30">
                 <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                   <span>
-                    <span className="text-skyrim-text">Level {character.level + 1}</span> requires <span className="text-skyrim-gold">{getXPForNextLevel(character.level).toLocaleString()} XP</span>
+                    <span className="text-skyrim-text">{t('character.level')} {character.level + 1}</span> requires <span className="text-skyrim-gold">{getXPForNextLevel(character.level).toLocaleString()} XP</span>
                   </span>
                   <span>•</span>
                   <span>
-                    Gold: <span className="text-yellow-500">{(character.gold || 0).toLocaleString()}</span>
+                    {t('character.gold')}: <span className="text-yellow-500">{(character.gold || 0).toLocaleString()}</span>
                   </span>
                 </div>
               </div>
@@ -696,13 +700,13 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
 
           {/* Current Vitals (for Adventure) - Moved directly under level */}
           <div className="mb-4 p-4 bg-gradient-to-r from-red-950/30 via-skyrim-paper/40 to-blue-950/30 rounded border border-skyrim-border">
-            <div className="text-xs uppercase tracking-widest text-skyrim-text font-bold mb-3">Current Vitals</div>
+            <div className="text-xs uppercase tracking-widest text-skyrim-text font-bold mb-3">{t('character.stats')}</div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Current Health */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
-                    <Heart size={12} className="text-red-500" /> Health
+                    <Heart size={12} className="text-red-500" /> {t('character.health')}
                   </span>
                   <span className="text-sm font-bold text-red-400">
                     {character.currentVitals?.currentHealth ?? character.stats.health} / {character.stats.health}
@@ -721,7 +725,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
-                    <Droplets size={12} className="text-blue-500" /> Magicka
+                    <Droplets size={12} className="text-blue-500" /> {t('character.magicka')}
                   </span>
                   <span className="text-sm font-bold text-blue-400">
                     {character.currentVitals?.currentMagicka ?? character.stats.magicka} / {character.stats.magicka}
@@ -740,7 +744,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
-                    <BicepsFlexed size={12} className="text-green-500" /> Stamina
+                    <BicepsFlexed size={12} className="text-green-500" /> {t('character.stamina')}
                   </span>
                   <span className="text-sm font-bold text-green-400">
                     {character.currentVitals?.currentStamina ?? character.stats.stamina} / {character.stats.stamina}
@@ -755,15 +759,12 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 </div>
               </div>
             </div>
-            <p className="text-[10px] text-gray-600 mt-3 text-center italic">
-              Current vitals change during adventure. Rest or use potions to restore them.
-            </p>
           </div>
 
           {/* Perk Points Summary */}
           <div className="mb-4 p-3 bg-skyrim-paper/30 border border-skyrim-border rounded flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-xs text-skyrim-text uppercase">Perk Points</div>
+              <div className="text-xs text-skyrim-text uppercase">{t('character.perks')}</div>
               <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
             </div>
             <div>

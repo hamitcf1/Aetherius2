@@ -561,15 +561,33 @@ Example discovering a hidden location:
   }]
 }
 
+=== SIMULATION UPDATE (CRITICAL - ALWAYS INCLUDE) ===
+
+IMPORTANT: You MUST include "simulationUpdate" in your response whenever:
+1. A NEW named NPC appears in the scene → Add to "npcsIntroduced"
+2. An existing NPC's attitude changes → Add to "npcUpdates"
+3. Player enters a new type of scene → Add "sceneStart"
+4. A topic is fully discussed → Add to "topicsResolved"
+5. Player reveals personal information → Add to "factsEstablished"
+
 SIMULATION UPDATE GUIDELINES:
-- npcsIntroduced: Add when a new named NPC enters the scene
+- npcsIntroduced: REQUIRED when ANY named NPC first appears (guards, merchants, quest-givers, etc.)
 - npcUpdates: Use for tension changes (+10 for suspicion, -10 for trust), disposition shifts, new knowledge
 - sceneStart: Use when entering a new location or encounter type
-- phaseChange: Advance the phase based on what's happening
-- sceneResolution: Set when an encounter concludes
+- phaseChange: Advance the phase based on what's happening (arrival, greeting, negotiation, conflict, resolution)
+- sceneResolution: Set when an encounter concludes (success, failure, fled, interrupted)
 - topicsResolved: Mark topics that have been fully addressed
 - factsEstablished: When player reveals information about themselves
 - newConsequences: Set up triggers for automatic outcomes
+
+Example - Meeting a new NPC:
+{
+  "narrative": { "title": "...", "content": "..." },
+  "simulationUpdate": {
+    "npcsIntroduced": [{ "name": "Belethor", "role": "Merchant", "disposition": "friendly", "description": "A Breton shopkeeper with a sly smile" }],
+    "sceneStart": { "type": "shop", "location": "Belethor's General Goods" }
+  }
+}
 
 Only include fields that changed. The narrative field is always required.`;
 
