@@ -767,7 +767,13 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="text-xs text-skyrim-text uppercase">{t('character.perks')}</div>
               <div className="px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded text-skyrim-gold font-bold">{character.perkPoints || 0}</div>
             </div>
-            <div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSpellsOpen(true)} className="px-3 py-1 bg-blue-800 text-white rounded flex items-center gap-1 text-sm hover:bg-blue-700">
+                <Zap size={14} /> Spells
+              </button>
+              <button onClick={() => { try { appCtx.openCompanions(); } catch (e) { (window as any).app?.openCompanions?.(); } }} className="px-3 py-1 bg-amber-700 text-white rounded flex items-center gap-1 text-sm hover:bg-amber-600">
+                <User size={14} /> Companions
+              </button>
               <button onClick={() => onOpenPerkTree ? onOpenPerkTree() : null} className="px-3 py-1 rounded border border-skyrim-border hover:border-skyrim-gold text-sm">Open Perk Tree</button>
             </div>
           </div>
@@ -970,14 +976,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             />
           )}
 
-          <div className="flex justify-end mb-4 gap-2">
-            <button onClick={() => setSpellsOpen(true)} className="px-3 py-1 bg-blue-800 text-white rounded flex items-center gap-2">
-              <Zap /> Spells
-            </button>
-            <button onClick={() => { try { appCtx.openCompanions(); } catch (e) { (window as any).app?.openCompanions?.(); } }} className="px-3 py-1 bg-amber-700 text-white rounded flex items-center gap-2">
-              <User /> Manage Companions
-            </button>
-          </div>
+
 
           <Section title="Identity & Psychology" icon={<User />} defaultOpen={true}>
              <div className="mb-4">

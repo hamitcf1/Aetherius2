@@ -708,12 +708,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
             >
                 <Plus size={18} /> Add Item
             </button>
-            <button
-              onClick={() => setShowQuantityControls(v => !v)}
-              title={showQuantityControls ? 'Hide quantity controls' : 'Show quantity controls'}
-              className={`px-3 py-2 rounded border ${showQuantityControls ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold' : 'bg-skyrim-paper/30 text-skyrim-text hover:bg-skyrim-paper/50'}`}>
-              {showQuantityControls ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
+
           </div>
       </div>
 

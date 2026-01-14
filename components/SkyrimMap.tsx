@@ -127,6 +127,16 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Close on ESC key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Merge base locations with discovered locations
   const allLocations = useMemo(() => {
     const baseLocations = SKYRIM_LOCATIONS.filter(loc => loc.type !== 'hold');

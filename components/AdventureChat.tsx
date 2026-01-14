@@ -18,7 +18,7 @@ import { getSimulationManager, processAISimulationUpdate, SimulationStateManager
 import { subscribeToCombatResolved } from '../services/events';
 import { getTransactionLedger, filterDuplicateTransactions } from '../services/transactionLedger';
 import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
-import { speak, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, type VoiceRole, type VoiceSettings } from '../services/ttsService';
+import { speak, speakSample, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, getVoiceSettings, saveVoiceSettings, VOICE_OPTIONS, type VoiceRole, type VoiceSettings } from '../services/ttsService';
 import { useLocalization } from '../services/localization';
 
 interface ChatMessage {
@@ -654,6 +654,51 @@ const FONT_WEIGHT_CLASSES: Record<ChatFontWeight, string> = {
   bold: 'font-semibold'
 };
 
+// Custom Voice Style Dropdown (matches app's dropdown design)
+const VoiceStyleSelector: React.FC<{
+  gender: 'male' | 'female';
+  currentVoice: string;
+  onSelect: (voice: string) => void;
+}> = ({ gender, currentVoice, onSelect }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const voices = VOICE_OPTIONS[gender] || [];
+  const current = voices.find(v => v.name === currentVoice);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold transition-colors"
+      >
+        <span className="flex-1 text-left truncate">{current?.label || 'Default'}</span>
+        <ChevronDown size={12} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-full bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+          <button
+            onClick={() => { onSelect(''); setIsOpen(false); }}
+            className={`w-full px-2 py-1.5 text-left text-xs flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${!currentVoice ? 'text-skyrim-gold' : 'text-skyrim-text'}`}
+          >
+            Default
+            {!currentVoice && <span className="text-skyrim-gold">✓</span>}
+          </button>
+          {voices.map(voice => (
+            <button
+              key={voice.name}
+              onClick={() => { onSelect(voice.name); setIsOpen(false); }}
+              className={`w-full px-2 py-1.5 text-left text-xs flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${voice.name === currentVoice ? 'text-skyrim-gold' : 'text-skyrim-text'}`}
+            >
+              {voice.label}
+              {voice.name === currentVoice && <span className="text-skyrim-gold">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AdventureChat: React.FC<AdventureChatProps> = ({
   userId,
   model,
@@ -677,6 +722,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [showTextSettings, setShowTextSettings] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(getVoiceSettings());
+  const [sampleKey, setSampleKey] = useState<string>('narrator_demo');
   const [localFontSize, setLocalFontSize] = useState<ChatFontSize>(chatFontSize);
   const [localFontWeight, setLocalFontWeight] = useState<ChatFontWeight>(chatFontWeight);
   const [toastMessages, setToastMessages] = useState<{ id: string; message: string; type: string }[]>([]);
@@ -2479,20 +2525,15 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           {voiceSettings.gender && (
             <div className="mb-3">
               <label className="text-xs text-skyrim-text block mb-1.5">Voice Style</label>
-              <select
-                value={voiceSettings.voiceName || ''}
-                onChange={(e) => {
-                  const newSettings = { ...voiceSettings, voiceName: e.target.value || undefined };
+              <VoiceStyleSelector
+                gender={voiceSettings.gender}
+                currentVoice={voiceSettings.voiceName || ''}
+                onSelect={(voiceName) => {
+                  const newSettings = { ...voiceSettings, voiceName: voiceName || undefined };
                   setVoiceSettings(newSettings);
                   saveVoiceSettings(newSettings);
                 }}
-                className="w-full px-2 py-1.5 rounded text-xs bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border focus:border-skyrim-gold"
-              >
-                <option value="">Default</option>
-                {VOICE_OPTIONS[voiceSettings.gender]?.map(voice => (
-                  <option key={voice.name} value={voice.name}>{voice.label}</option>
-                ))}
-              </select>
+              />
             </div>
           )}
           
@@ -2549,6 +2590,52 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           <p className="text-[10px] text-skyrim-text/60 mt-2">
             Note: Voice changes take effect on the next message. Custom voices count against your daily quota.
           </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => {
+                // Persist current voice settings and play a sample phrase
+                saveVoiceSettings(voiceSettings);
+                const sample = "The wind howls through the mountain pass as you approach the ancient ruins.";
+                // Use narrator role for the sample
+                speak(sample, 'narrator', { enabled: true, autoPlay: true, volume: 0.9 }).catch(() => {});
+              }}
+              className="px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold text-sm hover:bg-skyrim-goldHover transition-colors"
+            >
+              Test Voice
+            </button>
+            <button
+              onClick={() => {
+                // Play a short NPC sample in the selected gender/voice
+                saveVoiceSettings(voiceSettings);
+                const sampleNpc = "Hail, traveler. Have you come seeking fortune or mischief?";
+                speak(sampleNpc, voiceSettings.gender === 'female' ? 'npc_female' : 'npc', { enabled: true, autoPlay: true, volume: 0.85 }).catch(() => {});
+              }}
+              className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
+            >
+              Test NPC
+            </button>
+            {/* Sample playback (cached) */}
+            <div className="flex items-center gap-2">
+              <select
+                value={sampleKey}
+                onChange={(e) => setSampleKey(e.target.value)}
+                className="px-2 py-1 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border text-sm"
+              >
+                <option value="narrator_demo">Narrator Sample</option>
+                <option value="npc_demo">NPC Sample</option>
+                <option value="system_demo">System Sample</option>
+              </select>
+              <button
+                onClick={() => {
+                  saveVoiceSettings(voiceSettings);
+                  speakSample(sampleKey || 'narrator_demo', voiceSettings.gender === 'female' ? 'npc_female' : 'narrator', { enabled: true, autoPlay: true, volume: 0.9 }).catch(() => {});
+                }}
+                className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
+              >
+                Play Sample
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

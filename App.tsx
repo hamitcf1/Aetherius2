@@ -383,12 +383,12 @@ const App: React.FC = () => {
   const [statusEffects, setStatusEffects] = useState<StatusEffect[]>([]);
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [colorTheme, setColorTheme] = useState('default');
-  const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'none'>(() => {
+  const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'sandstorm' | 'none'>(() => {
     // Load from localStorage
     try {
       const saved = localStorage.getItem('aetherius:weatherEffect');
-      if (saved && ['snow', 'rain', 'none'].includes(saved)) {
-        return saved as 'snow' | 'rain' | 'none';
+      if (saved && ['snow', 'rain', 'sandstorm', 'none'].includes(saved)) {
+        return saved as 'snow' | 'rain' | 'sandstorm' | 'none';
       }
     } catch (e) {}
     return 'snow';
@@ -2746,6 +2746,13 @@ const App: React.FC = () => {
             }));
             // Log quest reward application
             console.log(`Quest rewards applied: +${totalXpFromQuests} XP, +${totalGoldFromQuests} gold`);
+            // Show immediate toast summarizing quest rewards
+            if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
+              const parts: string[] = [];
+              if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
+              if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
+              showToast(parts.join('  '), 'success');
+            }
           }
       }
 

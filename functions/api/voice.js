@@ -40,7 +40,7 @@ const VOICE_OPTIONS = {
 const VOICE_PROFILES = {
   narrator: {
     languageCode: 'en-US',
-    name: 'en-US-Wavenet-F', // Changed from Journey - Journey doesn't support pitch
+    name: 'en-US-Neural2-C', // Use Neural2 for more natural narration
     ssmlGender: 'FEMALE',
     pitch: -2,
     speakingRate: 0.9,
@@ -68,7 +68,7 @@ const VOICE_PROFILES = {
   // Default for NPCs
   npc: {
     languageCode: 'en-US',
-    name: 'en-US-Wavenet-D',
+    name: 'en-US-Neural2-D',
     ssmlGender: 'MALE',
     pitch: 0,
     speakingRate: 0.95,
@@ -78,7 +78,7 @@ const VOICE_PROFILES = {
   // Female NPC variant
   npc_female: {
     languageCode: 'en-US',
-    name: 'en-US-Wavenet-C',
+    name: 'en-US-Neural2-C',
     ssmlGender: 'FEMALE',
     pitch: 0,
     speakingRate: 0.95,
@@ -120,22 +120,17 @@ function buildSSML(text, profile) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
+  // Use a voice wrapper and prosody for more natural rendering
   // Only use pitch in prosody if voice supports it
-  if (profile.supportsPitch && profile.pitch !== 0) {
-    const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
-    return `<speak>
-      <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
-        ${escapedText}
-      </prosody>
-    </speak>`;
+  const pitchStr = (profile.supportsPitch && profile.pitch) ? (profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`) : undefined;
+  const rateStr = profile.speakingRate || 1.0;
+
+  if (pitchStr) {
+    return `<speak><voice name="${profile.name}"><prosody pitch="${pitchStr}" rate="${rateStr}">${escapedText}</prosody></voice></speak>`;
   }
-  
+
   // For voices without pitch support, only use rate
-  return `<speak>
-    <prosody rate="${profile.speakingRate}">
-      ${escapedText}
-    </prosody>
-  </speak>`;
+  return `<speak><voice name="${profile.name}"><prosody rate="${rateStr}">${escapedText}</prosody></voice></speak>`;
 }
 
 /**
@@ -244,23 +239,24 @@ function buildSSMLWithCustom(text, settings) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
-  const pitch = settings.pitch || 0;
-  const rate = settings.speakingRate || 1.0;
+  const pitch = typeof settings.pitch === 'number' ? settings.pitch : 0;
+  const rate = typeof settings.speakingRate === 'number' ? settings.speakingRate : 1.0;
+  const voiceName = settings.voiceName || '';
 
-  if (pitch !== 0) {
-    const pitchStr = pitch >= 0 ? `+${pitch}st` : `${pitch}st`;
-    return `<speak>
-      <prosody pitch="${pitchStr}" rate="${rate}">
-        ${escapedText}
-      </prosody>
-    </speak>`;
+  const pitchStr = pitch !== 0 ? (pitch >= 0 ? `+${pitch}st` : `${pitch}st`) : undefined;
+
+  if (voiceName) {
+    if (pitchStr) {
+      return `<speak><voice name="${voiceName}"><prosody pitch="${pitchStr}" rate="${rate}">${escapedText}</prosody></voice></speak>`;
+    }
+    return `<speak><voice name="${voiceName}"><prosody rate="${rate}">${escapedText}</prosody></voice></speak>`;
   }
-  
-  return `<speak>
-    <prosody rate="${rate}">
-      ${escapedText}
-    </prosody>
-  </speak>`;
+
+  if (pitchStr) {
+    return `<speak><prosody pitch="${pitchStr}" rate="${rate}">${escapedText}</prosody></speak>`;
+  }
+
+  return `<speak><prosody rate="${rate}">${escapedText}</prosody></speak>`;
 }
 
 /**
@@ -359,7 +355,61 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (request.method !== 'POST') {
+  // Allow simple GET requests for playing one of the fixed sample sentences
+  if (request.method === 'GET') {
+    const url = new URL(request.url);
+    const sample = url.searchParams.get('sample');
+    const role = url.searchParams.get('role') || 'narrator';
+    const voiceName = url.searchParams.get('voiceName') || null;
+
+    if (!sample) {
+      return new Response(JSON.stringify({ error: 'sample query param required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Map of fixed sample sentences (kept short and deterministic)
+    const SAMPLE_TEXTS = {
+      'narrator_demo': 'The wind howls through the mountain pass as you approach the ancient ruins.',
+      'npc_demo': 'Hail, traveler. Have you come seeking fortune or mischief?',
+      'system_demo': 'Warning: Your inventory is full. Consider making space before traveling farther.'
+    };
+
+    const text = SAMPLE_TEXTS[sample];
+    if (!text) {
+      return new Response(JSON.stringify({ error: 'Unknown sample key' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Build a deterministic cache key that includes the sample and optional voiceName
+    const settingsStr = voiceName ? JSON.stringify({ voiceName }) : '';
+    const cacheKey = await md5Hash(`${text}:${role}:${settingsStr}`);
+    const filename = `${cacheKey}.mp3`;
+
+    // Try to serve from R2 cache first
+    if (env.R2_BUCKET) {
+      const cached = await env.R2_BUCKET.get(filename);
+      if (cached) {
+        const audioData = await cached.arrayBuffer();
+        return new Response(audioData, {
+          headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg', 'X-Cache': 'HIT' }
+        });
+      }
+    }
+
+    // Fall through to synthesizing the sample below by treating it like a POST body
+    // so the existing quota/cache logic is reused. We'll synthesize the sample text.
+    // Build a fake payload for reuse.
+    const fakeBody = { text, role, voiceSettings: voiceName ? { voiceName } : null, sample };
+    // Continue processing with fake payload by assigning to a local variable below.
+    var incomingPayload = fakeBody;
+    // Jump to synthesis flow below by skipping the POST-only check.
+  }
+
+  if (request.method !== 'POST' && typeof incomingPayload === 'undefined') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -367,7 +417,14 @@ export async function onRequest(context) {
   }
 
   try {
-    const { text, role = 'narrator', voiceSettings = null } = await request.json();
+    // Support either POST bodies or an injected incomingPayload (for GET sample requests)
+    let body;
+    if (typeof incomingPayload !== 'undefined') {
+      body = incomingPayload;
+    } else {
+      body = await request.json();
+    }
+    const { text, role = 'narrator', voiceSettings = null, sample = null } = body;
 
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ error: 'Text is required' }), {
@@ -386,7 +443,7 @@ export async function onRequest(context) {
 
     // Generate cache key (include voice settings in hash)
     const settingsStr = voiceSettings ? JSON.stringify(voiceSettings) : '';
-    const cacheKey = await md5Hash(`${text}:${role}:${settingsStr}`);
+    const cacheKey = await md5Hash(`${sample ? `sample:${sample}` : text}:${role}:${settingsStr}`);
     const filename = `${cacheKey}.mp3`;
 
     // Step 1: Check R2 cache

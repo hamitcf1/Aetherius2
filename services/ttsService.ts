@@ -331,6 +331,64 @@ export async function speak(
 }
 
 /**
+ * Play a fixed, pre-defined sample sentence identified by `sampleKey`.
+ * Uses the backend sample path which caches samples deterministically
+ * so repeated playback does not consume extra quota.
+ */
+export async function speakSample(
+  sampleKey: string,
+  role: VoiceRole = 'narrator',
+  config: TTSConfig = { enabled: true, autoPlay: true, volume: 0.8 }
+): Promise<void> {
+  if (!config.enabled) return;
+  stopSpeaking();
+
+  // Duck music
+  try { const { audioService } = await import('./audioService'); audioService.duckMusic(0.1); } catch {}
+
+  updateState({ isSpeaking: true, currentText: `[Sample:${sampleKey}]`, error: null });
+
+  try {
+    // Use voiceSettings to include optional voiceName param so cache key matches backend
+    const voiceSettings = Object.keys(currentVoiceSettings).length > 0 ? currentVoiceSettings : undefined;
+    const voiceNameParam = voiceSettings?.voiceName ? `&voiceName=${encodeURIComponent(String(voiceSettings.voiceName))}` : '';
+    const url = `/api/voice?sample=${encodeURIComponent(sampleKey)}&role=${encodeURIComponent(role)}${voiceNameParam}`;
+
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'TTS sample fetch failed');
+      throw new Error(errorText || `TTS sample failed: ${response.status}`);
+    }
+
+    const audioBlob = await response.blob();
+    const cacheKey = getCacheKey(`[sample:${sampleKey}]`, role, voiceSettings);
+    const audioUrl = URL.createObjectURL(audioBlob);
+    audioCache.set(cacheKey, audioUrl);
+
+    // Play
+    currentAudio = new Audio(audioUrl);
+    currentAudio.volume = config.volume;
+    currentAudio.onplay = () => updateState({ isPlaying: true });
+    currentAudio.onended = () => {
+      updateState({ isPlaying: false, isSpeaking: false, currentText: null });
+      currentAudio = null;
+      import('./audioService').then(({ audioService }) => audioService.unduckMusic()).catch(() => {});
+    };
+    currentAudio.onerror = (e) => {
+      console.error('Sample playback error', e);
+      updateState({ isPlaying: false, isSpeaking: false, error: 'Playback failed' });
+      currentAudio = null;
+      import('./audioService').then(({ audioService }) => audioService.unduckMusic()).catch(() => {});
+    };
+
+    if (config.autoPlay) await currentAudio.play();
+  } catch (err) {
+    console.error('speakSample error:', err);
+    updateState({ isSpeaking: false, isPlaying: false, error: err instanceof Error ? err.message : 'Sample failed' });
+  }
+}
+
+/**
  * Pause current playback
  */
 export function pauseSpeaking(): void {

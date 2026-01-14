@@ -18,6 +18,52 @@ const SNOW_INTENSITY_OPTIONS: Array<{ value: SnowIntensity; label: string }> = [
   { value: 'blizzard', label: 'Blizzard' },
 ];
 
+// Custom Voice Style Dropdown (matches app's dropdown design)
+const VoiceStyleDropdown: React.FC<{
+  gender: 'male' | 'female';
+  currentVoice: string;
+  onSelect: (voice: string) => void;
+  language: string;
+}> = ({ gender, currentVoice, onSelect, language }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const voices = getVoicesForLanguage(language)[gender] || [];
+  const current = voices.find(v => v.name === currentVoice);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold transition-colors"
+      >
+        <span className="flex-1 text-left truncate text-sm">{current?.label || 'Default (Auto)'}</span>
+        <ChevronDown size={14} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-full bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
+          <button
+            onClick={() => { onSelect(''); setIsOpen(false); }}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${!currentVoice ? 'text-skyrim-gold' : 'text-skyrim-text'}`}
+          >
+            Default (Auto)
+            {!currentVoice && <span className="text-skyrim-gold">✓</span>}
+          </button>
+          {voices.map(voice => (
+            <button
+              key={voice.name}
+              onClick={() => { onSelect(voice.name); setIsOpen(false); }}
+              className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${voice.name === currentVoice ? 'text-skyrim-gold' : 'text-skyrim-text'}`}
+            >
+              {voice.label}
+              {voice.name === currentVoice && <span className="text-skyrim-gold">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ActionBar: React.FC = () => {
   const {
     handleManualSave,
@@ -44,6 +90,8 @@ const ActionBar: React.FC = () => {
     setWeatherIntensity,
     userSettings,
     updateUserSettings,
+    showQuantityControls,
+    setShowQuantityControls,
   } = useAppContext();
   
   // Localization
@@ -444,39 +492,7 @@ const ActionBar: React.FC = () => {
             )}
           </div>
 
-          {/* Audio Settings */}
-          <div className="border-t border-skyrim-border/60 pt-3 mt-2">
-            <div className="text-xs text-gray-500 font-bold mb-2">Audio Settings</div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleToggleSound}
-                className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded font-bold transition-colors ${
-                  soundEnabled 
-                    ? 'bg-green-700 text-white hover:bg-green-600' 
-                    : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
-                }`}
-                title={soundEnabled ? 'Disable sound effects' : 'Enable sound effects'}
-              >
-                {soundEnabled ? <Volume2 size={14} className="shrink-0" /> : <VolumeX size={14} className="shrink-0" />}
-                <span className="text-xs truncate">SFX</span>
-              </button>
-              <button
-                onClick={handleToggleMusic}
-                className={`flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded font-bold transition-colors ${
-                  musicEnabled 
-                    ? 'bg-purple-700 text-white hover:bg-purple-600' 
-                    : 'bg-gray-700 text-skyrim-text hover:bg-gray-600'
-                }`}
-                title={musicEnabled ? 'Disable background music' : 'Enable background music'}
-              >
-                {musicEnabled ? <Music size={14} className="shrink-0" /> : <Music2 size={14} className="shrink-0" />}
-                <span className="text-xs truncate">Music</span>
-              </button>
-            </div>
-            <p className="text-[10px] text-gray-600 mt-1 text-center italic">
-              Audio files coming soon
-            </p>
-          </div>
+
 
           {/* Voice Settings */}
           <div className="border-t border-skyrim-border/60 pt-3 mt-2">
@@ -739,23 +755,36 @@ const ActionBar: React.FC = () => {
               </div>
               
               {/* Voice Style */}
-              <div>
+              <div className="mb-3">
                 <label className="text-xs text-skyrim-text block mb-2">Voice Style</label>
-                <select
-                  value={voiceName}
-                  onChange={(e) => handleVoiceNameChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border focus:border-skyrim-gold focus:outline-none"
-                >
-                  <option value="">Default (Auto)</option>
-                  {getVoicesForLanguage(language)[voiceGender].map(voice => (
-                    <option key={voice.name} value={voice.name}>{voice.label}</option>
-                  ))}
-                </select>
+                <VoiceStyleDropdown
+                  gender={voiceGender}
+                  currentVoice={voiceName}
+                  onSelect={handleVoiceNameChange}
+                  language={language}
+                />
               </div>
               
               <p className="text-[10px] text-gray-500 mt-2 italic">
                 Voice language will match your selected language ({AVAILABLE_LANGUAGES.find(l => l.code === language)?.nativeName})
               </p>
+            </div>
+
+            {/* Inventory Settings */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Settings size={16} className="text-skyrim-gold" />
+                <span className="text-sm font-bold text-skyrim-gold uppercase">Inventory</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showQuantityControls}
+                  onChange={() => setShowQuantityControls(!showQuantityControls)}
+                  className="accent-skyrim-gold w-4 h-4"
+                />
+                <span className="text-sm text-skyrim-text">Show quantity controls</span>
+              </label>
             </div>
 
             {/* Weather Effects (if enabled) */}

@@ -291,8 +291,19 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete 
                              <h3 className={quest.status !== 'active' ? 'text-xl font-serif text-skyrim-text line-through' : 'text-xl font-serif text-skyrim-gold'}>
                                 {quest.title}
                             </h3>
-                            {quest.status === 'failed' && <span className="text-xs bg-red-900 text-red-200 px-2 py-0.5 rounded border border-red-700 uppercase font-bold">Failed</span>}
-                            {quest.status === 'completed' && <span className="text-xs bg-green-900 text-green-200 px-2 py-0.5 rounded border border-green-700 uppercase font-bold">Completed</span>}
+                                                        {quest.status === 'failed' && <span className="text-xs bg-red-900 text-red-200 px-2 py-0.5 rounded border border-red-700 uppercase font-bold">Failed</span>}
+                                                        {quest.status === 'completed' && <span className="text-xs bg-green-900 text-green-200 px-2 py-0.5 rounded border border-green-700 uppercase font-bold">Completed</span>}
+                                                        {/* Reward badges */}
+                                                        {(quest.xpReward || quest.goldReward) && (
+                                                            <div className="ml-2 flex items-center gap-2">
+                                                                {typeof quest.xpReward === 'number' && (
+                                                                    <span className="text-xs bg-blue-900 text-blue-100 px-2 py-0.5 rounded border border-blue-800 font-semibold">✦ {quest.xpReward} XP</span>
+                                                                )}
+                                                                {typeof quest.goldReward === 'number' && (
+                                                                    <span className="text-xs bg-yellow-900 text-yellow-100 px-2 py-0.5 rounded border border-yellow-800 font-semibold">🪙 {quest.goldReward}</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                         </div>
                        
                         {editingQuestId === quest.id ? (
