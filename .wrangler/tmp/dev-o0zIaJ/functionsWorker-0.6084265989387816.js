@@ -58,10 +58,12 @@ globalThis.fetch = new Proxy(globalThis.fetch, {
 var VOICE_PROFILES = {
   narrator: {
     languageCode: "en-US",
-    name: "en-US-Journey-F",
+    name: "en-US-Wavenet-F",
+    // Changed from Journey - Journey doesn't support pitch
     ssmlGender: "FEMALE",
     pitch: -2,
     speakingRate: 0.9,
+    supportsPitch: true,
     style: "Atmospheric, wise narrator"
   },
   khajiit: {
@@ -70,6 +72,7 @@ var VOICE_PROFILES = {
     ssmlGender: "MALE",
     pitch: -4,
     speakingRate: 0.85,
+    supportsPitch: true,
     style: "Deep, raspy, exotic"
   },
   system: {
@@ -78,6 +81,7 @@ var VOICE_PROFILES = {
     ssmlGender: "FEMALE",
     pitch: 0,
     speakingRate: 1.1,
+    supportsPitch: true,
     style: "Clean, fast for alerts"
   },
   // Default for NPCs
@@ -87,6 +91,7 @@ var VOICE_PROFILES = {
     ssmlGender: "MALE",
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: "Generic NPC voice"
   },
   // Female NPC variant
@@ -96,6 +101,7 @@ var VOICE_PROFILES = {
     ssmlGender: "FEMALE",
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: "Generic female NPC"
   }
 };
@@ -117,9 +123,16 @@ __name(getTodayKey, "getTodayKey");
 __name2(getTodayKey, "getTodayKey");
 function buildSSML(text, profile) {
   const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-  const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+    return `<speak>
+      <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+        ${escapedText}
+      </prosody>
+    </speak>`;
+  }
   return `<speak>
-    <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+    <prosody rate="${profile.speakingRate}">
       ${escapedText}
     </prosody>
   </speak>`;
@@ -197,6 +210,13 @@ __name2(getGoogleAccessToken, "getGoogleAccessToken");
 async function synthesizeSpeech(text, role, accessToken) {
   const profile = VOICE_PROFILES[role] || VOICE_PROFILES.narrator;
   const ssml = buildSSML(text, profile);
+  const audioConfig = {
+    audioEncoding: "MP3",
+    speakingRate: profile.speakingRate
+  };
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    audioConfig.pitch = profile.pitch;
+  }
   const response = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
     method: "POST",
     headers: {
@@ -210,11 +230,7 @@ async function synthesizeSpeech(text, role, accessToken) {
         name: profile.name,
         ssmlGender: profile.ssmlGender
       },
-      audioConfig: {
-        audioEncoding: "MP3",
-        pitch: profile.pitch,
-        speakingRate: profile.speakingRate
-      }
+      audioConfig
     })
   });
   if (!response.ok) {

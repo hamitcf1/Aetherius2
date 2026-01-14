@@ -19,6 +19,7 @@ import { subscribeToCombatResolved } from '../services/events';
 import { getTransactionLedger, filterDuplicateTransactions } from '../services/transactionLedger';
 import { getXPForNextLevel, getXPProgress } from '../utils/levelingSystem';
 import { speak, stopSpeaking, pauseSpeaking, resumeSpeaking, subscribeTTS, detectVoiceRole, cleanupTTS, type VoiceRole } from '../services/ttsService';
+import { useLocalization } from '../services/localization';
 
 interface ChatMessage {
   id: string;
@@ -561,6 +562,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   onChatSettingsChange
 }) => {
   const { showToast, openBonfireMenu } = useAppContext();
+  const { language } = useLocalization();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1290,7 +1292,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
       const context = `${simulationContext}\n\nADVENTURE_CONTEXT_JSON:\n${JSON.stringify(adventureContext, null, 2)}`;
       const systemPrompt = getSystemPrompt(); // Use dynamic system prompt with simulation context
-      const result = await generateAdventureResponse(trimmed, context, systemPrompt, { model });
+      const result = await generateAdventureResponse(trimmed, context, systemPrompt, { model, language });
       
       // Process simulation state updates if present
       if (result.simulationUpdate && simulationManagerRef.current) {
@@ -1553,7 +1555,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
           };
           const systemPrompt = `You are the adventure game master. Continue the story from the player's perspective after a combat. Do not perform mechanical state changes; focus on narrative and plausible next choices.`;
           const playerInput = `Combat ended: ${payload.result}. Continue the story.`;
-          const resp = await generateAdventureResponse(playerInput, JSON.stringify(contextObj), systemPrompt, { model: 'gemini-2.5-flash' });
+          const resp = await generateAdventureResponse(playerInput, JSON.stringify(contextObj), systemPrompt, { model: 'gemini-2.5-flash', language });
 
           const gmMessage: ChatMessage = {
             id: Math.random().toString(36).substr(2, 9),
@@ -1879,33 +1881,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             <Map size={12} /> <span className="hidden sm:inline">Map</span>
           </button>
           <button
-            onClick={() => setShowTextSettings(!showTextSettings)}
-            className={`px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${showTextSettings ? 'bg-skyrim-gold/20 border-skyrim-gold' : ''}`}
-            title="Text Settings"
-          >
-            <Type size={12} /> <span className="hidden sm:inline">Text</span>
-          </button>
-          <button
-            onClick={() => {
-              setTtsEnabled(!ttsEnabled);
-              if (ttsEnabled) {
-                stopSpeaking();
-                setSpeakingMessageId(null);
-              }
-            }}
-            className={`px-2 py-1.5 border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${
-              ttsEnabled 
-                ? 'bg-green-900/30 border-green-600 text-green-400' 
-                : 'text-skyrim-text border-skyrim-border'
-            }`}
-            title={ttsEnabled ? 'Disable Voice' : 'Enable Voice'}
-          >
-            {ttsEnabled ? <Volume2 size={12} /> : <VolumeX size={12} />}
-            <span className="hidden sm:inline">{ttsEnabled ? 'Voice On' : 'Voice'}</span>
-          </button>
-          <button
             onClick={() => setShowSettings(!showSettings)}
-            className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
+            className={`px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${showSettings ? 'bg-skyrim-gold/20 border-skyrim-gold' : ''}`}
           >
             <Settings size={12} /> {showSettings ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
           </button>
@@ -2120,8 +2097,14 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="flex-shrink-0 mb-2 p-2 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
-          <label className="flex items-center gap-2 cursor-pointer">
+        <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <Settings size={14} className="text-skyrim-gold" />
+            <span className="text-xs text-skyrim-gold font-semibold uppercase">Chat Settings</span>
+          </div>
+          
+          {/* Auto-apply toggle */}
+          <label className="flex items-center gap-2 cursor-pointer mb-3 pb-3 border-b border-skyrim-border/50">
             <input
               type="checkbox"
               checked={autoApply}
@@ -2130,6 +2113,37 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
             />
             <span className="text-xs text-skyrim-text">Auto-apply game changes (items, quests, gold)</span>
           </label>
+          
+          {/* Text & Voice Settings Row */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => setShowTextSettings(!showTextSettings)}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
+                showTextSettings 
+                  ? 'bg-skyrim-gold text-skyrim-dark' 
+                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+              }`}
+            >
+              <Type size={14} /> Text Settings
+            </button>
+            <button
+              onClick={() => {
+                setTtsEnabled(!ttsEnabled);
+                if (ttsEnabled) {
+                  stopSpeaking();
+                  setSpeakingMessageId(null);
+                }
+              }}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
+                ttsEnabled 
+                  ? 'bg-green-700 text-white' 
+                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+              }`}
+            >
+              {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+              {ttsEnabled ? 'Voice On' : 'Voice Off'}
+            </button>
+          </div>
         </div>
       )}
 

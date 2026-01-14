@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Character, SKYRIM_RACES } from '../types';
-import { Play, Plus, Dice5, MessageSquare, Loader2, Sparkles, Send, FileText, ArrowLeft, Trash2, Skull, RotateCcw, Sun, Moon, Volume2, VolumeX, Settings, CloudRain, Snowflake, CloudOff } from 'lucide-react';
+import { Play, Plus, Dice5, MessageSquare, Loader2, Sparkles, Send, FileText, ArrowLeft, Trash2, Skull, RotateCcw, Sun, Moon, Volume2, VolumeX, Settings, CloudRain, Snowflake, CloudOff, Globe } from 'lucide-react';
 import { generateCharacterProfile, chatWithScribe } from '../services/geminiService';
 import { isFeatureEnabled } from '../featureFlags';
 import { DropdownSelector } from './GameFeatures';
 import { audioService } from '../services/audioService';
+import { useLocalization, AVAILABLE_LANGUAGES, type Language } from '../services/localization';
 
 export type WeatherEffect = 'snow' | 'rain' | 'none';
 
@@ -48,6 +49,9 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
   const [creationMode, setCreationMode] = useState<'manual' | 'chat' | 'import'>('manual');
   const [showSettings, setShowSettings] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(audioService.getConfig().musicEnabled);
+  
+  // Localization
+  const { language, setLanguage, t } = useLocalization();
   
   // Manual State
   const [newName, setNewName] = useState('');
@@ -235,95 +239,82 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
     <div className="min-h-screen flex items-center justify-center bg-skyrim-dark bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
       <div className="w-full max-w-4xl p-4 sm:p-8 bg-skyrim-paper border border-skyrim-gold shadow-2xl rounded-lg flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         
-        {/* Settings Bar */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Settings Bar - Only Settings toggle, rest inside panel */}
+        <div className="flex items-center justify-end mb-4">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
-            title="Settings"
+            className={`flex items-center gap-2 px-3 py-1.5 border rounded text-sm transition-colors ${
+              showSettings 
+                ? 'bg-skyrim-gold/20 border-skyrim-gold text-skyrim-gold' 
+                : 'bg-skyrim-paper/50 border-skyrim-border hover:bg-skyrim-paper/70 text-skyrim-text'
+            }`}
+            title={t('common.settings')}
           >
             <Settings size={16} />
-            <span className="hidden sm:inline">Settings</span>
+            <span className="hidden sm:inline">{t('common.settings')}</span>
           </button>
-          
-          {/* Quick toggles always visible */}
-          <div className="flex items-center gap-2">
-            {/* Theme toggle */}
-            <button
-              onClick={handleToggleTheme}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
-              title={colorTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            >
-              {colorTheme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-              <span className="hidden sm:inline">{colorTheme === 'light' ? 'Dark' : 'Light'}</span>
-            </button>
-            
-            {/* Music toggle */}
-            <button
-              onClick={handleToggleMusic}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
-              title={musicEnabled ? 'Mute Music' : 'Enable Music'}
-            >
-              {musicEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              <span className="hidden sm:inline">{musicEnabled ? 'Music On' : 'Music Off'}</span>
-            </button>
-            
-            {/* Weather toggle */}
-            {isFeatureEnabled('snowEffect') && onWeatherChange && (
-              <button
-                onClick={handleCycleWeather}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-skyrim-paper/50 border border-skyrim-border rounded hover:bg-skyrim-paper/70 text-skyrim-text text-sm transition-colors"
-                title={`Weather: ${getWeatherLabel()}`}
-              >
-                {getWeatherIcon()}
-                <span className="hidden sm:inline">{getWeatherLabel()}</span>
-              </button>
-            )}
-          </div>
         </div>
         
-        {/* Expanded Settings Panel */}
+        {/* Expanded Settings Panel - All settings here */}
         {showSettings && (
           <div className="mb-4 p-4 bg-skyrim-dark/30 border border-skyrim-border rounded-lg">
-            <h3 className="text-sm font-semibold text-skyrim-gold mb-3">Display & Audio Settings</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <h3 className="text-sm font-semibold text-skyrim-gold mb-3">{t('settings.theme')} & Audio</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* Theme Setting */}
               <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
-                <div className="text-xs text-gray-400 mb-1">Theme</div>
+                <div className="text-xs text-gray-400 mb-1">{t('settings.theme')}</div>
                 <button
                   onClick={handleToggleTheme}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
                 >
                   {colorTheme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                  {colorTheme === 'light' ? 'Light Mode' : 'Dark Mode'}
+                  {colorTheme === 'light' ? t('settings.themeLight') : t('settings.themeDark')}
                 </button>
               </div>
               
               {/* Music Setting */}
               <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
-                <div className="text-xs text-gray-400 mb-1">Background Music</div>
+                <div className="text-xs text-gray-400 mb-1">{t('settings.music')}</div>
                 <button
                   onClick={handleToggleMusic}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
                 >
                   {musicEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                  {musicEnabled ? 'Music Enabled' : 'Music Disabled'}
+                  {musicEnabled ? t('settings.musicOn') : t('settings.musicOff')}
                 </button>
               </div>
               
               {/* Weather Setting */}
               {isFeatureEnabled('snowEffect') && onWeatherChange && (
                 <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
-                  <div className="text-xs text-gray-400 mb-1">Weather Effects</div>
+                  <div className="text-xs text-gray-400 mb-1">{t('settings.weather')}</div>
                   <button
                     onClick={handleCycleWeather}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors"
                   >
                     {getWeatherIcon()}
-                    {getWeatherLabel()} Effect
+                    {weatherEffect === 'snow' ? t('settings.weatherSnow') : 
+                     weatherEffect === 'rain' ? t('settings.weatherRain') : 
+                     t('settings.weatherClear')}
                   </button>
                 </div>
               )}
+              
+              {/* Language Setting */}
+              <div className="p-3 bg-skyrim-paper/20 rounded border border-skyrim-border">
+                <div className="text-xs text-gray-400 mb-1">{t('settings.language')}</div>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as Language)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-skyrim-paper/40 border border-skyrim-border rounded hover:bg-skyrim-paper/60 text-skyrim-text transition-colors cursor-pointer"
+                >
+                  {AVAILABLE_LANGUAGES.map(lang => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.flag} {lang.nativeName}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         )}

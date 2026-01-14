@@ -8,13 +8,15 @@
  */
 
 // Voice profiles with SSML attributes
+// Note: Journey voices don't support pitch, only Wavenet/Neural2 do
 const VOICE_PROFILES = {
   narrator: {
     languageCode: 'en-US',
-    name: 'en-US-Journey-F',
+    name: 'en-US-Wavenet-F', // Changed from Journey - Journey doesn't support pitch
     ssmlGender: 'FEMALE',
     pitch: -2,
     speakingRate: 0.9,
+    supportsPitch: true,
     style: 'Atmospheric, wise narrator'
   },
   khajiit: {
@@ -23,6 +25,7 @@ const VOICE_PROFILES = {
     ssmlGender: 'MALE',
     pitch: -4,
     speakingRate: 0.85,
+    supportsPitch: true,
     style: 'Deep, raspy, exotic'
   },
   system: {
@@ -31,6 +34,7 @@ const VOICE_PROFILES = {
     ssmlGender: 'FEMALE',
     pitch: 0,
     speakingRate: 1.1,
+    supportsPitch: true,
     style: 'Clean, fast for alerts'
   },
   // Default for NPCs
@@ -40,6 +44,7 @@ const VOICE_PROFILES = {
     ssmlGender: 'MALE',
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: 'Generic NPC voice'
   },
   // Female NPC variant
@@ -49,6 +54,7 @@ const VOICE_PROFILES = {
     ssmlGender: 'FEMALE',
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: 'Generic female NPC'
   }
 };
@@ -86,10 +92,19 @@ function buildSSML(text, profile) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
-  const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+  // Only use pitch in prosody if voice supports it
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+    return `<speak>
+      <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+        ${escapedText}
+      </prosody>
+    </speak>`;
+  }
   
+  // For voices without pitch support, only use rate
   return `<speak>
-    <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+    <prosody rate="${profile.speakingRate}">
       ${escapedText}
     </prosody>
   </speak>`;
@@ -196,6 +211,17 @@ async function synthesizeSpeech(text, role, accessToken) {
   const profile = VOICE_PROFILES[role] || VOICE_PROFILES.narrator;
   const ssml = buildSSML(text, profile);
 
+  // Build audioConfig - only include pitch if voice supports it
+  const audioConfig = {
+    audioEncoding: 'MP3',
+    speakingRate: profile.speakingRate
+  };
+  
+  // Only add pitch if the voice supports it
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    audioConfig.pitch = profile.pitch;
+  }
+
   const response = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
     method: 'POST',
     headers: {
@@ -209,11 +235,7 @@ async function synthesizeSpeech(text, role, accessToken) {
         name: profile.name,
         ssmlGender: profile.ssmlGender
       },
-      audioConfig: {
-        audioEncoding: 'MP3',
-        pitch: profile.pitch,
-        speakingRate: profile.speakingRate
-      }
+      audioConfig
     })
   });
 

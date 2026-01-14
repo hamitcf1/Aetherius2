@@ -285,6 +285,16 @@ const App: React.FC = () => {
     } catch (e) {}
     return 'snow';
   });
+  
+  const [weatherIntensity, setWeatherIntensity] = useState<'light' | 'normal' | 'heavy' | 'blizzard'>(() => {
+    try {
+      const saved = localStorage.getItem('aetherius:weatherIntensity');
+      if (saved && ['light', 'normal', 'heavy', 'blizzard'].includes(saved)) {
+        return saved as 'light' | 'normal' | 'heavy' | 'blizzard';
+      }
+    } catch (e) {}
+    return 'normal';
+  });
 
   // Save weather effect preference
   React.useEffect(() => {
@@ -292,6 +302,13 @@ const App: React.FC = () => {
       localStorage.setItem('aetherius:weatherEffect', weatherEffect);
     } catch (e) {}
   }, [weatherEffect]);
+  
+  // Save weather intensity preference
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('aetherius:weatherIntensity', weatherIntensity);
+    } catch (e) {}
+  }, [weatherIntensity]);
 
   // Apply theme variables (light / default)
   React.useEffect(() => {
@@ -3299,7 +3316,7 @@ const App: React.FC = () => {
           {/* Global Weather Effect on login page */}
           {weatherEffect !== 'none' && (
             <SnowEffect 
-              settings={{ intensity: 'normal' }} 
+              settings={{ intensity: weatherIntensity }} 
               theme={colorTheme} 
               weatherType={weatherEffect} 
             />
@@ -3378,6 +3395,8 @@ const App: React.FC = () => {
       setShowQuantityControls,
       weatherEffect,
       setWeatherEffect,
+      weatherIntensity,
+      setWeatherIntensity,
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
@@ -3868,7 +3887,7 @@ const App: React.FC = () => {
         {/* Global Weather Effect */}
         {weatherEffect !== 'none' && (
           <SnowEffect 
-            settings={{ intensity: 'normal' }} 
+            settings={{ intensity: weatherIntensity }} 
             theme={colorTheme} 
             weatherType={weatherEffect} 
           />

@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// ../.wrangler/tmp/bundle-aBnR7K/checked-fetch.js
+// ../.wrangler/tmp/bundle-PW6gHg/checked-fetch.js
 var urls = /* @__PURE__ */ new Set();
 function checkURL(request, init) {
   const url = request instanceof URL ? request : new URL(
@@ -31,10 +31,12 @@ globalThis.fetch = new Proxy(globalThis.fetch, {
 var VOICE_PROFILES = {
   narrator: {
     languageCode: "en-US",
-    name: "en-US-Journey-F",
+    name: "en-US-Wavenet-F",
+    // Changed from Journey - Journey doesn't support pitch
     ssmlGender: "FEMALE",
     pitch: -2,
     speakingRate: 0.9,
+    supportsPitch: true,
     style: "Atmospheric, wise narrator"
   },
   khajiit: {
@@ -43,6 +45,7 @@ var VOICE_PROFILES = {
     ssmlGender: "MALE",
     pitch: -4,
     speakingRate: 0.85,
+    supportsPitch: true,
     style: "Deep, raspy, exotic"
   },
   system: {
@@ -51,6 +54,7 @@ var VOICE_PROFILES = {
     ssmlGender: "FEMALE",
     pitch: 0,
     speakingRate: 1.1,
+    supportsPitch: true,
     style: "Clean, fast for alerts"
   },
   // Default for NPCs
@@ -60,6 +64,7 @@ var VOICE_PROFILES = {
     ssmlGender: "MALE",
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: "Generic NPC voice"
   },
   // Female NPC variant
@@ -69,6 +74,7 @@ var VOICE_PROFILES = {
     ssmlGender: "FEMALE",
     pitch: 0,
     speakingRate: 0.95,
+    supportsPitch: true,
     style: "Generic female NPC"
   }
 };
@@ -88,9 +94,16 @@ function getTodayKey() {
 __name(getTodayKey, "getTodayKey");
 function buildSSML(text, profile) {
   const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-  const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    const pitchStr = profile.pitch >= 0 ? `+${profile.pitch}st` : `${profile.pitch}st`;
+    return `<speak>
+      <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+        ${escapedText}
+      </prosody>
+    </speak>`;
+  }
   return `<speak>
-    <prosody pitch="${pitchStr}" rate="${profile.speakingRate}">
+    <prosody rate="${profile.speakingRate}">
       ${escapedText}
     </prosody>
   </speak>`;
@@ -165,6 +178,13 @@ __name(getGoogleAccessToken, "getGoogleAccessToken");
 async function synthesizeSpeech(text, role, accessToken) {
   const profile = VOICE_PROFILES[role] || VOICE_PROFILES.narrator;
   const ssml = buildSSML(text, profile);
+  const audioConfig = {
+    audioEncoding: "MP3",
+    speakingRate: profile.speakingRate
+  };
+  if (profile.supportsPitch && profile.pitch !== 0) {
+    audioConfig.pitch = profile.pitch;
+  }
   const response = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
     method: "POST",
     headers: {
@@ -178,11 +198,7 @@ async function synthesizeSpeech(text, role, accessToken) {
         name: profile.name,
         ssmlGender: profile.ssmlGender
       },
-      audioConfig: {
-        audioEncoding: "MP3",
-        pitch: profile.pitch,
-        speakingRate: profile.speakingRate
-      }
+      audioConfig
     })
   });
   if (!response.ok) {
@@ -810,7 +826,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// ../.wrangler/tmp/bundle-aBnR7K/middleware-insertion-facade.js
+// ../.wrangler/tmp/bundle-PW6gHg/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -842,7 +858,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// ../.wrangler/tmp/bundle-aBnR7K/middleware-loader.entry.ts
+// ../.wrangler/tmp/bundle-PW6gHg/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

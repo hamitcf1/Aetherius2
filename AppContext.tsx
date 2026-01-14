@@ -2,8 +2,10 @@ import React, { createContext, useContext } from 'react';
 import type { InventoryItem, DifficultyLevel, WeatherState, StatusEffect, Companion } from './types';
 import type { RestOptions } from './components/SurvivalModals';
 import type { ShopItem } from './components/ShopModal';
+import type { SnowSettings } from './components/SnowEffect';
 
 export type WeatherEffectType = 'snow' | 'rain' | 'none';
+export type WeatherIntensity = SnowSettings['intensity'];
 
 export interface AppContextType {
   handleManualSave: () => void;
@@ -50,6 +52,8 @@ export interface AppContextType {
   // Weather effects
   weatherEffect: WeatherEffectType;
   setWeatherEffect: (effect: WeatherEffectType) => void;
+  weatherIntensity: WeatherIntensity;
+  setWeatherIntensity: (intensity: WeatherIntensity) => void;
   // Companions management
   openCompanions: () => void;
 }

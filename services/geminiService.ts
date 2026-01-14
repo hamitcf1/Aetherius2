@@ -739,9 +739,15 @@ export const generateAdventureResponse = async (
   playerInput: string,
   context: string,
   systemPrompt: string,
-  options?: { model?: PreferredAIModel | string }
+  options?: { model?: PreferredAIModel | string; language?: string }
 ): Promise<GameStateUpdate> => {
   const preferredModel = String(options?.model || 'gemini-2.5-flash');
+  const language = options?.language || 'en';
+  
+  // Language instruction for non-English responses
+  const languageInstruction = language === 'tr' 
+    ? '\n\nIMPORTANT: Respond in Turkish (Türkçe). All narrative content, dialogue, and descriptions must be in Turkish. Keep JSON field names in English but values in Turkish.'
+    : '';
 
   const fullPrompt = `${systemPrompt}
 
@@ -749,7 +755,7 @@ export const generateAdventureResponse = async (
   ${context}
 
   PLAYER ACTION:
-  ${playerInput}
+  ${playerInput}${languageInstruction}
 
   Remember: Return ONLY valid JSON.
   The "narrative" field MUST be an object: { "title": "...", "content": "..." }.`;

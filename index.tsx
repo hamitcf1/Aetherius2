@@ -4,6 +4,7 @@ import App from './App';
 import { BASE_PATH } from './services/basePath';
 import './styles/rarity.css';
 import { initButtonTooltips } from './utils/buttonTooltips';
+import { LocalizationProvider } from './services/localization';
 
 // Ensure global APP_BASE_PATH is set early for non-module assets
 if (typeof window !== 'undefined') (window as any).APP_BASE_PATH = (window as any).APP_BASE_PATH || BASE_PATH;
@@ -16,7 +17,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <LocalizationProvider>
+      <App />
+    </LocalizationProvider>
   </React.StrictMode>
 );
 

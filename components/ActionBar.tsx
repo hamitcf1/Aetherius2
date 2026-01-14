@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
@@ -38,9 +38,10 @@ const ActionBar: React.FC = () => {
     openCompanions,
     weatherEffect,
     setWeatherEffect,
+    weatherIntensity,
+    setWeatherIntensity,
   } = useAppContext();
   const [open, setOpen] = useState(false);
-  const [snowIntensity, setSnowIntensity] = useState<SnowIntensity>('normal');
   const [showSnowOptions, setShowSnowOptions] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   
@@ -62,7 +63,8 @@ const ActionBar: React.FC = () => {
   };
   
   // Ref for the button to align dropdown
-  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{left: number, top: number, width: number}>({left: 0, top: 0, width: 220});
 
   const updateDropdownPos = () => {
@@ -103,6 +105,32 @@ const ActionBar: React.FC = () => {
       window.removeEventListener('resize', updateDropdownPos);
     };
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      // Don't close if clicking the button or inside the dropdown
+      if (buttonRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      
+      setOpen(false);
+      window.removeEventListener('scroll', updateDropdownPos);
+      window.removeEventListener('resize', updateDropdownPos);
+    };
+    
+    // Delay adding listener to avoid immediate close
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+    
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
 
   return (
     <>
@@ -145,6 +173,7 @@ const ActionBar: React.FC = () => {
       </button>
       {open && createPortal(
         <div
+          ref={dropdownRef}
           className="bg-skyrim-paper border border-skyrim-gold rounded-lg shadow-2xl p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2"
           style={{
             position: 'fixed',
@@ -314,9 +343,9 @@ const ActionBar: React.FC = () => {
                   {SNOW_INTENSITY_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
-                      onClick={() => setSnowIntensity(opt.value)}
+                      onClick={() => setWeatherIntensity(opt.value)}
                       className={`px-2 py-1 text-xs rounded ${
-                        snowIntensity === opt.value
+                        weatherIntensity === opt.value
                           ? weatherEffect === 'snow' ? 'bg-blue-600 text-white' : 'bg-cyan-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
