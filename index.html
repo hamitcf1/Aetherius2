@@ -108,6 +108,31 @@
         border-color: var(--skyrim-border) !important;
         -webkit-text-fill-color: var(--skyrim-text) !important;
       }
+      
+      /* Fix browser autofill styling - override the light yellow/white backgrounds */
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active,
+      textarea:-webkit-autofill,
+      select:-webkit-autofill {
+        -webkit-box-shadow: 0 0 0 1000px var(--skyrim-paper) inset !important;
+        -webkit-text-fill-color: var(--skyrim-text) !important;
+        background-color: var(--skyrim-paper) !important;
+        border-color: var(--skyrim-border) !important;
+        caret-color: var(--skyrim-text) !important;
+        transition: background-color 5000s ease-in-out 0s;
+      }
+      
+      /* Firefox autofill fix */
+      input:autofill,
+      textarea:autofill,
+      select:autofill {
+        background-color: var(--skyrim-paper) !important;
+        color: var(--skyrim-text) !important;
+        border-color: var(--skyrim-border) !important;
+      }
+      
       input::placeholder, textarea::placeholder {
         color: rgba(209,209,209,0.55) !important;
       }

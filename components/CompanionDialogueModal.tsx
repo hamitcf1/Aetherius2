@@ -133,7 +133,8 @@ const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, companion, onS
             autoFocus
             onChange={e => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            className="flex-1 bg-white p-4 rounded border border-stone-700 text-black placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-h-[64px] resize-none"
+            className="flex-1 p-4 rounded border border-skyrim-border text-skyrim-text placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 min-h-[64px] resize-none"
+            style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
           />
           <button onClick={send} type="button" className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded h-fit">Send</button>
         </div>

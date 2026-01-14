@@ -6,19 +6,21 @@ import { SortSelector, DropdownSelector } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 
 // Themed input used across the companions UI to ensure consistent dark styling
-const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', ...props }) => (
+const FieldInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', style = {}, ...props }) => (
   <input
     {...props}
-    className={`bg-skyrim-paper/20 p-3 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+    className={`p-3 rounded border border-skyrim-border text-skyrim-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+    style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)', ...style }}
   />
 );
 
 // Small numeric input variant for compact layout
-const NumberInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', ...props }) => (
+const NumberInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className = '', style = {}, ...props }) => (
   <input
     {...props}
     type={props.type || 'number'}
-    className={`bg-skyrim-paper/20 p-2 rounded border border-skyrim-border text-skyrim-text placeholder-skyrim-text focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+    className={`p-2 rounded border border-skyrim-border text-skyrim-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${className}`}
+    style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)', ...style }}
   />
 );
 
@@ -66,6 +68,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
     const lvl = Math.max(1, Number(level) || 1);
     const c: Companion = {
       id: Math.random().toString(36).substr(2,9),
+      characterId: '', // Will be set by App.tsx addCompanion handler
       name: name.trim(),
       race,
       class: 'Follower',

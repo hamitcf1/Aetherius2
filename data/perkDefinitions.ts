@@ -21,8 +21,11 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'endurance', name: 'Endurance', skill: 'Stamina', description: 'Increase max stamina by 10 per rank.', maxRank: 9, masteryCost: 3, effect: { type: 'stat', key: 'stamina', amount: 10 } },
   { id: 'fleet_foot', name: 'Fleet Foot', skill: 'Stamina', description: 'Increase max stamina by 15 per rank.', requires: ['endurance:2'], maxRank: 8, masteryCost: 3, effect: { type: 'stat', key: 'stamina', amount: 15 } },
   { id: 'reroll_on_failure', name: 'Lucky Strike', skill: 'Luck', description: 'When an attack critically fails, automatically reroll the attack once (passive).', maxRank: 1, masteryCost: 2 },
-  // Regeneration perk: upgradeable passive health regeneration per rank (fractional values allowed)
-  { id: 'regeneration', name: 'Regeneration', skill: 'Restoration', description: 'Increase passive health regeneration per rank (per second).', maxRank: 4, masteryCost: 3, effect: { type: 'stat', key: 'regenHealthPerSec', amount: 0.25 } },
+  // Regeneration perks - unlockable at level 10+
+  // Before level 10, characters have free passive regen. After level 10, these perks must be unlocked.
+  { id: 'health_regen', name: 'Health Regeneration', skill: 'Restoration', description: 'Passively regenerate health during combat. Each rank increases regen rate by 25%. Requires level 10.', requires: ['level:10'], maxRank: 5, masteryCost: 2 },
+  { id: 'magicka_regen', name: 'Magicka Regeneration', skill: 'Restoration', description: 'Passively regenerate magicka during combat. Each rank increases regen rate by 25%. Requires level 10.', requires: ['level:10'], maxRank: 5, masteryCost: 2 },
+  { id: 'stamina_regen', name: 'Stamina Regeneration', skill: 'Restoration', description: 'Passively regenerate stamina during combat. Each rank increases regen rate by 25%. Requires level 10.', requires: ['level:10'], maxRank: 5, masteryCost: 2 },
 ];
 
 export default PERK_DEFINITIONS;

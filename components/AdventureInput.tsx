@@ -44,7 +44,8 @@ const AdventureInput = React.forwardRef<HTMLTextAreaElement, Props>(
         rows={rows}
         autoCapitalize="none"
         autoCorrect="off"
-        className="flex-1 w-full bg-skyrim-paper/40 border border-skyrim-border rounded-lg p-3 text-sm text-skyrim-text placeholder-gray-500 resize-none focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 disabled:opacity-50 font-sans normal-case min-h-[44px] max-h-40 overflow-auto"
+        className="flex-1 w-full border border-skyrim-border rounded-lg p-3 text-sm text-skyrim-text placeholder-gray-500 resize-none focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 disabled:opacity-50 font-sans normal-case min-h-[44px] max-h-40 overflow-auto"
+        style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
         aria-label="Adventure input"
       />
     );

@@ -92,8 +92,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                   <div>
                     <div className="font-bold text-skyrim-gold flex items-center gap-2">{s.name}{isEmpoweredVariant && <span className="ml-2"><EmpoweredBadge small /></span>}</div>
                     <div className="text-xs text-skyrim-text">{s.description}</div>
-                    {/* Empowered variant info (only for base spells) */}
-                    {!isEmpoweredVariant && (empoweredUnlocked ? (
+                    {/* Empowered variant info: only visible if base spell is learned */}
+                    {!isEmpoweredVariant && baseLearned && (empoweredUnlocked ? (
                       <div className="text-xs text-stone-400 mt-1">Empowered variant available</div>
                     ) : (
                       <div className="text-xs text-stone-500 italic mt-1">Empowered variant locked (requires level {((s.prerequisites?.level || 1) + 5)} or the Empower perk)</div>
@@ -107,8 +107,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                         Learn
                       </button>
                     )}
-                    {/* Empowered learn button: show on base spells when the variant is unlocked (tests expect availability without requiring base learned) */}
-                    {!isEmpoweredVariant && !empoweredLearned && empoweredUnlocked && (
+                    {/* Empowered learn button: only shown when base spell is learned and variant unlocked */}
+                    {!isEmpoweredVariant && baseLearned && !empoweredLearned && empoweredUnlocked && (
                       <button title={`Learn empowered variant (cost ${getSpellById(empoweredId)?.perkCost || 10} perks)`} onClick={() => handleLearn(empoweredId)} className="mt-2 ml-2 px-2 py-1 rounded bg-amber-600 text-black text-xs">Learn Empowered</button>
                     )}
                     {!empoweredUnlocked && (

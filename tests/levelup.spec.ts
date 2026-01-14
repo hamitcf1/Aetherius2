@@ -4,7 +4,7 @@ import { calculatePlayerCombatStats } from '../services/combatService';
 
 
 describe('applyLevelUpToCharacter', () => {
-  it('preserves custom stats (e.g., regen) when leveling up', () => {
+  it('preserves custom stats (e.g., magicka values) when leveling up', () => {
     const char = {
       id: 'c1',
       name: 'Test Hero',
@@ -14,8 +14,7 @@ describe('applyLevelUpToCharacter', () => {
         health: 100,
         magicka: 80,
         stamina: 90,
-        regenHealthPerSec: 0.5,
-        regenMagickaPerSec: 0.0
+        regenMagickaPerSec: 0.5
       },
       perkPoints: 0,
     } as any;
@@ -24,11 +23,11 @@ describe('applyLevelUpToCharacter', () => {
 
     expect(out.level).toBe(10);
     expect(out.stats.health).toBe(110); // +10 applied
-    expect(out.stats.regenHealthPerSec).toBe(0.5); // preserved
+    expect(out.stats.regenMagickaPerSec).toBe(0.5); // preserved
     expect(out.perkPoints).toBe(1);
   });
 
-  it('retains default regen when stats.key is absent after level up', () => {
+  it('has zero regen at level 10 without regen perks (regen requires perk unlock)', () => {
     const char = {
       id: 'c2',
       name: 'NoRegen Hero',
@@ -43,6 +42,7 @@ describe('applyLevelUpToCharacter', () => {
 
     const out = applyLevelUpToCharacter(char, 10, 0, 'health');
     const combat = calculatePlayerCombatStats(out, []);
-    expect(combat.regenHealthPerSec).toBeCloseTo(0.25); // default fallback
+    // At level 10+, regen is 0 unless regen perks are unlocked
+    expect(combat.regenMagickaPerSec).toBeCloseTo(0);
   });
 });

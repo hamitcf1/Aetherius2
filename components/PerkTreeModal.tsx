@@ -28,9 +28,25 @@ function prerequisitesMet(char: Character, def: PerkDef) {
   if (!def.requires || def.requires.length === 0) return true;
   return def.requires.every(r => {
     const parsed = parseRequirement(r);
+    // Special-case level requirement encoded as 'level:X'
+    if (parsed.id === 'level') {
+      return (char.level || 0) >= parsed.rank;
+    }
     const have = currentPerkRank(char, parsed.id);
     return have >= parsed.rank;
   });
+}
+
+function formatRequirement(req: string): string {
+  const parsed = parseRequirement(req);
+  if (parsed.id === 'level') {
+    return `Level ${parsed.rank}`;
+  }
+  const def = PERK_DEFINITIONS.find(d => d.id === parsed.id);
+  if (def) {
+    return parsed.rank > 1 ? `${def.name} Rank ${parsed.rank}` : def.name;
+  }
+  return req;
 }
 
 export default function PerkTreeModal({ open, onClose, character, onConfirm, onForceUnlock }: Props) {
@@ -176,7 +192,7 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                         )}
                   </div>
                   {st === 'locked' && def.requires && (
-                    <div className="mt-3 text-xs text-skyrim-text">Requires: {def.requires.map(r => <span key={r} className="px-1 py-0.5 bg-skyrim-paper/20 rounded mr-1">{r}</span>)}</div>
+                    <div className="mt-3 text-xs text-skyrim-text">Requires: {def.requires.map(r => <span key={r} className="px-1 py-0.5 bg-skyrim-paper/20 rounded mr-1">{formatRequirement(r)}</span>)}</div>
                   )}
                 </div>
               );

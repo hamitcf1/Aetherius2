@@ -330,7 +330,8 @@ window.demo.recruitCompanion = function(payload = { name: 'New Follower', race: 
   if (!_isAdmin()) { console.error('Admin only'); return { ok: false }; }
   const app = window.app; if (!app) return { ok: false, message: 'no app' };
   const id = uniqueId();
-  const c = { id, name: payload.name || 'Companion', race: payload.race || 'Nord', class: 'Follower', level: Math.max(1, Number(payload.level)||1), health: 50, maxHealth: 50, damage: 6, armor: 5, personality: 'Loyal', recruitedAt: Date.now(), loyalty: 50, mood: 'neutral' };
+  // characterId will be set by addCompanion handler in App.tsx
+  const c = { id, characterId: '', name: payload.name || 'Companion', race: payload.race || 'Nord', class: 'Follower', level: Math.max(1, Number(payload.level)||1), health: 50, maxHealth: 50, damage: 6, armor: 5, personality: 'Loyal', recruitedAt: Date.now(), loyalty: 50, mood: 'neutral' };
   if (typeof app.addCompanion === 'function') { app.addCompanion(c); console.log('Recruited companion:', c); return { ok: true, companion: c }; }
   if (typeof app.setCompanions === 'function') { app.setCompanions(prev => [...(prev||[]), c]); console.log('Recruited companion (via setCompanions):', c); return { ok: true, companion: c }; }
   return { ok: false, message: 'no method' };

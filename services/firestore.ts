@@ -156,12 +156,30 @@ export const deleteCharacter = async (uid: string, characterId: string): Promise
     const storySnapshot = await getDocs(storyQuery);
     const storyDeletePromises = storySnapshot.docs.map(doc => deleteDoc(doc.ref));
     
+    // Delete adventure messages subcollection
+    const adventureMessagesRef = collection(db, 'users', uid, 'characters', characterId, 'adventureMessages');
+    const adventureSnapshot = await getDocs(adventureMessagesRef);
+    const adventureDeletePromises = adventureSnapshot.docs.map(d => deleteDoc(d.ref));
+    
+    // Delete simulation state document
+    const simulationStateRef = doc(db, 'users', uid, 'characters', characterId, 'simulation', 'state');
+    const simulationDeletePromise = deleteDoc(simulationStateRef).catch(() => {}); // May not exist
+    
+    // Delete loadouts associated with this character
+    const loadoutsRef = collection(db, 'users', uid, 'loadouts');
+    const loadoutsQuery = query(loadoutsRef, where('characterId', '==', characterId));
+    const loadoutsSnapshot = await getDocs(loadoutsQuery);
+    const loadoutDeletePromises = loadoutsSnapshot.docs.map(d => deleteDoc(d.ref));
+    
     // Wait for all deletions to complete
     await Promise.all([
       ...itemDeletePromises,
       ...questDeletePromises,
       ...journalDeletePromises,
-      ...storyDeletePromises
+      ...storyDeletePromises,
+      ...adventureDeletePromises,
+      simulationDeletePromise,
+      ...loadoutDeletePromises
     ]);
   } catch (error) {
     console.error('Error deleting character and related data:', error);
@@ -663,14 +681,14 @@ export const deleteItemByName = async (uid: string, itemName: string, characterI
 // COMPANIONS & LOADOUTS (user-scoped collections)
 // ============================================================================
 
-export const saveUserCompanions = async (uid: string, companions: any[]): Promise<void> => {
+export const saveUserCompanions = async (uid: string, companions: any[], characterId?: string): Promise<void> => {
   if (!uid) return;
   try {
     const db = getDb();
     const batch = writeBatch(db);
     companions.forEach(c => {
       const docRef = doc(db, 'users', uid, 'companions', c.id);
-      const data = { ...c };
+      const data = { ...c, characterId: characterId || c.characterId };
       Object.keys(data).forEach(k => data[k] === undefined && delete data[k]);
       batch.set(docRef, data as any, { merge: true } as any);
     });
@@ -681,15 +699,35 @@ export const saveUserCompanions = async (uid: string, companions: any[]): Promis
   }
 };
 
-export const loadUserCompanions = async (uid: string): Promise<any[]> => {
+export const loadUserCompanions = async (uid: string, characterId?: string): Promise<any[]> => {
   try {
     const db = getDb();
-    const collRef = collection(db, 'users', uid, 'companions');
-    const snapshot = await getDocs(collRef as any);
+    const collRef = collection(db, 'users', uid, 'companions') as CollectionReference<DocumentData>;
+    const constraints: QueryConstraint[] = [];
+    if (characterId) constraints.push(where('characterId', '==', characterId));
+    const q = constraints.length ? query(collRef, ...constraints) : query(collRef);
+    const snapshot = await getDocs(q as any);
     return snapshot.docs.map(d => d.data());
   } catch (err) {
     console.warn('Failed to load companions from Firestore:', err);
     return [];
+  }
+};
+
+// Delete all companions associated with a specific character (used when deleting a character)
+export const deleteUserCompanions = async (uid: string, characterId: string): Promise<number> => {
+  if (!uid || !characterId) return 0;
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'companions') as CollectionReference<DocumentData>;
+    const q = query(collRef, where('characterId', '==', characterId));
+    const snapshot = await getDocs(q as any);
+    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+    return deletePromises.length;
+  } catch (err) {
+    console.warn('Failed to delete companions from Firestore:', err);
+    throw err;
   }
 };
 

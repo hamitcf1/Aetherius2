@@ -476,6 +476,8 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
       // Don't allow selling keys
       if (item.type === 'key') return false;
       if ((item.quantity || 0) <= 0) return false;
+      // Don't allow selling equipped items
+      if (item.equipped) return false;
       const matchesSearch = !search || 
         item.name.toLowerCase().includes(search.toLowerCase()) ||
         item.description.toLowerCase().includes(search.toLowerCase());

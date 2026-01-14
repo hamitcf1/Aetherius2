@@ -510,8 +510,6 @@ export interface CombatEnemy {
   behavior: 'aggressive' | 'defensive' | 'tactical' | 'support' | 'berserker';
   // Status effects currently on this enemy
   activeEffects?: Array<{ effect: CombatEffect; turnsRemaining: number }>;
-  // Passive health regen per second (optional, fractional allowed)
-  regenHealthPerSec?: number;
 }
 
 export interface CombatState {
@@ -614,10 +612,11 @@ export interface PlayerCombatStats {
   dodgeChance: number;
   magicResist: number;
   abilities: CombatAbility[];
-  // Passive regeneration per second
-  regenHealthPerSec?: number;
-  regenMagickaPerSec?: number;
-  regenStaminaPerSec?: number;
+  // Regeneration is handled by the passive regen ability system (see combatService)
+  // Health/Magicka/Stamina regen rates per second - set based on level and perks
+  regenHealthPerSec?: number;  // Passive health regen (from regen ability, unlockable via perk after level 10)
+  regenMagickaPerSec?: number; // Passive magicka regen (from regen ability)
+  regenStaminaPerSec?: number; // Passive stamina regen (from regen ability)
 }
 
 // ============================================================================
@@ -657,6 +656,7 @@ export interface StatusEffect {
 
 export interface Companion {
   id: string;
+  characterId: string; // Required: companions are scoped to a specific character
   name: string;
   race: string;
   class: string;

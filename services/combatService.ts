@@ -249,11 +249,51 @@ export const calculatePlayerCombatStats = (
     dodgeChance,
     magicResist,
     abilities,
-    // Passive regen: base values per second. These are applied per-turn (default 4s).
-    // Read any customized values from character.stats (set by perks) and fall back to sensible defaults.
-    regenHealthPerSec: (character.stats && typeof (character.stats as any).regenHealthPerSec === 'number') ? (character.stats as any).regenHealthPerSec : 0.25, // ~1 health per 4s
-    regenMagickaPerSec: (character.stats && typeof (character.stats as any).regenMagickaPerSec === 'number') ? (character.stats as any).regenMagickaPerSec : 0.75, // ~3 magicka per 4s
-    regenStaminaPerSec: (character.stats && typeof (character.stats as any).regenStaminaPerSec === 'number') ? (character.stats as any).regenStaminaPerSec : 0.5 // ~2 stamina per 4s
+    // Regen system: Calculate based on level and perks
+    // Characters below level 10 get free passive regen
+    // Characters level 10+ need to unlock regen via perks
+    ...calculateRegenRates(character)
+  };
+};
+
+// Calculate regeneration rates based on level and perks
+// Under level 10: free passive regen for all stats
+// Level 10+: regen only available via perks
+const calculateRegenRates = (character: Character): { regenHealthPerSec: number; regenMagickaPerSec: number; regenStaminaPerSec: number } => {
+  const level = character.level || 1;
+  const perks = character.perks || [];
+  
+  // Check for regen perks
+  const hasHealthRegen = perks.some(p => p.id === 'health_regen' || p.name === 'Health Regeneration');
+  const hasMagickaRegen = perks.some(p => p.id === 'magicka_regen' || p.name === 'Magicka Regeneration');
+  const hasStaminaRegen = perks.some(p => p.id === 'stamina_regen' || p.name === 'Stamina Regeneration');
+  
+  // Get perk ranks for scaling
+  const healthRegenPerk = perks.find(p => p.id === 'health_regen' || p.name === 'Health Regeneration');
+  const magickaRegenPerk = perks.find(p => p.id === 'magicka_regen' || p.name === 'Magicka Regeneration');
+  const staminaRegenPerk = perks.find(p => p.id === 'stamina_regen' || p.name === 'Stamina Regeneration');
+  
+  // Base regen rates (per second, applied per turn which is ~4s)
+  const BASE_HEALTH_REGEN = 0.5;   // ~2 health per turn
+  const BASE_MAGICKA_REGEN = 0.75; // ~3 magicka per turn
+  const BASE_STAMINA_REGEN = 0.5;  // ~2 stamina per turn
+  
+  // Under level 10: free passive regen
+  if (level < 10) {
+    return {
+      regenHealthPerSec: BASE_HEALTH_REGEN,
+      regenMagickaPerSec: BASE_MAGICKA_REGEN,
+      regenStaminaPerSec: BASE_STAMINA_REGEN
+    };
+  }
+  
+  // Level 10+: regen only from perks, with scaling per rank
+  const perkMultiplier = 1.25; // Each perk rank increases regen by 25%
+  
+  return {
+    regenHealthPerSec: hasHealthRegen ? BASE_HEALTH_REGEN * (1 + ((healthRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
+    regenMagickaPerSec: hasMagickaRegen ? BASE_MAGICKA_REGEN * (1 + ((magickaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
+    regenStaminaPerSec: hasStaminaRegen ? BASE_STAMINA_REGEN * (1 + ((staminaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0
   };
 };
 
@@ -449,8 +489,7 @@ export const initializeCombat = (
     currentMagicka: enemy.maxMagicka,
     currentStamina: enemy.maxStamina,
     activeEffects: [],
-    // Default regen: 0.25 per second (== 1 per 4s), override via enemy.regenHealthPerSec
-    regenHealthPerSec: enemy.regenHealthPerSec ?? 0.25,
+    // Health regeneration is no longer applied passively; regenerated health mechanics were removed intentionally.
     // Ensure rewards and loot exist to avoid empty loot phases
     xpReward: typeof enemy.xpReward === 'number' ? enemy.xpReward : computeEnemyXP(enemy as CombatEnemy),
     goldReward: typeof enemy.goldReward === 'number' ? enemy.goldReward : randomRange(Math.max(1, (enemy.level || 1) * 5), Math.max(5, (enemy.level || 1) * 12)),
@@ -458,7 +497,16 @@ export const initializeCombat = (
   }));
 
   // If companions are provided, include companions as allied combatants when their behavior indicates participation
-  const companionAllies: CombatEnemy[] = (companions || []).filter(c => c && (c.behavior === 'follow' || c.behavior === 'guard')).map((c, idx) => ({
+  // Filter out invalid companions (must have id, name, and be active - behavior of 'follow' or 'guard')
+  const validCompanions = (companions || []).filter(c => 
+    c && 
+    c.id && 
+    c.name && 
+    (c.behavior === 'follow' || c.behavior === 'guard') &&
+    (c.health > 0 || c.maxHealth > 0) // must be alive
+  );
+  
+  const companionAllies: CombatEnemy[] = validCompanions.map((c, idx) => ({
     id: `ally_${c.id}_${Date.now()}_${idx}`,
     name: c.name,
     type: 'humanoid',
@@ -1485,31 +1533,26 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
 
 // Apply regen after a turn. Uses per-second regen values but applies them for a turn-length equivalent.
 // By default a "turn" yields the same healing as the previous 4s tick (regenPerSec * 4).
+// Now includes health regen based on level and perks
 export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
   let newPlayerStats = { ...playerStats };
   const multiplier = secondsPerTurn;
+  
   // Record pre-regen values so we can log exact deltas
   const beforeHealth = newPlayerStats.currentHealth || 0;
   const beforeMagicka = newPlayerStats.currentMagicka || 0;
   const beforeStamina = newPlayerStats.currentStamina || 0;
 
+  // Apply health regen (now available based on level/perks)
   const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
   const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
   const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
+  
   newPlayerStats.currentHealth = nh;
   newPlayerStats.currentMagicka = nm;
   newPlayerStats.currentStamina = ns;
 
-  const enemies = state.enemies.map(e => {
-    if (!e || e.currentHealth <= 0) return e;
-    const regen = e.regenHealthPerSec || 0;
-    if (!regen) return e;
-    const nh = Math.min(e.maxHealth, (e.currentHealth || 0) + Math.floor(regen * multiplier));
-    if (nh !== e.currentHealth) return { ...e, currentHealth: nh };
-    return e;
-  });
-
-  const newState = { ...state, enemies };
+  const newState = { ...state };
   // If any vitals recovered, append a concise turn chat entry to the combat log
   try {
     const deltaH = Math.max(0, (newPlayerStats.currentHealth || 0) - beforeHealth);

@@ -277,13 +277,14 @@ const App: React.FC = () => {
   React.useEffect(() => {
     const root = document.documentElement;
     if (colorTheme === 'light') {
-      root.style.setProperty('--skyrim-dark', '#f6f7f9');
-      root.style.setProperty('--skyrim-paper', '#ffffff');
-      root.style.setProperty('--skyrim-border', '#d7d7d7');
-      root.style.setProperty('--skyrim-gold', '#b07d3b');
-      root.style.setProperty('--skyrim-gold-hover', '#c99753');
-      root.style.setProperty('--skyrim-text', '#1b1b1b');
-      root.style.setProperty('--skyrim-accent', '#e8eef6');
+      // Softer, warmer light theme that's easier on the eyes
+      root.style.setProperty('--skyrim-dark', '#e8e4df');      // Warm parchment background
+      root.style.setProperty('--skyrim-paper', '#f5f2ed');     // Slightly off-white, like aged paper
+      root.style.setProperty('--skyrim-border', '#c5bfb5');    // Warm gray-brown border
+      root.style.setProperty('--skyrim-gold', '#8b6914');      // Darker gold for better contrast
+      root.style.setProperty('--skyrim-gold-hover', '#a67c1a');
+      root.style.setProperty('--skyrim-text', '#2d2a26');      // Warm dark brown text
+      root.style.setProperty('--skyrim-accent', '#d8d3c8');    // Warm light accent
     } else {
       // default/dark
       root.style.setProperty('--skyrim-dark', '#0f0f0f');
@@ -382,47 +383,84 @@ const App: React.FC = () => {
 
   // Companion persistence: load from localStorage per-user and save on change
   useEffect(() => {
-    const key = currentUser?.uid ? `aetherius:companions:${currentUser.uid}` : null;
-    if (!key) return;
+    // CRITICAL: Always clear companions and status effects when character changes to prevent carryover
+    setCompanions([]);
+    setStatusEffects([]); // Clear status effects when switching characters
+    
+    // Only load companions if we have both user and character selected
+    if (!currentUser?.uid || !currentCharacterId) return;
+    
+    const key = `aetherius:companions:${currentUser.uid}:${currentCharacterId}`;
+    
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setCompanions(parsed);
+        if (Array.isArray(parsed)) {
+          // Filter to ensure all companions belong to this character (safety check)
+          const filtered = parsed.filter((p: any) => p.characterId === currentCharacterId);
+          setCompanions(filtered);
+        }
       }
+
+      // Also try loading from Firestore for this user+character if available (server source of truth)
+      (async () => {
+        try {
+          const remote = await loadUserCompanions(currentUser.uid, currentCharacterId);
+          // Only replace companions if remote has explicit entries for this character
+          if (Array.isArray(remote) && remote.length > 0) {
+            // Filter to ensure all companions belong to this character
+            const filtered = remote.filter((p: any) => p.characterId === currentCharacterId);
+            setCompanions(filtered);
+          }
+        } catch (e) {
+          console.warn('Failed to load companions from Firestore:', e);
+        }
+      })();
     } catch (err) {
       console.warn('Failed to load companions from localStorage:', err);
     }
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, currentCharacterId]);
 
   useEffect(() => {
-    const key = currentUser?.uid ? `aetherius:companions:${currentUser.uid}` : null;
-    if (!key) return;
+    // Persist companions per-character when possible
+    // Only persist companions if we have both user and character selected
+    if (!currentUser?.uid || !currentCharacterId) return;
+    
+    const key = `aetherius:companions:${currentUser.uid}:${currentCharacterId}`;
+    
+    // Filter companions to only include those for current character (safety check)
+    const characterCompanions = companions.filter(c => c.characterId === currentCharacterId);
+    
     try {
-      localStorage.setItem(key, JSON.stringify(companions));
+      localStorage.setItem(key, JSON.stringify(characterCompanions));
     } catch (err) {
       console.warn('Failed to persist companions to localStorage:', err);
     }
 
-    // Attempt to persist companions to Firestore when logged in
-    if (currentUser?.uid) {
-      (async () => {
-        try {
-          await saveUserCompanions(currentUser.uid, companions);
-        } catch (e) {
-          console.warn('Failed to persist companions to Firestore:', e);
-        }
-      })();
-    }
-  }, [companions, currentUser?.uid]);
+    // Attempt to persist companions to Firestore when logged in; pass characterId for scoping
+    (async () => {
+      try {
+        await saveUserCompanions(currentUser.uid, characterCompanions, currentCharacterId);
+      } catch (e) {
+        console.warn('Failed to persist companions to Firestore:', e);
+      }
+    })();
+  }, [companions, currentUser?.uid, currentCharacterId]);
 
   const openCompanions = () => setCompanionsModalOpen(true);
   const closeCompanions = () => setCompanionsModalOpen(false);
 
   const addCompanion = (c: Companion) => {
+    // Ensure companion is always scoped to current character
+    if (!currentCharacterId) {
+      showToast('Cannot recruit companion without an active character', 'error');
+      return;
+    }
+    const toAdd = { ...c, characterId: currentCharacterId } as Companion;
     setCompanions(prev => {
-      const next = [...prev, c];
-      showToast(`Recruited ${c.name}`, 'success');
+      const next = [...prev, toAdd];
+      showToast(`Recruited ${toAdd.name}`, 'success');
       return next;
     });
   };
@@ -433,6 +471,15 @@ const App: React.FC = () => {
   };
 
   const removeCompanion = (id: string) => {
+    // First, unequip all items from this companion to prevent ghost-equipped items
+    setItems(prev => prev.map(item => {
+      if (item.equippedBy === id) {
+        setDirtyEntities(d => new Set([...d, item.id]));
+        return { ...item, equipped: false, slot: undefined, equippedBy: null };
+      }
+      return item;
+    }));
+    
     setCompanions(prev => prev.filter(p => p.id !== id));
     showToast('Companion removed', 'warning');
   };
@@ -680,7 +727,7 @@ const App: React.FC = () => {
         characterId: currentCharacterId,
         removeDuplicateItems: () => removeDuplicateItems(currentUser.uid, currentCharacterId || undefined),
         reloadItems: async () => {
-          const userItems = await loadInventoryItems(currentUser.uid);
+          const userItems = await loadInventoryItems(currentUser.uid, currentCharacterId || undefined);
           setItems(userItems);
           return userItems;
         }
@@ -740,10 +787,14 @@ const App: React.FC = () => {
 
           // Load all data from Firestore in parallel
           console.log('Loading user data from Firestore...');
+          // Prefer loading inventory for the last selected character (if available)
+          let preferredCharacterId: string | undefined;
+          try { preferredCharacterId = localStorage.getItem(`aetherius:lastCharacter:${user.uid}`) || undefined; } catch { preferredCharacterId = undefined; }
+
           const [userProfiles, userCharacters, userItems, userQuests, userEntries, userChapters, settings] = await Promise.all([
             loadUserProfiles(user.uid),
             loadCharacters(user.uid),
-            loadInventoryItems(user.uid),
+            loadInventoryItems(user.uid, preferredCharacterId),
             loadQuests(user.uid),
             loadJournalEntries(user.uid),
             loadStoryChapters(user.uid),
@@ -811,11 +862,15 @@ const App: React.FC = () => {
           setJournalEntries(userEntries);
           setStoryChapters(userChapters);
 
-          // Load remote companions if present (Cloud-synced), otherwise keep local companions
+          // Load remote companions only for the preferred character (avoid setting cross-character companions globally)
           try {
-            const remoteCompanions = await loadUserCompanions(user.uid);
-            if (Array.isArray(remoteCompanions) && remoteCompanions.length > 0) {
-              setCompanions(remoteCompanions);
+            if (preferredCharacterId) {
+              const remoteCompanions = await loadUserCompanions(user.uid, preferredCharacterId);
+              if (Array.isArray(remoteCompanions) && remoteCompanions.length > 0) {
+                setCompanions(remoteCompanions);
+              }
+            } else {
+              // No preferred character selected yet — skip loading global companions from Firestore to avoid mixing characters
             }
           } catch (e) {
             // ignore and fall back to localStorage loaded companions
@@ -919,6 +974,21 @@ const App: React.FC = () => {
       console.log('🎵 Requested main menu music');
     }
   }, [currentCharacterId, characters]);
+
+  // Load inventory items for the currently selected character (or none if no character selected)
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const itemsForChar = await loadInventoryItems(currentUser.uid, currentCharacterId || undefined);
+        if (!cancelled) setItems(itemsForChar);
+      } catch (e) {
+        console.warn('Failed to load inventory items for character:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser?.uid, currentCharacterId]);
 
   const completeOnboarding = async () => {
     if (!currentUser?.uid) {
@@ -1027,9 +1097,34 @@ const App: React.FC = () => {
       setJournalEntries(prev => prev.filter(j => j.characterId !== characterId));
       setStoryChapters(prev => prev.filter(s => s.characterId !== characterId));
       
-      // Clear current selection if deleted
+      // Ensure any companions tied to this character are removed locally and remotely
+      try {
+        // Remove per-character localStorage key
+        try { localStorage.removeItem(`aetherius:companions:${currentUser.uid}:${characterId}`); } catch {}
+
+        // Clean up global fallback list by removing entries for the deleted character
+        try {
+          const fallbackKey = `aetherius:companions:${currentUser.uid}`;
+          const raw = localStorage.getItem(fallbackKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter((p: any) => p.characterId !== characterId);
+              localStorage.setItem(fallbackKey, JSON.stringify(filtered));
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        // Delete from Firestore
+        try {
+          await deleteUserCompanions(currentUser.uid, characterId);
+        } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore overall cleanup errors */ }
+
+      // Clear in-memory companions if we just deleted the currently selected character
       if (currentCharacterId === characterId) {
         setCurrentCharacterId(null);
+        setCompanions([]);
       }
     } catch (error) {
       console.error('Error deleting character:', error);
@@ -1440,6 +1535,16 @@ const App: React.FC = () => {
       };
       setCharacters([...characters, newChar]);
       setDirtyEntities(prev => new Set([...prev, charId]));
+
+      // Ensure newly created character starts with no companions (explicitly initialize per-character companions)
+      try {
+        setCompanions([]);
+        // Initialize an empty per-character localStorage key so fallback won't leak global companions
+        if (currentUser?.uid) {
+          try { localStorage.setItem(`aetherius:companions:${currentUser.uid}:${charId}`, JSON.stringify([])); } catch {}
+          try { saveUserCompanions(currentUser.uid, [], charId); } catch (e) { /* ignore remote failures */ }
+        }
+      } catch (e) { /* ignore */ }
 
         // 2. Inventory - validate incoming items against defined set and apply stats
         if (fullDetails?.inventory) {
@@ -2323,7 +2428,16 @@ const App: React.FC = () => {
               const update = updates.updateQuests?.find(u => u.title.toLowerCase() === q.title.toLowerCase());
               if (update) {
                   setDirtyEntities(prev => new Set([...prev, q.id]));
-                  return { ...q, status: update.status };
+                  // If quest is completed, mark all objectives as completed too
+                  const updatedObjectives = update.status === 'completed' 
+                      ? q.objectives.map(obj => ({ ...obj, completed: true }))
+                      : q.objectives;
+                  return { 
+                      ...q, 
+                      status: update.status, 
+                      objectives: updatedObjectives,
+                      completedAt: (update.status === 'completed' || update.status === 'failed') ? Date.now() : undefined
+                  };
               }
               return q;
           }));
@@ -2590,13 +2704,15 @@ const App: React.FC = () => {
       // 5c. Combat Start - Initialize turn-based combat
       if (updates.combatStart && updates.combatStart.enemies?.length) {
         const combatData = updates.combatStart;
+        // Filter companions to only include those belonging to the current character
+        const activeCompanions = companions.filter(c => c.characterId === currentCharacterId);
         const initializedCombat = initializeCombat(
           combatData.enemies as CombatEnemy[],
           combatData.location,
           combatData.ambush ?? false,
           combatData.fleeAllowed ?? true,
           combatData.surrenderAllowed ?? false,
-          companions // include companions who will join if behavior indicates
+          activeCompanions // include only current character's companions who will join if behavior indicates
         );
         setCombatState(initializedCombat);
         
@@ -2888,6 +3004,10 @@ const App: React.FC = () => {
     };
     return def.requires.every(r => {
       const parsed = parseReq(r);
+      // Special-case level requirement encoded as 'level:10'
+      if (parsed.id === 'level') {
+        return (char.level || 0) >= parsed.rank;
+      }
       const have = (char.perks || []).find(p => p.id === parsed.id)?.rank || 0;
       return have >= parsed.rank;
     });
@@ -3508,6 +3628,8 @@ const App: React.FC = () => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
               if (result === 'victory' && rewards) {
+                // NOTE: Loot items are already applied via onInventoryUpdate during finalizeLoot
+                // Do NOT pass newItems here to avoid duplication
                 handleGameUpdate({
                   narrative: {
                     title: 'Victory!',
@@ -3515,7 +3637,7 @@ const App: React.FC = () => {
                   },
                   xpChange: rewards.xp,
                   goldChange: rewards.gold,
-                  newItems: rewards.items.length > 0 ? rewards.items : undefined,
+                  // newItems intentionally omitted - already applied via onInventoryUpdate to prevent duplication
                   transactionId: (rewards as any).transactionId,
                   characterUpdates: {
                     completedCombats: (rewards as any).combatId ? [(rewards as any).combatId] : []
@@ -3631,9 +3753,45 @@ const App: React.FC = () => {
               console.log('[Combat Narrative]', narrative);
             }}
             onInventoryUpdate={(itemsOrRemoved) => {
+              // itemsOrRemoved can be:
+              //  - array of { id,... } = a full inventory snapshot (from finalizeLoot) or updated items (equips/unequips)
+              //  - array of { name, quantity } = removed items
               if (Array.isArray(itemsOrRemoved) && itemsOrRemoved.length > 0 && (itemsOrRemoved[0] as any).id) {
-                // full inventory snapshot or new items
-                handleGameUpdate({ newItems: itemsOrRemoved as any });
+                const arr = itemsOrRemoved as InventoryItem[];
+                
+                // Separate items into existing (update) and new (add)
+                const existingIds = new Set(items.filter(it => it.characterId === currentCharacterId).map(it => it.id));
+                const toUpdate: InventoryItem[] = [];
+                const toAdd: InventoryItem[] = [];
+                
+                for (const item of arr) {
+                  if (existingIds.has(item.id)) {
+                    // This item already exists - only update if it actually changed
+                    const existing = items.find(it => it.id === item.id);
+                    if (existing) {
+                      // Check if anything relevant changed (equipped, slot, quantity)
+                      const hasChanged = 
+                        existing.equipped !== item.equipped ||
+                        existing.slot !== item.slot ||
+                        existing.equippedBy !== item.equippedBy ||
+                        existing.quantity !== item.quantity;
+                      if (hasChanged) {
+                        toUpdate.push(item);
+                      }
+                    }
+                  } else {
+                    // New item - add it
+                    toAdd.push({ ...item, characterId: currentCharacterId || '' });
+                  }
+                }
+                
+                // Apply updates and additions
+                if (toUpdate.length > 0) {
+                  handleGameUpdate({ updatedItems: toUpdate });
+                }
+                if (toAdd.length > 0) {
+                  handleGameUpdate({ newItems: toAdd as any });
+                }
               } else {
                 handleGameUpdate({ removedItems: itemsOrRemoved as any });
               }

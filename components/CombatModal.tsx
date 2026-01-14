@@ -264,8 +264,19 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [inventory]);
 
   // Recompute player combat stats whenever the local inventory or character changes
+  // BUT preserve current combat vitals (health/magicka/stamina) to avoid resetting combat damage
   useEffect(() => {
-    setPlayerStats(calculatePlayerCombatStats(character, localInventory));
+    setPlayerStats(prev => {
+      const recalculated = calculatePlayerCombatStats(character, localInventory);
+      // Preserve combat-modified vitals if they differ from character's saved state
+      // This prevents the useEffect from resetting damage taken during combat
+      return {
+        ...recalculated,
+        currentHealth: prev.currentHealth,
+        currentMagicka: prev.currentMagicka,
+        currentStamina: prev.currentStamina
+      };
+    });
   }, [localInventory, character]);
 
   // If the currently selected target dies, auto-select the next alive enemy
@@ -291,7 +302,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     });
     setLocalInventory(updated);
     onInventoryUpdate && onInventoryUpdate(updated as InventoryItem[]);
-    setPlayerStats(calculatePlayerCombatStats(character, updated));
+    // Preserve combat vitals when recalculating equipment stats
+    setPlayerStats(prev => {
+      const recalculated = calculatePlayerCombatStats(character, updated);
+      return { ...recalculated, currentHealth: prev.currentHealth, currentMagicka: prev.currentMagicka, currentStamina: prev.currentStamina };
+    });
     setEquipSelectedSlot(null);
   };
 
@@ -299,7 +314,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     const updated = localInventory.map(it => it.id === item.id ? { ...it, equipped: false, slot: undefined, equippedBy: null } : it);
     setLocalInventory(updated);
     onInventoryUpdate && onInventoryUpdate(updated as InventoryItem[]);
-    setPlayerStats(calculatePlayerCombatStats(character, updated));
+    // Preserve combat vitals when recalculating equipment stats
+    setPlayerStats(prev => {
+      const recalculated = calculatePlayerCombatStats(character, updated);
+      return { ...recalculated, currentHealth: prev.currentHealth, currentMagicka: prev.currentMagicka, currentStamina: prev.currentStamina };
+    });
   };
   // Auto-select first alive enemy
   useEffect(() => {
@@ -526,11 +545,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
           // Advance to next turn and apply regen for the turn
           currentState = advanceTurn(currentState);
-          const regenResAlly = applyTurnRegen(currentState, currentPlayerStats);
-          currentState = regenResAlly.newState;
-          currentPlayerStats = regenResAlly.newPlayerStats;
-          setCombatState(currentState);
-          setPlayerStats(currentPlayerStats);
+          // Only apply regen when the turn advanced to the player
+          if (currentState.currentTurnActor === 'player') {
+            const regenResAlly = applyTurnRegen(currentState, currentPlayerStats);
+            currentState = regenResAlly.newState;
+            currentPlayerStats = regenResAlly.newPlayerStats;
+            setCombatState(currentState);
+            setPlayerStats(currentPlayerStats);
+          } else {
+            setCombatState(currentState);
+            setPlayerStats(currentPlayerStats);
+          }
 
           // brief pause before next actor
           await waitMs(Math.floor(400 * timeScale));
@@ -602,11 +627,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       // Advance to next turn and apply regen for the turn
       currentState = advanceTurn(currentState);
-      const regenRes = applyTurnRegen(currentState, currentPlayerStats);
-      currentState = regenRes.newState;
-      currentPlayerStats = regenRes.newPlayerStats;
-      setCombatState(currentState);
-      setPlayerStats(currentPlayerStats);
+      // Only apply regen when the turn advanced to the player
+      if (currentState.currentTurnActor === 'player') {
+        const regenRes = applyTurnRegen(currentState, currentPlayerStats);
+        currentState = regenRes.newState;
+        currentPlayerStats = regenRes.newPlayerStats;
+        setCombatState(currentState);
+        setPlayerStats(currentPlayerStats);
+      } else {
+        setCombatState(currentState);
+        setPlayerStats(currentPlayerStats);
+      }
       
       await waitMs(Math.floor(500 * timeScale));
     }
@@ -695,9 +726,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     
     if (finalState.active && (action !== 'flee' || !narrative.includes('failed'))) {
       finalState = advanceTurn(finalState);
-      const regenRes = applyTurnRegen(finalState, newPlayerStats);
-      finalState = regenRes.newState;
-      newPlayerStats = regenRes.newPlayerStats;
+      // Only apply regen when the turn advanced to the player
+      if (finalState.currentTurnActor === 'player') {
+        const regenRes = applyTurnRegen(finalState, newPlayerStats);
+        finalState = regenRes.newState;
+        newPlayerStats = regenRes.newPlayerStats;
+      }
     }
 
     setCombatState(finalState);

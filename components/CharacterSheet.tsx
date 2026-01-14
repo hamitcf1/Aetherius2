@@ -81,9 +81,10 @@ const TextAreaField: React.FC<{
     <textarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
-            className="w-full bg-skyrim-paper/40 border border-skyrim-border/60 rounded p-3 text-skyrim-text focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 outline-none transition-all placeholder-gray-600 font-sans"
-            autoCapitalize="none"
-            autoCorrect="off"
+      className="w-full border border-skyrim-border/60 rounded p-3 text-skyrim-text focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 outline-none transition-all placeholder-gray-600 font-sans"
+      style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
+      autoCapitalize="none"
+      autoCorrect="off"
       rows={rows}
       placeholder={placeholder}
     />
@@ -112,8 +113,8 @@ const StatBar: React.FC<{
                         if (v > 600) v = 600;
                         onChange(v);
                     }}
-                    className="w-14 sm:w-16 bg-skyrim-paper/40 border border-skyrim-border rounded text-skyrim-text text-sm px-2 ml-2 focus:outline-none focus:border-skyrim-gold text-right tracking-widest"
-                    style={{ height: 24, letterSpacing: '0.05em' }}
+                    className="w-14 sm:w-16 border border-skyrim-border rounded text-skyrim-text text-sm px-2 ml-2 focus:outline-none focus:border-skyrim-gold text-right tracking-widest"
+                    style={{ height: 24, letterSpacing: '0.05em', backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                 />
             </div>
             <div
@@ -997,14 +998,16 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                             max="81" 
                             value={newMilestoneLevel} 
                             onChange={(e) => setNewMilestoneLevel(parseInt(e.target.value))}
-                            className="w-16 bg-skyrim-paper/40 border border-skyrim-border p-2 rounded text-skyrim-text text-center"
+                            className="w-16 border border-skyrim-border p-2 rounded text-skyrim-text text-center"
+                            style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                         />
                         <input 
                             type="text" 
                             placeholder="Milestone description (e.g., Become Arch-Mage)" 
                             value={newMilestone} 
                             onChange={(e) => setNewMilestone(e.target.value)}
-                            className="flex-1 bg-skyrim-paper/40 border border-skyrim-border p-2 rounded text-skyrim-text"
+                            className="flex-1 border border-skyrim-border p-2 rounded text-skyrim-text"
+                            style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                         />
                         <button onClick={addMilestone} className="px-3 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-skyrim-goldHover">
                             <Plus size={18} />
@@ -1080,7 +1083,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                                <div className="col-span-8">
                                     <label className="text-[10px] uppercase text-gray-500 font-bold">Perk Name</label>
                                     <input 
-                                        className="w-full bg-skyrim-paper/40 border border-skyrim-border/60 rounded p-3 text-skyrim-text focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 outline-none transition-all placeholder-gray-600 font-sans"
+                                        className="w-full border border-skyrim-border/60 rounded p-3 text-skyrim-text focus:border-skyrim-gold focus:ring-1 focus:ring-skyrim-gold/50 outline-none transition-all placeholder-gray-600 font-sans"
+                                        style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                                         placeholder="e.g. Juggernaut"
                                         value={newPerkName}
                                         onChange={(e) => setNewPerkName(e.target.value)}
@@ -1103,7 +1107,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                                         type="number"
                                         min="1"
                                         max="5"
-                                        className="w-full bg-skyrim-paper/40 border border-skyrim-border p-2 rounded text-sm text-skyrim-text focus:border-skyrim-gold focus:outline-none"
+                                        className="w-full border border-skyrim-border p-2 rounded text-sm text-skyrim-text focus:border-skyrim-gold focus:outline-none"
+                                        style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                                         value={newPerkRank}
                                         onChange={(e) => setNewPerkRank(parseInt(e.target.value))}
                                     />
@@ -1111,7 +1116,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                                <div className="col-span-9">
                                     <label className="text-[10px] uppercase text-gray-500 font-bold">Description</label>
                                     <input 
-                                        className="w-full bg-skyrim-paper/40 border border-skyrim-border p-2 rounded text-sm text-skyrim-text focus:border-skyrim-gold focus:outline-none"
+                                        className="w-full border border-skyrim-border p-2 rounded text-sm text-skyrim-text focus:border-skyrim-gold focus:outline-none"
+                                        style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
                                         placeholder="Effect description..."
                                         value={newPerkDesc}
                                         onChange={(e) => setNewPerkDesc(e.target.value)}

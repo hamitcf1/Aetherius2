@@ -39,13 +39,13 @@ describe('CompanionDialogueModal', () => {
     expect(headerBackstory).toBeTruthy();
   });
 
-  it('renders input with prominent white style', async () => {
+  it('renders input with theme-consistent style via inline styles', async () => {
     const comp = { id: 'c1', name: 'Hamit' } as any;
     render(<CompanionDialogueModal open={true} onClose={() => {}} companion={comp} onSend={() => {}} />);
 
     const input = await screen.findByRole('textbox');
-    // The textarea should have the white background class we added
-    expect(input).toHaveClass('bg-white');
-    expect(input).toHaveClass('text-black');
+    // The textarea should have inline styles using CSS variables for theme consistency
+    expect(input).toHaveStyle({ backgroundColor: 'var(--skyrim-paper)' });
+    expect(input).toHaveStyle({ color: 'var(--skyrim-text)' });
   });
 });

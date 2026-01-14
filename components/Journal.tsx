@@ -141,7 +141,8 @@ export const Journal: React.FC<JournalProps> = ({ entries, setEntries, onDeleteE
             autoCorrect="off"
           />
           <textarea
-            className="w-full bg-skyrim-paper/20 border border-skyrim-border/30 rounded p-4 text-skyrim-text font-sans leading-relaxed focus:outline-none focus:border-skyrim-gold/50 h-40"
+            className="w-full border border-skyrim-border/30 rounded p-4 text-skyrim-text font-sans leading-relaxed focus:outline-none focus:border-skyrim-gold/50 h-40"
+            style={{ backgroundColor: 'var(--skyrim-paper)', color: 'var(--skyrim-text)' }}
             placeholder="Write your thoughts here..."
             value={newEntryContent}
             onChange={(e) => setNewEntryContent(e.target.value)}

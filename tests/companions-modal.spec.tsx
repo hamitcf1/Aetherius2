@@ -42,8 +42,9 @@ describe('CompanionsModal component', () => {
     render(<CompanionsModal open={true} onClose={() => {}} companions={[]} onAdd={() => {}} onUpdate={() => {}} onRemove={() => {}} />);
 
     const nameInput = await screen.findByPlaceholderText('Name');
-    expect(nameInput).toHaveClass('bg-skyrim-paper/20');
-    expect(nameInput).toHaveClass('text-skyrim-text');
+    // Uses inline styles with CSS variables for theme consistency
+    expect(nameInput).toHaveStyle({ backgroundColor: 'var(--skyrim-paper)' });
+    expect(nameInput).toHaveStyle({ color: 'var(--skyrim-text)' });
     // aria label is present for accessibility
     const nameByLabel = screen.getByLabelText('Companion name');
     expect(nameByLabel).toBeTruthy();
