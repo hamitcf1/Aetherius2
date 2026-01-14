@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import RarityBadge from './RarityBadge';
 import { CombatState } from '../types';
 
 interface LootModalProps {
@@ -59,7 +60,7 @@ export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onC
                   <label key={idx} className="flex items-center gap-2 text-sm">
                     <input type="checkbox" className="w-4 h-4 accent-skyrim-gold" checked={!!selected[l.name]} onChange={() => toggleItem(l.name, l.quantity)} />
                     <span className="flex-1">{l.name} <span className="text-stone-400 text-xs">x{l.quantity}</span></span>
-                    <span className="text-xs text-stone-400">{l.rarity || ''}</span>
+                    {l.rarity ? <span className="ml-2"><RarityBadge rarity={String(l.rarity)} /></span> : <span className="text-xs text-stone-400">{l.rarity || ''}</span>}
                   </label>
                 ))}
               </div>

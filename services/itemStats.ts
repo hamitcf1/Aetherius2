@@ -117,6 +117,11 @@ const WEAPON_STATS: Record<string, ItemStats> = {
   'silver greatsword': { damage: 17, value: 350 },
   'crossbow': { damage: 19, value: 400 },
   'steel bolts (20)': { damage: 0, value: 30 },
+  // === LEGENDARY ITEMS ===
+  'sword of ages (legendary)': { damage: 9999, value: 99999 },
+  'aeon greatsword (legendary)': { damage: 9999, value: 99999 },
+  'bow of the apocalypse (legendary)': { damage: 9999, value: 99999 },
+  'void dagger (legendary)': { damage: 9999, value: 99999 },
 };
 
 // Armor rating values by name (case-insensitive match)
@@ -228,6 +233,12 @@ const ARMOR_STATS: Record<string, ItemStats> = {
   'silver necklace': { armor: 0, value: 60 },
   'gold circlet': { armor: 0, value: 150 },
 };
+
+// Legendary armor pieces
+ARMOR_STATS['plate of titans (legendary)'] = { armor: 9999, value: 99999 };
+ARMOR_STATS['helm of eternity (legendary)'] = { armor: 9999, value: 99999 };
+ARMOR_STATS['shield of sol (legendary)'] = { armor: 9999, value: 99999 };
+ARMOR_STATS['epic legion armor (legendary)'] = { armor: 9999, value: 99999 };
 
 /**
  * Get stats for an item by name

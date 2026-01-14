@@ -45,6 +45,15 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
   onClose,
   onExecuteCommand
 }) => {
+  // Quick tools exposed as buttons in the header for faster dev access
+  const QUICK_COMMANDS = [
+    'demo.createTestCharacter()',
+    "demo.simulateCombat({ location: 'Abandoned Watchtower' })",
+    'demo.addGold(100)',
+    'demo.addRandomItems(3)',
+    'demo.getAppState()',
+    'clear'
+  ];
   const [inputValue, setInputValue] = useState('');
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -177,12 +186,26 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
             <Terminal className="w-5 h-5 text-green-400" />
             <span className="text-white font-mono text-sm">Developer Console</span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-skyrim-text hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex gap-2">
+              {QUICK_COMMANDS.map((cmd, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => executeCommand(cmd)}
+                  title={cmd}
+                  className="px-2 py-1 bg-skyrim-border text-xs text-skyrim-text hover:bg-skyrim-hover rounded font-mono"
+                >
+                  {cmd.length > 18 ? cmd.slice(0, 16) + '…' : cmd}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onClose}
+              className="text-skyrim-text hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Output Area */}

@@ -250,9 +250,10 @@ export const calculatePlayerCombatStats = (
     magicResist,
     abilities,
     // Passive regen: base 0.25 per second (== 1 per 4s). Can be increased by progression later.
-    regenHealthPerSec: 0.25,
-    regenMagickaPerSec: 0.25,
-    regenStaminaPerSec: 0.25
+    // Player regeneration removed: players no longer auto-regen.
+    regenHealthPerSec: 0,
+    regenMagickaPerSec: 0,
+    regenStaminaPerSec: 0
   };
 };
 
@@ -689,14 +690,16 @@ export const executePlayerAction = (
       const appliedDamage = resisted ? Math.floor(finalDamage * 0.5) : finalDamage;
 
       // Apply damage to the correct list (enemies or allies)
+      let enemyIndex = -1;
+      let allyIndex = -1;
       if (targetIsAlly) {
-        const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+        allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
         if (allyIndex >= 0) {
           newState.allies = [ ...(newState.allies || []) ];
           newState.allies[allyIndex] = { ...target, currentHealth: Math.max(0, target.currentHealth - appliedDamage) };
         }
       } else {
-        const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+        enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
         if (enemyIndex >= 0) {
           newState.enemies = [ ...newState.enemies ];
           newState.enemies[enemyIndex] = { ...target, currentHealth: Math.max(0, target.currentHealth - appliedDamage) };
@@ -715,7 +718,7 @@ export const executePlayerAction = (
 
       narrative = `You use ${ability.name} on ${target.name} and ${damageNarrative}!`;
       
-      if (newState.enemies[enemyIndex].currentHealth <= 0) {
+      if (enemyIndex >= 0 && newState.enemies[enemyIndex].currentHealth <= 0) {
         narrative += ` ${target.name} is defeated!`;
       }
 
@@ -778,11 +781,22 @@ export const executePlayerAction = (
               narrative += ` ${summonName} joins the fight to aid you for ${turns} turns!`;
 
             } else if (effect.duration) {
-              // Add status effect to enemy
-              newState.enemies[enemyIndex].activeEffects = [
-                ...(newState.enemies[enemyIndex].activeEffects || []),
-                { effect, turnsRemaining: effect.duration }
-              ];
+              // Add status effect to the target (enemy or ally)
+              if (!targetIsAlly && enemyIndex >= 0) {
+                newState.enemies[enemyIndex].activeEffects = [
+                  ...(newState.enemies[enemyIndex].activeEffects || []),
+                  { effect, turnsRemaining: effect.duration }
+                ];
+              } else if (targetIsAlly && allyIndex >= 0) {
+                newState.allies = [ ...(newState.allies || []) ];
+                newState.allies[allyIndex] = {
+                  ...newState.allies[allyIndex],
+                  activeEffects: [
+                    ...((newState.allies[allyIndex]?.activeEffects) || []),
+                    { effect, turnsRemaining: effect.duration }
+                  ]
+                } as any;
+              }
               narrative += ` ${target.name} is affected by ${effect.type}!`;
             }
           }
@@ -1123,11 +1137,83 @@ export const executeEnemyTurn = (
     return { newState, newPlayerStats, narrative: narrativeLocal };
   }
 
+  // Allow enemies to target allied companions. Prefer critically-low allies (<30% hp)
+  // and make the base chance depend on actor.behavior.
+  const aliveAllies = (newState.allies || []).filter(a => a.currentHealth > 0);
+  let narrative = '';
+  let targetedAlly: any = null;
+  if (aliveAllies.length > 0) {
+    // Identify critically-low allies (percentage of their maxHealth)
+    const criticallyLow = aliveAllies.filter(a => (a.currentHealth || 0) / Math.max(1, a.maxHealth || 1) < 0.30);
+    const injuredComparedToPlayer = aliveAllies.filter(a => (a.currentHealth || 0) < playerStats.currentHealth);
+
+    // Base chances by behavior (higher -> more likely to opportunistically target allies)
+    const behaviorChanceMap: Record<string, number> = {
+      berserker: 0.7,
+      aggressive: 0.6,
+      tactical: 0.45,
+      defensive: 0.25,
+      default: 0.35
+    };
+    const baseChance = behaviorChanceMap[(actor.behavior as string) || 'default'] ?? behaviorChanceMap.default;
+
+    // If there are critically-low allies, increase chance significantly
+    if (criticallyLow.length > 0) {
+      const critChance = Math.min(0.95, baseChance + 0.35);
+      if (Math.random() < critChance) targetedAlly = criticallyLow[Math.floor(Math.random() * criticallyLow.length)];
+    }
+
+    // Otherwise, consider allies injured relative to the player with base chance
+    if (!targetedAlly && injuredComparedToPlayer.length > 0) {
+      if (Math.random() < baseChance) targetedAlly = injuredComparedToPlayer[Math.floor(Math.random() * injuredComparedToPlayer.length)];
+    }
+  }
+
+  // Scale damage to remain meaningful at high player health and scale with actor level
+  const healthScale = Math.max(1, Math.floor((playerStats.maxHealth || 100) / 200));
+  const levelScale = 1 + ((actor.level || 1) * 0.02);
+  appliedDamage = Math.max(0, Math.floor(appliedDamage * healthScale * levelScale));
+
+  if (targetedAlly) {
+    // Apply damage to the chosen ally
+    const allyIndex = (newState.allies || []).findIndex(a => a.id === targetedAlly.id);
+    if (allyIndex >= 0) {
+      newState.allies = [ ...(newState.allies || []) ];
+      newState.allies[allyIndex] = { ...targetedAlly, currentHealth: Math.max(0, (targetedAlly.currentHealth || 0) - appliedDamage) } as any;
+    }
+
+    if (!resolved.hit) {
+      narrative = `${actor.name} uses ${chosenAbility.name} and rolls ${resolved.natRoll} (${resolved.rollTier}), missing ${targetedAlly.name}.`;
+    } else if (appliedDamage === 0) {
+      narrative = `${actor.name} attacks ${targetedAlly.name} but deals no damage.`;
+    } else {
+      narrative = `${actor.name} uses ${chosenAbility.name} and deals ${appliedDamage} damage to ${targetedAlly.name}!`;
+      if (resolved.isCrit) narrative = `${actor.name} lands a CRITICAL HIT on ${targetedAlly.name} with ${chosenAbility.name} for ${appliedDamage} damage!`;
+    }
+
+    // Log and return
+    newState.combatLog.push({
+      turn: newState.turn,
+      actor: actor.name,
+      action: chosenAbility.name,
+      target: targetedAlly.name,
+      damage: appliedDamage,
+      isCrit: !!resolved.isCrit,
+      nat: resolved.natRoll,
+      rollTier: resolved.rollTier,
+      narrative,
+      timestamp: Date.now()
+    });
+
+    // Allies dying does not end combat but log accordingly
+    return { newState, newPlayerStats, narrative };
+  }
+
   // Apply damage to player
   newPlayerStats.currentHealth = Math.max(0, newPlayerStats.currentHealth - appliedDamage);
 
   // Build narrative
-  let narrative = `${actor.name} uses ${chosenAbility.name}`;
+  narrative = `${actor.name} uses ${chosenAbility.name}`;
   if (!resolved.hit) {
     narrative += ` and rolls ${resolved.natRoll} (${resolved.rollTier}), missing you.`;
   } else if (appliedDamage === 0) {

@@ -161,6 +161,8 @@ export const getSpellById = (id: string): Spell | undefined => {
       name: `${base.name} (Empowered)`,
       description: `${base.description} (Empowered variant: increased potency.)`,
       cost: Math.max(1, Math.floor((base.cost || 0) * scale)),
+      // Empowered variants require a larger perk investment
+      perkCost: 10,
       damage: base.damage ? Math.max(1, Math.floor(base.damage * scale)) : base.damage,
       heal: base.heal ? Math.max(1, Math.floor(base.heal * scale)) : base.heal
     };
@@ -250,5 +252,5 @@ export const teachSpellToCharacter = (characterId: string, spellId: string) => {
   const already = isSpellLearned(characterId, spellId);
   if (already) return { learned: false, alreadyKnown: true, spell };
   const ok = learnSpell(characterId, spellId);
-  return { learned: ok, alreadyKnown: !ok ? false : false, spell };
+  return { learned: ok, alreadyKnown: false, spell };
 };

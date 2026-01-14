@@ -155,6 +155,8 @@ export interface InventoryItem {
   damage?: number;
   weight?: number;
   value?: number;
+  // Item rarity: common < uncommon < rare < mythic < epic (legendary is a special premium badge)
+  rarity?: 'common' | 'uncommon' | 'rare' | 'mythic' | 'epic' | 'legendary';
   // Upgrade fields for blacksmith system
   upgradeLevel?: number; // current upgrade tier (0 = base)
   maxUpgradeLevel?: number; // optional per-item override for max upgrades
@@ -163,6 +165,8 @@ export interface InventoryItem {
   // If this item represents a spell tome or teaches a spell, set the spell id here
   spellId?: string;
 }
+
+export type LootRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'epic' | 'legendary';
 
 export interface QuestStep {
   id: string;

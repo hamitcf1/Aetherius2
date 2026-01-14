@@ -37,7 +37,7 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
   daedra: [
     { id: 'dae_essence', name: 'Daedric Soul Fragment', type: 'misc', weight: 20, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'dae_uncommon', name: 'Imbued Shard', type: 'misc', weight: 10, minQty: 1, maxQty: 2, rarity: 'rare' },
-    { id: 'dae_rare', name: 'Daedric Relic', type: 'misc', weight: 2, minQty: 1, maxQty: 1, rarity: 'legendary' }
+    { id: 'dae_rare', name: 'Daedric Relic', type: 'misc', weight: 2, minQty: 1, maxQty: 1, rarity: 'epic' }
   ],
   dragon: [
     { id: 'drg_scale', name: 'Dragon Scale', type: 'misc', weight: 30, minQty: 1, maxQty: 3, rarity: 'rare' },
@@ -56,7 +56,9 @@ export const RARITY_MULTIPLIER: Record<LootRarity, number> = {
   common: 1.0,
   uncommon: 0.7,
   rare: 0.35,
-  legendary: 0.12
+  mythic: 0.18,
+  epic: 0.12,
+  legendary: 0.06
 };
 
 // Boss-specific loot additions (merged into base tables when enemy.isBoss is true)

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { X, ShoppingBag, Coins, Search, Package, Sword, Shield, FlaskConical, Tent, Apple, Droplets, ArrowDownToLine, ArrowUpFromLine, Check, Gem } from 'lucide-react';
+import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import type { InventoryItem } from '../types';
 import { playSoundEffect } from '../services/audioService';
@@ -298,6 +299,23 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'gold_necklace', name: 'Gold Necklace', type: 'apparel', description: 'A necklace made of pure gold.', price: 120, category: 'Jewelry' },
   { id: 'silver_necklace', name: 'Silver Necklace', type: 'apparel', description: 'A necklace crafted from fine silver.', price: 60, category: 'Jewelry' },
   { id: 'gold_circlet', name: 'Gold Circlet', type: 'apparel', description: 'A circlet of gold, fit for nobility.', price: 150, category: 'Jewelry' },
+  // === LEGENDARY PROMO ITEMS ===
+  { id: 'legendary_sword_of_ages', name: 'Sword of Ages (Legendary)', type: 'weapon', description: 'A legendary blade of impossible sharpness.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_greatsword_aeon', name: 'Aeon Greatsword (Legendary)', type: 'weapon', description: 'A greatsword that burns with timeless power.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_bow_apocalypse', name: 'Bow of the Apocalypse (Legendary)', type: 'weapon', description: 'A bow whose arrows pierce even destiny.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_dagger_void', name: 'Void Dagger (Legendary)', type: 'weapon', description: 'A dagger that steals the very essence of foes.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_plate_of_titans', name: 'Plate of Titans (Legendary)', type: 'apparel', description: 'Armor forged for giants, impenetrable.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_helm_of_eternity', name: 'Helm of Eternity (Legendary)', type: 'apparel', description: 'A helm that anchors a warrior across eras.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_shield_of_sol', name: 'Shield of Sol (Legendary)', type: 'apparel', description: 'A radiant shield that bends fate.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_armor_epic', name: 'Epic Legion Armor (Legendary)', type: 'apparel', description: 'An ensemble of armor that proclaims dominion.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' as any },
+  { id: 'legendary_sword_of_ages', name: 'Sword of Ages (Epic)', type: 'weapon', description: 'A legendary blade of impossible sharpness.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_greatsword_aeon', name: 'Aeon Greatsword (Epic)', type: 'weapon', description: 'A greatsword that burns with timeless power.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_bow_apocalypse', name: 'Bow of the Apocalypse (Epic)', type: 'weapon', description: 'A bow whose arrows pierce even destiny.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_dagger_void', name: 'Void Dagger (Epic)', type: 'weapon', description: 'A dagger that steals the very essence of foes.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_plate_of_titans', name: 'Plate of Titans (Epic)', type: 'apparel', description: 'Armor forged for giants, impenetrable.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_helm_of_eternity', name: 'Helm of Eternity (Epic)', type: 'apparel', description: 'A helm that anchors a warrior across eras.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_shield_of_sol', name: 'Shield of Sol (Epic)', type: 'apparel', description: 'A radiant shield that bends fate.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' as any },
+  { id: 'legendary_armor_epic', name: 'Epic Legion Armor (Epic)', type: 'apparel', description: 'An ensemble of armor that proclaims dominion.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' as any },
 ];
 
 const CATEGORIES = ['All', 'Food', 'Drinks', 'Potions', 'Camping', 'Weapons', 'Armor', 'Misc', 'Ingredients', 'Jewelry'];
@@ -441,6 +459,11 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
       const key = parsedShopSort.key;
       if (key === 'price') return dir * (a.item.price - b.item.price);
       if (key === 'damage') return dir * ((a.damage || 0) - (b.damage || 0));
+      if (key === 'armor') {
+        const aa = getItemStats(a.item.name, a.item.type).armor || 0;
+        const bb = getItemStats(b.item.name, b.item.type).armor || 0;
+        return dir * (aa - bb);
+      }
       if (key === 'weight') return dir * (getWeight(a.item) - getWeight(b.item));
       return dir * a.item.name.localeCompare(b.item.name);
     });
@@ -500,6 +523,24 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     playSoundEffect('sell');
     
     // Show sell feedback
+    setRecentlySold(prev => new Set(prev).add(item.id));
+    setTimeout(() => {
+      setRecentlySold(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        return newSet;
+      });
+    }, 1500);
+  };
+
+  const handleSellAll = (item: InventoryItem) => {
+    if (!onSell) return;
+    const maxQty = item.quantity || 1;
+    const unitPrice = getSellPrice(item);
+    const total = unitPrice * maxQty;
+    onSell(item, maxQty, total);
+    setQuantities(prev => ({ ...prev, [item.id]: 1 }));
+    playSoundEffect('sell');
     setRecentlySold(prev => new Set(prev).add(item.id));
     setTimeout(() => {
       setRecentlySold(prev => {
@@ -608,6 +649,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                     { id: 'name', label: 'Name' },
                     { id: 'price', label: 'Price' },
                     { id: 'damage', label: 'Damage' },
+                    { id: 'armor', label: 'Armor' },
                     { id: 'weight', label: 'Weight' }
                   ]}
                   label="Sort"
@@ -640,6 +682,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
+                          {(item as any).rarity && <span className="ml-2"><RarityBadge rarity={String((item as any).rarity)} /></span>}
                           <span className="text-skyrim-text text-xs">({item.category})</span>
                           {/* Show stats for weapons and armor */}
                           {shouldHaveStats(item.type) && (() => {
@@ -733,6 +776,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                         <div className="flex items-center gap-2">
                           <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
                           <span className="text-gray-500 text-xs">×{item.quantity}</span>
+                          {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
                           {/* Show stats for weapons and armor */}
                           {(item.damage || item.armor) && (
                             <span className="flex items-center gap-2 text-xs">
@@ -793,6 +837,17 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                           ) : (
                             `Sell +${total}g`
                           )}
+                        </button>
+                        <button
+                          onClick={() => handleSellAll(item)}
+                          disabled={recentlySold.has(item.id) || (item.quantity || 0) <= 1}
+                          className={`ml-2 px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
+                            recentlySold.has(item.id)
+                              ? 'bg-yellow-600 text-white scale-105'
+                              : 'bg-gray-700 text-white hover:bg-gray-600'
+                          }`}
+                        >
+                          Sell All
                         </button>
                       </div>
                     </div>

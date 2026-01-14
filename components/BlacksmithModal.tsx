@@ -3,6 +3,7 @@ import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
 import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade } from '../services/upgradeService';
 import { Sword, Shield, Coins } from 'lucide-react';
+import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 
 interface Props {
@@ -39,10 +40,30 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
       return;
     }
 
-    // Deduct gold and update item
+    // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
+    // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.
+    if ((selected.quantity || 0) > 1) {
+      const newId = `item_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+      const upgradedSingle = { ...updated, id: newId, quantity: 1 } as InventoryItem;
+      const originalReduced = { ...selected, quantity: (selected.quantity || 1) - 1 } as InventoryItem;
+
+      // Persist via global handler only (avoid local double-insert).
+      // We rely on `handleGameUpdate` to update the original stack and create
+      // a new, unique upgraded item (using __forceCreate) so the app state
+      // remains the single source of truth and we don't accidentally insert
+      // the same item twice.
+      setGold(gold - cost);
+      (window as any).app?.handleGameUpdate?.({ updatedItems: [originalReduced], newItems: [{ ...upgradedSingle, __forceCreate: true }] });
+      showToast?.('Upgraded one item from the stack', 'success');
+      return;
+    }
+
+    // Deduct gold and update single item
     setGold(gold - cost);
     const next = items.map(i => i.id === updated.id ? { ...updated } : i);
     setItems(next);
+    // Persist by id to avoid name-merge behavior
+    (window as any).app?.handleGameUpdate?.({ updatedItems: [updated] });
     showToast?.('Upgrade successful', 'success');
   };
 
@@ -88,7 +109,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-xl font-serif text-skyrim-gold">{selected.name}</h4>
-                        <div className="text-xs text-skyrim-text">Type: {selected.type}</div>
+                        <div className="text-xs text-skyrim-text">Type: {selected.type} {selected.rarity && <span className="inline-block align-middle ml-2"><RarityBadge rarity={String(selected.rarity)} /></span>}</div>
                       </div>
                       <div className="text-sm text-gray-200">Current Level: <strong>{selected.upgradeLevel || 0}</strong></div>
                     </div>

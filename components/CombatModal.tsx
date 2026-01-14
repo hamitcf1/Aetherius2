@@ -309,6 +309,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
   }, [combatState.enemies, selectedTarget]);
 
+  // Slow down combat animations at higher player levels for more dramatic pacing
+  const timeScale = 1 + Math.floor((character?.level || 1) / 20) * 0.25;
+
   // Scroll combat log to bottom (if auto-scroll is enabled)
   useEffect(() => {
     if (!autoScroll) return;
@@ -495,10 +498,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       for (let i = 0; i < 6; i++) {
         setRollValue(Math.floor(Math.random() * 20) + 1);
         // eslint-disable-next-line no-await-in-loop
-        await waitMs(60 + i * 30);
+        await waitMs(Math.floor((60 + i * 30) * timeScale));
       }
       setRollValue(finalEnemyRoll);
-      await waitMs(220);
+      await waitMs(Math.floor(220 * timeScale));
       setShowRoll(false);
       setRollActor(null);
 
@@ -510,9 +513,27 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
           currentState = res.newState;
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+          // Update UI and play companion animation
           setCombatState(currentState);
-              // Brief pause to animate companion action
-          await waitMs(1000);
+          await waitMs(Math.floor(600 * timeScale));
+
+          // Check for combat end
+          currentState = checkCombatEnd(currentState, currentPlayerStats);
+          if (!currentState.active) {
+            setCombatState(currentState);
+            break;
+          }
+
+          // Advance to next turn and apply regen for the turn
+          currentState = advanceTurn(currentState);
+          const regenResAlly = applyTurnRegen(currentState, currentPlayerStats);
+          currentState = regenResAlly.newState;
+          currentPlayerStats = regenResAlly.newPlayerStats;
+          setCombatState(currentState);
+          setPlayerStats(currentPlayerStats);
+
+          // brief pause before next actor
+          await waitMs(Math.floor(400 * timeScale));
           continue; // proceed to next turn
         }
 
@@ -535,7 +556,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       currentPlayerStats = newPlayerStats;
       
       // Update state with animation delay
-      await waitMs(1000);
+      await waitMs(Math.floor(1000 * timeScale));
       
       setCombatState(currentState);
       setPlayerStats(currentPlayerStats);
@@ -587,7 +608,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setCombatState(currentState);
       setPlayerStats(currentPlayerStats);
       
-      await waitMs(500);
+      await waitMs(Math.floor(500 * timeScale));
     }
     
     setIsAnimating(false);
@@ -615,11 +636,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setRollValue(Math.floor(Math.random() * 20) + 1);
       // shorten time as it progresses
       // eslint-disable-next-line no-await-in-loop
-      await waitMs(50 + i * 20);
+      await waitMs(Math.floor((50 + i * 20) * timeScale));
     }
     // final settle
     setRollValue(finalRoll);
-    await waitMs(220);
+    await waitMs(Math.floor(220 * timeScale));
     setShowRoll(false);
     setRollActor(null);
 
@@ -714,7 +735,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
     
     // In tests this will resolve instantly, but in production we keep the short delay for UX
-    waitMs(500).then(() => setIsAnimating(false));
+    waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
   };
 
 
@@ -869,27 +890,32 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               </div>
             </div>
             <div ref={logRef} className="flex-1 overflow-y-auto p-3 space-y-2 scroll-smooth">
-              {combatState.combatLog.map((entry, i) => (
-                <div 
-                  key={i} 
-                  className={`text-sm p-2 rounded ${
-                    entry.actor === 'player' 
-                      ? 'bg-green-900/20 border-l-2 border-green-500' 
-                      : entry.actor === 'system'
-                        ? 'bg-amber-900/20 border-l-2 border-amber-500'
-                        : 'bg-red-900/20 border-l-2 border-red-500'
-                  }`}
-                >
-                  <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
-                  <span className="text-stone-300">{entry.narrative}</span>
-                  {entry.nat !== undefined && (
-                    <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
-                  )}
-                  {entry.auto && (
-                    <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">AUTO</span>
-                  )}
-                </div>
-              ))}
+              {combatState.combatLog.map((entry, i) => {
+                const isAlly = !!(combatState.allies && combatState.allies.find(a => a.name === entry.actor));
+                return (
+                  <div 
+                    key={i} 
+                    className={`text-sm p-2 rounded ${
+                      entry.actor === 'player' 
+                        ? 'bg-green-900/20 border-l-2 border-green-500' 
+                        : entry.actor === 'system'
+                          ? 'bg-amber-900/20 border-l-2 border-amber-500'
+                          : isAlly
+                            ? 'bg-sky-900/10 border-l-2 border-sky-400 text-sky-200' 
+                            : 'bg-red-900/20 border-l-2 border-red-500'
+                    }`}
+                  >
+                    <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
+                    <span className="text-stone-300">{entry.narrative}</span>
+                    {entry.nat !== undefined && (
+                      <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
+                    )}
+                    {entry.auto && (
+                      <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">AUTO</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

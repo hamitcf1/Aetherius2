@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Spell, getAllSpells, getLearnedSpellIds, learnSpell, getSpellById, isSpellVariantUnlocked } from '../services/spells';
 import { Character } from '../types';
 import { Zap, Book, Check } from 'lucide-react';
+import EmpoweredBadge from './EmpoweredBadge';
 
 interface SpellsModalProps {
   character: Character;
@@ -49,7 +50,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
       <div className="bg-skyrim-paper border border-skyrim-gold rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-serif text-skyrim-gold flex items-center gap-2"><Zap /> Spells</h3>
-          <button onClick={onClose} className="px-2 py-1 bg-gray-700 rounded text-white">Close</button>
+          <button title="Close the spells window" onClick={onClose} className="px-2 py-1 bg-gray-700 rounded text-white">Close</button>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -64,7 +65,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
               <div key={s.id} className={`p-3 rounded border ${learnedFlag ? 'border-skyrim-gold bg-skyrim-paper/40' : 'border-skyrim-border bg-skyrim-paper/30'}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-skyrim-gold">{s.name}</div>
+                    <div className="font-bold text-skyrim-gold flex items-center gap-2">{s.name}{empoweredUnlocked && <span className="ml-2"><EmpoweredBadge small /></span>}</div>
                     <div className="text-xs text-skyrim-text">{s.description}</div>
                     {/* Empowered variant */}
                     {empoweredUnlocked ? (
@@ -77,13 +78,13 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                     <div className="text-sm text-blue-300">Magicka: {s.cost}</div>
                     <div className="text-sm text-yellow-200">Perk cost: {perkCost}</div>
                     {learnedFlag ? <div className="text-green-400 flex items-center gap-1"><Check size={12} /> Learned</div> : (
-                      <button disabled={!canAfford} onClick={() => handleLearn(s.id)} className={`mt-2 px-2 py-1 ${canAfford ? 'bg-skyrim-gold text-skyrim-dark' : 'bg-gray-700 text-gray-300'} rounded text-xs`}>
+                      <button title={`Learn ${s.name} (cost ${perkCost} perk)`} disabled={!canAfford} onClick={() => handleLearn(s.id)} className={`mt-2 px-2 py-1 ${canAfford ? 'bg-skyrim-gold text-skyrim-dark' : 'bg-gray-700 text-gray-300'} rounded text-xs`}>
                         Learn
                       </button>
                     )}
-                    {/* Empowered learn button */}
-                    {!empoweredLearned && empoweredUnlocked && (
-                      <button onClick={() => handleLearn(empoweredId)} className="mt-2 ml-2 px-2 py-1 rounded bg-amber-600 text-black text-xs">Learn Empowered</button>
+                    {/* Empowered learn button: only show if base spell is already learned */}
+                    {learnedFlag && !empoweredLearned && empoweredUnlocked && (
+                      <button title={`Learn empowered variant (cost ${getSpellById(empoweredId)?.perkCost || 10} perks)`} onClick={() => handleLearn(empoweredId)} className="mt-2 ml-2 px-2 py-1 rounded bg-amber-600 text-black text-xs">Learn Empowered</button>
                     )}
                     {!empoweredUnlocked && (
                       <div className="text-xs text-stone-500 mt-1">Locked</div>

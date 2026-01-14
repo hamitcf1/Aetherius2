@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, EquipmentSlot } from '../types';
 import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowDownToLine as ArrowDownToLineAlt, ArrowUpFromLine as ArrowUpFromLineAlt, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff } from 'lucide-react';
+import RarityBadge from './RarityBadge';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
 import { isTwoHandedWeapon, isShield, canEquipInOffhand, canEquipInMainhand } from '../services/equipment';
@@ -59,7 +60,8 @@ const InventoryItemCard: React.FC<{
     onUnequip?: (item: InventoryItem) => void;
     onUse?: (item: InventoryItem) => void;
     getIcon: (type: string) => React.ReactNode;
-}> = ({ item, onUpdate, onRemove, onDeltaQuantity, onEquip, onUnequip, onUse, getIcon }) => {
+      showDebug?: boolean;
+    }> = ({ item, onUpdate, onRemove, onDeltaQuantity, onEquip, onUnequip, onUse, getIcon, showDebug }) => {
     const [editMode, setEditMode] = useState(false);
     const [editName, setEditName] = useState(item.name);
     const [editDesc, setEditDesc] = useState(item.description);
@@ -125,6 +127,12 @@ const InventoryItemCard: React.FC<{
                           <h3 className="text-skyrim-gold font-serif truncate">
                               {item.name}
                           </h3>
+                          {item.rarity && (
+                            <span className="ml-2">
+                              {/* Rarity badge */}
+                              <RarityBadge rarity={item.rarity} />
+                            </span>
+                          )}
                           <span className="text-xs text-gray-500">x{item.quantity}</span>
                           {isEquipped && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-skyrim-gold/30 text-skyrim-gold rounded border border-skyrim-gold/50 flex items-center gap-1">
@@ -132,6 +140,11 @@ const InventoryItemCard: React.FC<{
                             </span>
                           )}
                         </div>
+                          {showDebug && (
+                            <div className="mt-1 text-xs font-mono text-gray-400">
+                              ID: {item.id} • Key: {(item.name || '').toLowerCase().trim()}|{item.rarity || ''}|{item.upgradeLevel || 0}|{item.damage || 0}|{item.armor || 0}
+                            </div>
+                          )}
                         <p className="text-sm text-skyrim-text truncate">{item.description}</p>
                         {/* Stats display - get from item or itemStats service */}
                         {(() => {
@@ -217,6 +230,7 @@ const InventoryItemCard: React.FC<{
 };
 
 export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, setGold, maxCarryWeight = 300, onUseItem }) => {
+  const [showDebugIds, setShowDebugIds] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<InventoryItem['type']>('misc');
@@ -270,18 +284,24 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
       }
     });
     
-    // Also deduplicate by name (case-insensitive) - merge quantities
-    const nameMap = new Map<string, InventoryItem>();
-    Array.from(uniqueMap.values()).forEach(item => {
-      const key = item.name.toLowerCase().trim();
-      const existing = nameMap.get(key);
-      if (existing) {
-        // Merge quantities for duplicate items
-        nameMap.set(key, { ...existing, quantity: existing.quantity + item.quantity });
-      } else {
-        nameMap.set(key, item);
-      }
-    });
+      // Group items: keep weapons/apparel separate (non-stackable by default),
+      // otherwise merge by a composite key that includes rarity/upgrade/stats.
+      const nameMap = new Map<string, InventoryItem>();
+      Array.from(uniqueMap.values()).forEach(item => {
+        if (item.type === 'weapon' || item.type === 'apparel') {
+          // preserve as unique entries by id for equipment
+          nameMap.set(item.id, item);
+          return;
+        }
+
+        const key = `${(item.name || '').toLowerCase().trim()}|${String(item.rarity || '')}|${Number(item.upgradeLevel || 0)}|${Number(item.damage || 0)}|${Number(item.armor || 0)}`;
+        const existing = nameMap.get(key);
+        if (existing) {
+          nameMap.set(key, { ...existing, quantity: (existing.quantity || 0) + (item.quantity || 0) });
+        } else {
+          nameMap.set(key, item);
+        }
+      });
     
     let uniqueItems = Array.from(nameMap.values());
     
@@ -760,6 +780,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
               { id: 'value', label: 'Value (Gold)' }
             ]}
           />
+          <button onClick={() => setShowDebugIds(s => !s)} className={`px-2 py-1 text-xs rounded ${showDebugIds ? 'bg-sky-600 text-white' : 'bg-skyrim-paper/30 text-skyrim-text'}`}>{showDebugIds ? 'Hide IDs' : 'Show IDs'}</button>
         </div>
       </div>
 
@@ -775,6 +796,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
           onEquip={(item) => equipItem(item)}
           onUnequip={unequipItem}
           onUse={onUseItem}
+          showDebug={showDebugIds}
         />
       ))}
         {sortedItems.length === 0 && (

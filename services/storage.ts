@@ -1,3 +1,4 @@
+
 // Minimal storage wrapper to provide safe access to localStorage in browser
 // and an in-memory fallback for Node/test environments.
 
@@ -29,3 +30,5 @@ export const storage = {
     memory.clear();
   }
 };
+
+export default storage;

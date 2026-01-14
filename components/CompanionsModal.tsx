@@ -208,14 +208,17 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
                       inventory.filter(i => getDefaultSlotForItem(i) === equipSlotPicker).map(it => {
                         const ownedByOther = it.equippedBy && it.equippedBy !== 'player' && it.equippedBy !== selectedEquipCompanion.id;
                         const ownedByPlayer = it.equippedBy === 'player';
+                        const allowEquipWhenStacked = ownedByPlayer && (it.quantity || 0) > 1;
                         return (
                           <div key={it.id} className="flex items-center justify-between p-2 bg-skyrim-paper/30 border border-skyrim-border rounded">
                             <div>
                               <div className="text-sm text-gray-200">{it.name}</div>
-                              <div className="text-xs text-gray-400">{it.damage ? `Damage: ${it.damage} ` : ''}{it.armor ? `Armor: ${it.armor}` : ''}{ownedByPlayer ? ' • Equipped by you' : ''}{ownedByOther ? ' • Equipped by another' : ''}</div>
+                              <div className="text-xs text-gray-400">{it.damage ? `Damage: ${it.damage} ` : ''}{it.armor ? `Armor: ${it.armor}` : ''}{ownedByPlayer ? ` • Equipped by you${allowEquipWhenStacked ? ' (stack available)' : ''}` : ''}{ownedByOther ? ' • Equipped by another' : ''}</div>
                             </div>
                             <div>
-                              <button disabled={ownedByOther || ownedByPlayer} onClick={() => { onAssignItemToCompanion?.(selectedEquipCompanion.id, it.id, equipSlotPicker); setEquipSlotPicker(null); }} className={`px-2 py-1 text-xs rounded ${ownedByOther || ownedByPlayer ? 'bg-gray-700 text-gray-300 cursor-not-allowed' : 'bg-green-700 text-white'}`}>Equip</button>
+                              <button disabled={ownedByOther || (ownedByPlayer && !allowEquipWhenStacked)} onClick={() => { onAssignItemToCompanion?.(selectedEquipCompanion.id, it.id, equipSlotPicker); setEquipSlotPicker(null); }} className={`px-2 py-1 text-xs rounded ${ownedByOther || (ownedByPlayer && !allowEquipWhenStacked) ? 'bg-gray-700 text-gray-300 cursor-not-allowed' : 'bg-green-700 text-white'}`}>
+                                {ownedByPlayer && allowEquipWhenStacked ? 'Split & Equip' : 'Equip'}
+                              </button>
                             </div>
                           </div>
                         );

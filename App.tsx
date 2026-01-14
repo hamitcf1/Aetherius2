@@ -1910,7 +1910,8 @@ const App: React.FC = () => {
         quantity,
         // `value` and `slot` are intentionally cast to any to avoid strict GameStateUpdate shape
         ...( { value: shopItem.price, slot } as any ),
-        ...stats  // Include armor/damage if applicable
+        ...stats, // Include armor/damage if applicable
+        ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
       } as any]
     });
   };
@@ -2309,34 +2310,53 @@ const App: React.FC = () => {
                const name = (rawItem.name || '').trim();
                if (!name) continue;
 
-               const idx = next.findIndex(it =>
-                 it.characterId === currentCharacterId &&
-                 (it.name || '').trim().toLowerCase() === name.toLowerCase()
-               );
+               const forceCreate = (i as any).__forceCreate === true;
+
+               if (forceCreate) {
+                 // Create unique item entity without name-merging
+                 const added = sanitizeInventoryItem({
+                   id: (i as any).id || uniqueId(),
+                   characterId: currentCharacterId,
+                   name,
+                   type: rawItem.type || 'misc',
+                   subtype: rawItem.subtype,
+                   description: rawItem.description || '',
+                   quantity: Math.max(1, Number(rawItem.quantity || 1)),
+                   equipped: rawItem.equipped ?? false,
+                   equippedBy: rawItem.equippedBy ?? null,
+                   armor: rawItem.armor,
+                   damage: rawItem.damage,
+                   value: rawItem.value,
+                   slot: rawItem.slot,
+                 }) as InventoryItem;
+                 next.push(added);
+                 setDirtyEntities(d => new Set([...d, added.id]));
+                 continue;
+               }
+
+               const idx = next.findIndex(it => {
+                 if (it.characterId !== currentCharacterId) return false;
+                 if (((it.name || '').trim().toLowerCase()) !== name.toLowerCase()) return false;
+                 if (String(it.rarity || '').toLowerCase() !== String(rawItem.rarity || '').toLowerCase()) return false;
+                 // Also require upgrade/damage/armor to match exactly to avoid merging upgraded or enchanted items
+                 const itUpgrade = Number(it.upgradeLevel || 0);
+                 const rawUpgrade = Number(rawItem.upgradeLevel || 0);
+                 if (itUpgrade !== rawUpgrade) return false;
+                 const itDamage = Number(it.damage || 0);
+                 const rawDamage = Number(rawItem.damage || 0);
+                 if (itDamage !== rawDamage) return false;
+                 const itArmor = Number(it.armor || 0);
+                 const rawArmor = Number(rawItem.armor || 0);
+                 if (itArmor !== rawArmor) return false;
+                 return true;
+               });
 
                const addQty = Math.max(1, Number(rawItem.quantity || 1));
 
-               if (idx >= 0) {
-                 const existing = next[idx];
-                 const updated = sanitizeInventoryItem({
-                   ...existing,
-                   quantity: (existing.quantity || 0) + addQty,
-                   description: existing.description || rawItem.description || '',
-                   type: existing.type || rawItem.type || 'misc',
-                   subtype: existing.subtype || rawItem.subtype,
-                   armor: existing.armor ?? rawItem.armor,
-                   damage: existing.damage ?? rawItem.damage,
-                   value: existing.value ?? rawItem.value,
-                   // Preserve or apply equipped state and ownership when provided in the update
-                   equipped: rawItem.equipped ?? existing.equipped ?? false,
-                   equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
-                   slot: existing.slot ?? rawItem.slot,
-                 }) as InventoryItem;
-                 next[idx] = updated;
-                 setDirtyEntities(d => new Set([...d, updated.id]));
-               } else {
+               // If forceCreate, always create a unique entry
+               if (forceCreate) {
                  const added = sanitizeInventoryItem({
-                   id: uniqueId(),
+                   id: (i as any).id || uniqueId(),
                    characterId: currentCharacterId,
                    name,
                    type: rawItem.type || 'misc',
@@ -2352,10 +2372,104 @@ const App: React.FC = () => {
                  }) as InventoryItem;
                  next.push(added);
                  setDirtyEntities(d => new Set([...d, added.id]));
+                 continue;
+               }
+
+               // Default behavior: only merge into existing stacks when the incoming
+               // quantity is greater than 1 or the item is explicitly stackable.
+               // Singletons (quantity === 1) should create unique inventory entries
+               // so items like weapons/armor don't collapse into a stack.
+               const NON_STACKABLE_TYPES = ['weapon', 'apparel'];
+               let isStackable = Boolean((rawItem as any).stackable) || addQty > 1;
+               // Treat known equipment types as non-stackable by default unless explicitly marked stackable
+               if (NON_STACKABLE_TYPES.includes(String(rawItem.type || '').toLowerCase()) && !(rawItem as any).stackable) {
+                 isStackable = false;
+               }
+
+               if (isStackable) {
+                 if (idx >= 0) {
+                   const existing = next[idx];
+                   const updated = sanitizeInventoryItem({
+                     ...existing,
+                     quantity: (existing.quantity || 0) + addQty,
+                     description: existing.description || rawItem.description || '',
+                     type: existing.type || rawItem.type || 'misc',
+                     subtype: existing.subtype || rawItem.subtype,
+                     armor: existing.armor ?? rawItem.armor,
+                     damage: existing.damage ?? rawItem.damage,
+                     value: existing.value ?? rawItem.value,
+                     // Preserve or apply equipped state and ownership when provided in the update
+                     equipped: rawItem.equipped ?? existing.equipped ?? false,
+                     equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
+                     slot: existing.slot ?? rawItem.slot,
+                   }) as InventoryItem;
+                   next[idx] = updated;
+                   setDirtyEntities(d => new Set([...d, updated.id]));
+                 } else {
+                   const added = sanitizeInventoryItem({
+                     id: uniqueId(),
+                     characterId: currentCharacterId,
+                     name,
+                     type: rawItem.type || 'misc',
+                     subtype: rawItem.subtype,
+                     description: rawItem.description || '',
+                     quantity: addQty,
+                     equipped: rawItem.equipped ?? false,
+                     equippedBy: rawItem.equippedBy ?? null,
+                     armor: rawItem.armor,
+                     damage: rawItem.damage,
+                     value: rawItem.value,
+                     slot: rawItem.slot,
+                   }) as InventoryItem;
+                   next.push(added);
+                   setDirtyEntities(d => new Set([...d, added.id]));
+                 }
+               } else {
+                 // Non-stackable singletons: create a unique record per incoming item
+                 const added = sanitizeInventoryItem({
+                   id: (i as any).id || uniqueId(),
+                   characterId: currentCharacterId,
+                   name,
+                   type: rawItem.type || 'misc',
+                   subtype: rawItem.subtype,
+                   description: rawItem.description || '',
+                   quantity: 1,
+                   equipped: rawItem.equipped ?? false,
+                   equippedBy: rawItem.equippedBy ?? null,
+                   armor: rawItem.armor,
+                   damage: rawItem.damage,
+                   value: rawItem.value,
+                   slot: rawItem.slot,
+                 }) as InventoryItem;
+                 next.push(added);
+                 setDirtyEntities(d => new Set([...d, added.id]));
                }
              }
              return next;
            });
+      }
+
+      // 4a. Updated items by id (preserve id and replace matching entries)
+      if ((updates as any).updatedItems) {
+        setItems(prev => {
+          const next = [...prev];
+          for (const u of (updates as any).updatedItems || []) {
+            const id = (u as any).id;
+            if (!id) continue;
+            const idx = next.findIndex(it => it.id === id && it.characterId === currentCharacterId);
+            const sanitized = sanitizeInventoryItem(u as Partial<InventoryItem>) as InventoryItem;
+            if (idx >= 0) {
+              next[idx] = { ...next[idx], ...sanitized } as InventoryItem;
+              setDirtyEntities(d => new Set([...d, next[idx].id]));
+            } else {
+              // If not present, push as new (respect id)
+              const added = { ...sanitized, id: id, characterId: currentCharacterId } as InventoryItem;
+              next.push(added);
+              setDirtyEntities(d => new Set([...d, added.id]));
+            }
+          }
+          return next;
+        });
       }
 
       // 4b. Removed Items
@@ -3122,11 +3236,33 @@ const App: React.FC = () => {
             showToast('Item already equipped by another companion', 'warning');
             return;
           }
+
+          // If item is currently equipped by player but exists in a stack, allow splitting and give one copy to companion
+          if (item.equippedBy === 'player' && (item.quantity || 0) > 1) {
+            const newId = `item_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+            const cloned: any = { ...item, id: newId, quantity: 1, equipped: true, slot: slot || item.slot, equippedBy: companionId, createdAt: Date.now() };
+            const originalUpdated = { ...item, quantity: (item.quantity || 1) - 1 };
+            // Persist both changes
+            (window as any).app?.handleGameUpdate?.({ newItems: [originalUpdated, cloned] });
+
+            // Update companion equipment mapping
+            setCompanions(prev => prev.map(c => {
+              if (c.id !== companionId) return c;
+              const slotKey = (slot || item.slot || getDefaultSlotForItem(item)) as any;
+              return { ...c, equipment: { ...(c.equipment || {}), [slotKey]: cloned.id } };
+            }));
+
+            showToast('Split stack and assigned item to companion', 'success');
+            return;
+          }
+
+          // If item is equipped by player and only one exists, require unequip first
           if (item.equippedBy === 'player') {
             showToast('Unequip item from player before assigning to companion', 'warning');
             return;
           }
-          // Assign
+
+          // Normal assignment (not splitting)
           const updated = { ...item, equipped: true, slot: slot || item.slot, equippedBy: companionId };
           (window as any).app?.handleGameUpdate?.({ newItems: [updated] });
 
