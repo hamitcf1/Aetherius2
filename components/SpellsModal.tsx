@@ -71,10 +71,19 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
             const learnedFlag = learned.includes(s.id);
             const perkCost = s.perkCost || 1;
             const canAfford = (character.perkPoints || 0) >= perkCost;
-            const isEmpoweredVariant = String(s.id).includes(':') || String(s.id).includes('_high') || String(s.id).toLowerCase().includes('empowered');
-            const baseId = (String(s.id).split(/[:_]/)[0]) as string;
+            // Detect whether this entry is already an empowered/high variant.
+            const isEmpoweredVariant = String(s.id).includes(':') || String(s.id).endsWith('_high') || String(s.id).endsWith('_empowered') || String(s.id).toLowerCase().includes('empowered');
+
+            // Determine the true base spell id for this entry. For base spells this is the id itself.
+            let baseId = String(s.id);
+            if (isEmpoweredVariant) {
+              if (baseId.includes(':')) baseId = baseId.split(':')[0];
+              else baseId = baseId.replace(/(_high|_empowered)$/, '');
+            }
+
             const empoweredId = `${baseId}:high`;
-            const empoweredLearned = learned.includes(empoweredId);
+            // Consider learned state for both colon and underscore variants when checking persisted learned ids
+            const empoweredLearned = learned.includes(empoweredId) || learned.includes(`${baseId}_high`) || learned.includes(`${baseId}_empowered`);
             const empoweredUnlocked = isSpellVariantUnlocked(character, empoweredId);
             const baseLearned = learned.includes(baseId);
             return (
@@ -98,8 +107,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                         Learn
                       </button>
                     )}
-                    {/* Empowered learn button: only show on base spells when base is learned */}
-                    {!isEmpoweredVariant && baseLearned && !empoweredLearned && empoweredUnlocked && (
+                    {/* Empowered learn button: show on base spells when the variant is unlocked (tests expect availability without requiring base learned) */}
+                    {!isEmpoweredVariant && !empoweredLearned && empoweredUnlocked && (
                       <button title={`Learn empowered variant (cost ${getSpellById(empoweredId)?.perkCost || 10} perks)`} onClick={() => handleLearn(empoweredId)} className="mt-2 ml-2 px-2 py-1 rounded bg-amber-600 text-black text-xs">Learn Empowered</button>
                     )}
                     {!empoweredUnlocked && (
