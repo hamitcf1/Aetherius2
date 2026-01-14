@@ -187,18 +187,6 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
             <span className="text-white font-mono text-sm">Developer Console</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex gap-2">
-              {QUICK_COMMANDS.map((cmd, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => executeCommand(cmd)}
-                  title={cmd}
-                  className="px-2 py-1 bg-skyrim-border text-xs text-skyrim-text hover:bg-skyrim-hover rounded font-mono"
-                >
-                  {cmd.length > 18 ? cmd.slice(0, 16) + '…' : cmd}
-                </button>
-              ))}
-            </div>
             <button
               onClick={onClose}
               className="text-skyrim-text hover:text-white transition-colors"
@@ -223,6 +211,24 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
 
         {/* Input Area */}
         <div className="p-4 border-t border-skyrim-border bg-skyrim-paper">
+          {/* Quick command buttons (moved here from header) */}
+          {QUICK_COMMANDS && QUICK_COMMANDS.length > 0 && (
+            <div className="mb-2 overflow-x-auto">
+              <div className="flex gap-2 whitespace-nowrap">
+                {QUICK_COMMANDS.map((cmd, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => executeCommand(cmd)}
+                    title={cmd}
+                    className="px-2 py-1 bg-skyrim-border text-xs text-skyrim-text hover:bg-skyrim-hover rounded font-mono whitespace-nowrap"
+                  >
+                    {cmd.length > 28 ? cmd.slice(0, 26) + '…' : cmd}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <span className="text-green-400 font-mono text-sm">&gt;</span>
             <input

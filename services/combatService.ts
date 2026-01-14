@@ -249,11 +249,11 @@ export const calculatePlayerCombatStats = (
     dodgeChance,
     magicResist,
     abilities,
-    // Passive regen: base 0.25 per second (== 1 per 4s). Can be increased by progression later.
-    // Player regeneration removed: players no longer auto-regen.
-    regenHealthPerSec: 0,
-    regenMagickaPerSec: 0,
-    regenStaminaPerSec: 0
+    // Passive regen: base values per second. These are applied per-turn (default 4s).
+    // Set sensible defaults so players recover a small amount between turns.
+    regenHealthPerSec: 0.25, // ~1 health per 4s
+    regenMagickaPerSec: 0.75, // ~3 magicka per 4s
+    regenStaminaPerSec: 0.5 // ~2 stamina per 4s
   };
 };
 
@@ -1488,9 +1488,14 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
 export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
   let newPlayerStats = { ...playerStats };
   const multiplier = secondsPerTurn;
-  const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.floor((newPlayerStats.regenHealthPerSec || 0) * multiplier));
-  const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.floor((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
-  const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.floor((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
+  // Record pre-regen values so we can log exact deltas
+  const beforeHealth = newPlayerStats.currentHealth || 0;
+  const beforeMagicka = newPlayerStats.currentMagicka || 0;
+  const beforeStamina = newPlayerStats.currentStamina || 0;
+
+  const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
+  const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
+  const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
   newPlayerStats.currentHealth = nh;
   newPlayerStats.currentMagicka = nm;
   newPlayerStats.currentStamina = ns;
@@ -1505,6 +1510,31 @@ export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStat
   });
 
   const newState = { ...state, enemies };
+  // If any vitals recovered, append a concise turn chat entry to the combat log
+  try {
+    const deltaH = Math.max(0, (newPlayerStats.currentHealth || 0) - beforeHealth);
+    const deltaM = Math.max(0, (newPlayerStats.currentMagicka || 0) - beforeMagicka);
+    const deltaS = Math.max(0, (newPlayerStats.currentStamina || 0) - beforeStamina);
+    const parts: string[] = [];
+    if (deltaH > 0) parts.push(`${deltaH} health`);
+    if (deltaM > 0) parts.push(`${deltaM} magicka`);
+    if (deltaS > 0) parts.push(`${deltaS} stamina`);
+    if (parts.length > 0) {
+      const narrative = `You recover ${parts.join(', ')}.`;
+      const entry: CombatLogEntry = {
+        turn: newState.turn,
+        actor: 'system',
+        action: 'regen',
+        narrative,
+        timestamp: Date.now()
+      };
+      newState.combatLog = [...(newState.combatLog || []), entry];
+    }
+  } catch (e) {
+    // Non-fatal: logging failure should not break regen application
+    console.warn('[combat] regen log failed', e);
+  }
+
   return { newState, newPlayerStats };
 };
 

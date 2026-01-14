@@ -561,8 +561,9 @@ const App: React.FC = () => {
   // Global Backquote / ~ key toggles the developer console (outside of text inputs)
   useEffect(() => {
     const handleBackquote = (e: KeyboardEvent) => {
-      // Prefer code for layout independence, but also accept key values
-      const isBackquote = e.code === 'Backquote' || e.key === '`' || e.key === '~';
+      // Prefer code for layout independence, but also accept key values and legacy keyCodes
+      const kc = (e as any).keyCode || (e as any).which;
+      const isBackquote = e.code === 'Backquote' || e.key === '`' || e.key === '~' || kc === 192;
       if (!isBackquote) return;
 
       const active = document.activeElement as HTMLElement | null;
@@ -579,7 +580,12 @@ const App: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleBackquote);
-    return () => window.removeEventListener('keydown', handleBackquote);
+    // Some environments dispatch the backquote on keyup - support that as well
+    window.addEventListener('keyup', handleBackquote);
+    return () => {
+      window.removeEventListener('keydown', handleBackquote);
+      window.removeEventListener('keyup', handleBackquote);
+    };
   }, []);
 
   // AI Model Selection (global)
