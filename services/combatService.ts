@@ -211,7 +211,7 @@ export const calculatePlayerCombatStats = (
 
   // Skill bonuses
   const getSkillLevel = (name: string) => 
-    character.skills.find(s => s.name === name)?.level || 15;
+    (character.skills || []).find(s => s.name === name)?.level || 15;
 
   // Light/Heavy armor skill affects armor rating
   const lightArmorSkill = getSkillLevel('Light Armor');
@@ -250,10 +250,10 @@ export const calculatePlayerCombatStats = (
     magicResist,
     abilities,
     // Passive regen: base values per second. These are applied per-turn (default 4s).
-    // Set sensible defaults so players recover a small amount between turns.
-    regenHealthPerSec: 0.25, // ~1 health per 4s
-    regenMagickaPerSec: 0.75, // ~3 magicka per 4s
-    regenStaminaPerSec: 0.5 // ~2 stamina per 4s
+    // Read any customized values from character.stats (set by perks) and fall back to sensible defaults.
+    regenHealthPerSec: (character.stats && typeof (character.stats as any).regenHealthPerSec === 'number') ? (character.stats as any).regenHealthPerSec : 0.25, // ~1 health per 4s
+    regenMagickaPerSec: (character.stats && typeof (character.stats as any).regenMagickaPerSec === 'number') ? (character.stats as any).regenMagickaPerSec : 0.75, // ~3 magicka per 4s
+    regenStaminaPerSec: (character.stats && typeof (character.stats as any).regenStaminaPerSec === 'number') ? (character.stats as any).regenStaminaPerSec : 0.5 // ~2 stamina per 4s
   };
 };
 
@@ -267,7 +267,7 @@ const generatePlayerAbilities = (
 ): CombatAbility[] => {
   const abilities: CombatAbility[] = [];
   const getSkillLevel = (name: string) => 
-    character.skills.find(s => s.name === name)?.level || 15;
+    (character.skills || []).find(s => s.name === name)?.level || 15;
 
   // Always available: Basic Attack
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');

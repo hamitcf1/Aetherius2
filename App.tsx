@@ -111,6 +111,7 @@ import { filterDuplicateTransactions } from './services/transactionLedger';
 import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
+import { applyLevelUpToCharacter } from './utils/levelUpHelpers';
 import PerkTreeModal from './components/PerkTreeModal';
 import CompanionsModal from './components/CompanionsModal';
 import CompanionDialogueModal from './components/CompanionDialogueModal';
@@ -2836,24 +2837,14 @@ const App: React.FC = () => {
   };
 
   // Level-up confirm/cancel handlers
+
   const confirmLevelUp = (choice: 'health' | 'magicka' | 'stamina') => {
     if (!pendingLevelUp || !currentCharacterId) return;
     const p = pendingLevelUp;
+
     setCharacters(prev => prev.map(c => {
       if (c.id !== p.charId) return c;
-      const addedStats = { health: 0, magicka: 0, stamina: 0 };
-      addedStats[choice] = 10;
-      const updated = {
-        ...c,
-        level: p.newLevel,
-        experience: p.remainingXP,
-        stats: {
-          health: (c.stats?.health || 100) + addedStats.health,
-          magicka: (c.stats?.magicka || 100) + addedStats.magicka,
-          stamina: (c.stats?.stamina || 100) + addedStats.stamina,
-        },
-        perkPoints: (c.perkPoints || 0) + 1,
-      } as Character;
+      const updated = applyLevelUpToCharacter(c, p.newLevel, p.remainingXP, choice);
       setDirtyEntities(d => new Set([...d, c.id]));
 
       // Add a journal entry announcing the level up
@@ -2919,7 +2910,8 @@ const App: React.FC = () => {
       let updatedStats = { ...c.stats };
       if (def.effect && def.effect.type === 'stat') {
         const key = def.effect.key as keyof typeof updatedStats;
-        updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + def.effect.amount };
+        const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+        updatedStats = { ...updatedStats, [key]: prev + def.effect.amount };
       }
 
       let newPerks = (c.perks || []).slice();
@@ -2989,13 +2981,15 @@ const App: React.FC = () => {
             if (masteryBonusCfg && masteryBonusCfg.type === 'stat') {
               const key = masteryBonusCfg.key as keyof typeof updatedStats;
               const bonus = (masteryBonusCfg.amount || 0) * (wantCount || 1);
-              updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + bonus };
+              const prevMastery = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+              updatedStats = { ...updatedStats, [key]: prevMastery + bonus };
             } else if (def.effect && def.effect.type === 'stat') {
               // fallback to previous heuristic
               const key = def.effect.key as keyof typeof updatedStats;
               const bonusPerMastery = Math.ceil((def.effect.amount || 0) * 0.5 * (def.maxRank || 1));
               const bonus = bonusPerMastery * (wantCount || 1);
-              updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + bonus };
+              const prevMastery2 = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+              updatedStats = { ...updatedStats, [key]: prevMastery2 + bonus };
             }
             showToast && showToast(`Mastery purchased for ${def.name} (x${wantCount})`, 'success');
           }
@@ -3012,7 +3006,8 @@ const App: React.FC = () => {
           // apply one rank
           if (def.effect && def.effect.type === 'stat') {
             const key = def.effect.key as keyof typeof updatedStats;
-            updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + def.effect.amount };
+            const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+            updatedStats = { ...updatedStats, [key]: prev + def.effect.amount };
           }
           if (existing) {
             for (let i = 0; i < nextPerks.length; i++) {
@@ -3070,7 +3065,8 @@ const App: React.FC = () => {
       let updatedStats = { ...c.stats };
       if (def.effect && def.effect.type === 'stat') {
         const key = def.effect.key as keyof typeof updatedStats;
-        updatedStats = { ...updatedStats, [key]: (updatedStats as any)[key] + def.effect.amount };
+        const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+        updatedStats = { ...updatedStats, [key]: prev + def.effect.amount };
       }
       let newPerks = (c.perks || []).slice();
       if (existing) {
