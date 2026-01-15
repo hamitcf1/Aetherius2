@@ -180,6 +180,33 @@ const computeDamageFromNat = (
   return { damage, hitLocation };
 };
 
+// Normalize misclassified summoned companions: move any enemies that have `isCompanion` set into `allies`.
+// Be generic: treat any enemy flagged `isCompanion` as a companion (covers future conjuration spells).
+const normalizeSummonedCompanions = (state: CombatState): CombatState => {
+  const newState = { ...state } as CombatState;
+  if (!newState.enemies || newState.enemies.length === 0) return newState;
+  // Move any enemies that are companions (don't rely on id prefix)
+  const misclassified = (newState.enemies || []).filter(e => e.isCompanion);
+  if (misclassified.length === 0) return newState;
+  // Remove from enemies and add to allies
+  newState.enemies = (newState.enemies || []).filter(e => !e.isCompanion);
+  newState.allies = [...(newState.allies || []), ...misclassified.map(m => ({ ...m, companionMeta: (m as any).companionMeta || { companionId: m.id, autoLoot: false, autoControl: true } }))];
+  // Ensure turn order includes them after player
+  const playerIndex = newState.turnOrder.indexOf('player');
+  for (const m of misclassified) {
+    if (!newState.turnOrder.includes(m.id)) {
+      if (playerIndex >= 0) {
+        const before = newState.turnOrder.slice(0, playerIndex + 1);
+        const after = newState.turnOrder.slice(playerIndex + 1);
+        newState.turnOrder = [...before, m.id, ...after];
+      } else {
+        newState.turnOrder = [...newState.turnOrder, m.id];
+      }
+    }
+  }
+  return newState;
+};
+
 // ============================================================================
 // PLAYER COMBAT STATS CALCULATION
 // ============================================================================
@@ -944,7 +971,9 @@ export const executePlayerAction = (
             description: `A summoned ally: ${summonName}`
           } as any;
 
-          newState.enemies = [...newState.enemies, companion];
+          // Mark as companion and add to allies (not enemies)
+          companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true };
+          newState.allies = [...(newState.allies || []), companion];
           // Insert into turn order right after player
           const playerIndex = newState.turnOrder.indexOf('player');
           if (playerIndex >= 0) {
@@ -1208,6 +1237,9 @@ export const executePlayerAction = (
       // Record player's last action to avoid immediate repetition in AI (for flavor)
       newState.lastActorActions = newState.lastActorActions || {};
       newState.lastActorActions['player'] = [ability.id, ...(newState.lastActorActions['player'] || [])].slice(0, 4);
+
+      // Defensive normalization: ensure any summoned companions are classified as allies
+      newState = normalizeSummonedCompanions(newState);
 
       // Apply effects
       if (ability.effects) {
@@ -1920,7 +1952,9 @@ export const executeCompanionAction = (
 // ============================================================================
 
 export const advanceTurn = (state: CombatState): CombatState => {
-  const newState = { ...state };
+  let newState = { ...state } as CombatState;
+  // Normalize any misclassified summoned companions at turn boundary
+  newState = normalizeSummonedCompanions(newState);
   
   // Find next actor in turn order
   const currentIndex = newState.turnOrder.indexOf(newState.currentTurnActor);

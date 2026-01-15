@@ -101,6 +101,41 @@ describe('Spell classification: healing and summons', () => {
     expect(enemyAfter.currentHealth).toBe(30);
   });
 
+  it('summon works and remains friendly even when cast by a damaging spell (damage + summon)', () => {
+    const char = makeCharacter();
+    const playerStats = makePlayerStats();
+    const fireSummon = { id: 'fire_and_summon', name: 'Fire & Summon', type: 'magic', damage: 10, cost: 30, effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }] } as any;
+    playerStats.abilities.push(fireSummon);
+
+    const state = baseState();
+    const res = executePlayerAction(state, playerStats, 'magic', 'enemy1', 'fire_and_summon', undefined, undefined, 15, char);
+    const { newState } = res;
+
+    // The enemy should take damage
+    const enemy = newState.enemies.find((e: any) => e.id === 'enemy1');
+    expect(enemy.currentHealth).toBeLessThan(30);
+
+    // And the summoned skeleton should be added to allies, not enemies
+    const summonsAlly = newState.allies.filter((a: any) => a.isCompanion && a.name.includes('Skeleton'));
+    expect(summonsAlly.length).toBeGreaterThan(0);
+    const summonsEnemy = newState.enemies.filter((e: any) => e.isCompanion && e.name.includes('Skeleton'));
+    expect(summonsEnemy.length).toBe(0);
+  });
+
+  it('normalizes misclassified summoned companions (moves from enemies to allies) on turn advance', () => {
+    const state = baseState();
+    // Add a misclassified summon into enemies (simulating earlier bug). Use a non-"summon_" id to ensure we don't rely on prefix checks.
+    const mis = { id: 'buggy_summon_1', name: 'Skeleton', level: 1, maxHealth: 20, currentHealth: 20, isCompanion: true, abilities: [{ id: 's_a', name: 'Attack', type: 'melee', damage: 4 }] } as any;
+    state.enemies.push(mis);
+    state.turnOrder.push(mis.id);
+
+    const next = (require('../services/combatService')).advanceTurn(state);
+    const foundAlly = (next.allies || []).find((a: any) => a.id === 'buggy_summon_1');
+    expect(foundAlly).toBeDefined();
+    const foundEnemy = (next.enemies || []).find((e: any) => e.id === 'buggy_summon_1');
+    expect(foundEnemy).toBeUndefined();
+  });
+
   it('learned healing/summon spells from registry work via createAbilityFromSpell', () => {
     const char = makeCharacter();
     const playerStats = makePlayerStats();
