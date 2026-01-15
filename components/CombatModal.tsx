@@ -327,7 +327,6 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     let lastStep = -1;
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
-    const lastTickRef = { value: 0 } as { value: number };
     const loop = (now: number) => {
       const elapsed = now - start;
       const t = Math.min(1, duration > 0 ? elapsed / duration : 1);
@@ -338,16 +337,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setRollValue(display);
         lastStep = step;
 
-        // Play tick sound but throttle to avoid overwhelming the audio system
-        try {
-          const nowTs = performance.now();
-          const MIN_TICK_MS = 40; // at most ~25 ticks/sec
-          if (nowTs - lastTickRef.value >= MIN_TICK_MS) {
-            // Using audio service - plays only if sound enabled (graceful if file missing)
-            try { audioService.playSoundEffect('dice_tick'); } catch (e) { /* ignore audio errors */ }
-            lastTickRef.value = nowTs;
-          }
-        } catch (e) {}
+        // Play tick sound on every visible step change
+        try { audioService.playSoundEffect('dice_tick'); } catch (e) { /* ignore audio errors */ }
       }
 
       if (t >= 1) {
