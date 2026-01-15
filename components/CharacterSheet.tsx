@@ -28,6 +28,7 @@ interface CharacterSheetProps {
   hasBedroll?: boolean;
   onRequestLevelUp?: () => void;
   onOpenPerkTree?: () => void;
+  levelUpAvailable?: boolean;
 }
 
 const Section: React.FC<{ 
@@ -185,7 +186,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   hasCampingGear = false,
   hasBedroll = false,
   onRequestLevelUp,
-  onOpenPerkTree
+  onOpenPerkTree,
+  levelUpAvailable = false
 }) => {
   // Localization
   const { t } = useLocalization();
@@ -693,6 +695,10 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 <div className="flex items-center gap-2">
                   <button onClick={() => updateCharacter('level', Math.max(1, character.level - 1))} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">-</button>
                   <button onClick={() => onRequestLevelUp ? onRequestLevelUp() : updateCharacter('level', character.level + 1)} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">+</button>
+                  {/* Level up available indicator (renders when a postponed level-up exists) */}
+                  {levelUpAvailable && (
+                    <button onClick={() => onRequestLevelUp && onRequestLevelUp()} className="ml-2 px-3 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs font-semibold hover:bg-yellow-400 transition-all">Level up available</button>
+                  )}
                 </div>
               </div>
               

@@ -871,26 +871,142 @@ export const executePlayerAction = (
         break;
       }
 
-      // Disallow targeting allies with damaging abilities
+      // Detect ability categories to branch logic (healing, summon, buffs, etc.)
       const isHealingAbility = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal')));
-      if (targetIsAlly && !isHealingAbility) {
-        narrative = `${ability.name} cannot be used on allies!`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+      const hasSummonEffect = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
+      const isUtilityOrBuff = !!(ability.type === 'utility' || (ability.effects && ability.effects.some((ef: any) => ['buff', 'debuff', 'slow', 'stun', 'drain', 'dot'].includes(ef.type))));
+
+      // Healing abilities: apply directly to self/allies without attack resolution
+      if (isHealingAbility) {
+        if (!targetIsAlly && target.id !== 'player') {
+          narrative = `${ability.name} cannot be used on enemies!`;
+          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+          break;
+        }
+
+        // Compute heal amount
+        let healAmount = ability.heal || 0;
+        if (ability.effects) {
+          for (const ef of ability.effects) {
+            if (ef.type === 'heal') healAmount += ef.value || 0;
+          }
+        }
+        // Scale heal slightly with Restoration skill if present
+        const restorationLevel = (character?.skills || []).find((s: any) => s.name === 'Restoration')?.level || 0;
+        if (restorationLevel > 0) healAmount += Math.floor(restorationLevel * 0.2);
+
+        // Apply heal
+        if (targetIsAlly) {
+          const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+          if (allyIndex >= 0) {
+            newState.allies = [ ...(newState.allies || []) ];
+            const updated = { ...newState.allies[allyIndex] } as any;
+            updated.currentHealth = Math.min(updated.maxHealth, (updated.currentHealth || 0) + healAmount);
+            newState.allies[allyIndex] = updated;
+          }
+        } else if (target.id === 'player') {
+          newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, (newPlayerStats.currentHealth || 0) + healAmount);
+        }
+
+        // Set cooldown if any
+        if (ability.cooldown) {
+          newState.abilityCooldowns[ability.id] = ability.cooldown;
+        }
+
+        narrative = `You use ${ability.name} on ${target.name} and restore ${healAmount} health.`;
+        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: -healAmount, narrative, timestamp: Date.now() });
         break;
       }
 
-      // Prevent acting on defeated targets
-      if (target.currentHealth <= 0) {
-        narrative = `${target.name} is already defeated!`;
-        newState.combatLog.push({
-          turn: newState.turn,
-          actor: 'player',
-          action: ability.name,
-          target: target.name,
-          damage: 0,
-          narrative,
-          timestamp: Date.now()
-        });
+      // Summon abilities: create companion/summon without attack resolution
+      if (hasSummonEffect) {
+        // Find summon effect and execute
+        const summonEffects = (ability.effects || []).filter((ef: any) => ef.type === 'summon');
+        for (const ef of summonEffects) {
+          const summonName = ef.name || 'Summoned Ally';
+          const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+          const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
+          const maxHealth = 30 + (level * 8);
+          const companion: CombatEnemy = {
+            id: summonId,
+            name: summonName,
+            type: 'humanoid',
+            level,
+            maxHealth,
+            currentHealth: maxHealth,
+            armor: 5,
+            damage: 8 + level,
+            abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
+            behavior: 'support',
+            xpReward: 0,
+            loot: [],
+            isCompanion: true,
+            description: `A summoned ally: ${summonName}`
+          } as any;
+
+          newState.enemies = [...newState.enemies, companion];
+          // Insert into turn order right after player
+          const playerIndex = newState.turnOrder.indexOf('player');
+          if (playerIndex >= 0) {
+            const before = newState.turnOrder.slice(0, playerIndex + 1);
+            const after = newState.turnOrder.slice(playerIndex + 1);
+            newState.turnOrder = [...before, companion.id, ...after];
+          } else {
+            newState.turnOrder = [...newState.turnOrder, companion.id];
+          }
+
+          const turns = Math.max(1, ef.duration || 3);
+          newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
+          narrative += ` ${summonName} joins the fight to aid you for ${turns} turns!`;
+        }
+
+        // Set cooldown
+        if (ability.cooldown) {
+          newState.abilityCooldowns[ability.id] = ability.cooldown;
+        }
+
+        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
+        break;
+      }
+
+      // Utility/buff abilities: apply effects directly without going through attack resolution
+      if (isUtilityOrBuff && (!ability.damage || ability.damage === 0)) {
+        // Apply each effect immediately to the target
+        if (ability.effects) {
+          ability.effects.forEach((effect: any) => {
+            if (effect.type === 'buff' || effect.type === 'debuff' || effect.type === 'slow' || effect.type === 'stun' || effect.type === 'drain' || effect.type === 'dot') {
+              // Attach status effect to the target
+              if (targetIsAlly) {
+                const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+                if (allyIndex >= 0) {
+                  newState.allies = [...(newState.allies || [])];
+                  newState.allies[allyIndex] = {
+                    ...newState.allies[allyIndex],
+                    activeEffects: [...((newState.allies[allyIndex]?.activeEffects) || []), { effect, turnsRemaining: effect.duration || 1 }]
+                  } as any;
+                }
+              } else {
+                const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+                if (enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = {
+                    ...newState.enemies[enemyIndex],
+                    activeEffects: [...((newState.enemies[enemyIndex]?.activeEffects) || []), { effect, turnsRemaining: effect.duration || 1 }]
+                  } as any;
+                }
+              }
+              narrative += ` ${target.name} is affected by ${effect.type}!`;
+            }
+          });
+        }
+
+        // Set cooldown
+        if (ability.cooldown) {
+          newState.abilityCooldowns[ability.id] = ability.cooldown;
+        }
+
+        narrative = `You use ${ability.name} on ${target.name}.${narrative}`;
+        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
         break;
       }
 
@@ -1129,8 +1245,9 @@ export const executePlayerAction = (
                 description: `A summoned ally: ${summonName}`
               } as any;
 
-              // Add to enemies list but mark as companion so AI treats it as ally
-              newState.enemies = [...newState.enemies, companion];
+                  // Add to allies list (player summons should be friendly companions)
+              newState.allies = [...(newState.allies || []), companion];
+
               // Insert into turn order right after player
               const playerIndex = newState.turnOrder.indexOf('player');
               if (playerIndex >= 0) {
@@ -1140,6 +1257,9 @@ export const executePlayerAction = (
               } else {
                 newState.turnOrder = [...newState.turnOrder, companion.id];
               }
+
+              // Add companion metadata (useful for UI & auto-control)
+              companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true } as any;
 
               // Track pending summon expiration in turns (use effect.duration as turns if supplied)
               const turns = Math.max(1, (effect as any).duration || 3);
@@ -1426,6 +1546,116 @@ export const executeEnemyTurn = (
     if (alt) chosenAbility = alt;
   }
 
+
+  // Handle summon/heal/utility abilities used by enemies/allies (so they don't always go through the attack pipeline)
+  const hasSummonEffect = !!(chosenAbility.effects && chosenAbility.effects.some((ef: any) => ef.type === 'summon'));
+  const isHealingAbility = !!(chosenAbility.heal || (chosenAbility.effects && chosenAbility.effects.some((ef: any) => ef.type === 'heal')));
+  const isUtilityOnly = !!(chosenAbility.effects && chosenAbility.effects.some((ef: any) => ['buff','debuff','slow','stun','drain','dot'].includes(ef.type)) && !(chosenAbility.damage && chosenAbility.damage > 0));
+
+  if (hasSummonEffect) {
+    // Execute summons: enemies summon hostile companions, allies summon friendly ones
+    const summonEffects = (chosenAbility.effects || []).filter((ef: any) => ef.type === 'summon');
+    let narrativeLocal = `${actor.name} casts ${chosenAbility.name}`;
+    for (const ef of summonEffects) {
+      const summonName = ef.name || 'Summoned Ally';
+      const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+      const level = Math.max(1, actor.level || 1);
+      const maxHealth = 30 + (level * 8);
+      const companion: CombatEnemy = {
+        id: summonId,
+        name: summonName,
+        type: 'humanoid',
+        level,
+        maxHealth,
+        currentHealth: maxHealth,
+        armor: 5,
+        damage: 8 + level,
+        abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
+        behavior: actor.isCompanion ? 'support' : 'aggressive',
+        xpReward: 0,
+        loot: [],
+        isCompanion: actor.isCompanion ? true : false,
+        description: `A summoned ally: ${summonName}`
+      } as any;
+
+      if (actor.isCompanion) {
+        // Allied actor summoning -> add to allies
+        newState.allies = [...(newState.allies || []), companion];
+      } else {
+        // Enemy summoning -> add to enemies
+        newState.enemies = [...(newState.enemies || []), companion];
+      }
+
+      // Insert into turn order right after the summoner
+      const actorIndex = newState.turnOrder.indexOf(actor.id);
+      if (actorIndex >= 0) {
+        const before = newState.turnOrder.slice(0, actorIndex + 1);
+        const after = newState.turnOrder.slice(actorIndex + 1);
+        newState.turnOrder = [...before, companion.id, ...after];
+      } else {
+        newState.turnOrder = [...newState.turnOrder, companion.id];
+      }
+
+      const turns = Math.max(1, ef.duration || 3);
+      newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
+      narrativeLocal += ` ${summonName} joins the fight for ${turns} turns!`;
+    }
+    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
+    return { newState, newPlayerStats, narrative: narrativeLocal };
+  }
+
+  if (isHealingAbility) {
+    // Enemy/actor attempting to heal self or allies
+    let healAmount = chosenAbility.heal || 0;
+    if (chosenAbility.effects) {
+      for (const ef of chosenAbility.effects) {
+        if (ef.type === 'heal') healAmount += ef.value || 0;
+      }
+    }
+    // Prefer to heal self, otherwise heal lowest ally
+    if (actor.currentHealth < actor.maxHealth) {
+      const actualHeal = Math.min(healAmount, actor.maxHealth - actor.currentHealth);
+      actor.currentHealth = Math.min(actor.maxHealth, (actor.currentHealth || 0) + actualHeal);
+      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: -actualHeal, narrative: `${actor.name} heals for ${actualHeal} health.`, timestamp: Date.now() });
+      return { newState, newPlayerStats, narrative: `${actor.name} heals for ${actualHeal} health.` };
+    } else {
+      // Heal an allied companion if present
+      const allies = (actor.isCompanion ? (newState.allies || []) : (newState.enemies || [])).filter(a => a.id !== actor.id && (a.currentHealth || 0) < (a.maxHealth || 1));
+      if (allies.length > 0) {
+        const targetAlly = allies.sort((a,b) => (a.currentHealth || 0) - (b.currentHealth || 0))[0];
+        const allyIndex = (actor.isCompanion ? (newState.allies || []) : (newState.enemies || [])).findIndex(a => a.id === targetAlly.id);
+        if (allyIndex >= 0) {
+          if (actor.isCompanion) {
+            newState.allies = [ ...(newState.allies || []) ];
+            newState.allies[allyIndex] = { ...targetAlly, currentHealth: Math.min(targetAlly.maxHealth, (targetAlly.currentHealth || 0) + healAmount) } as any;
+          } else {
+            newState.enemies = [ ...(newState.enemies || []) ];
+            newState.enemies[allyIndex] = { ...targetAlly, currentHealth: Math.min(targetAlly.maxHealth, (targetAlly.currentHealth || 0) + healAmount) } as any;
+          }
+          newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: targetAlly.name, damage: -healAmount, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.`, timestamp: Date.now() });
+          return { newState, newPlayerStats, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.` };
+        }
+      }
+    }
+  }
+
+  if (isUtilityOnly) {
+    // Apply non-damaging effects: buffs for actor, debuffs/dot to player
+    let narrativeLocal = `${actor.name} uses ${chosenAbility.name}`;
+    if (chosenAbility.effects) {
+      chosenAbility.effects.forEach((ef: any) => {
+        if (ef.type === 'buff') {
+          actor.activeEffects = [...(actor.activeEffects || []), { effect: ef, turnsRemaining: ef.duration || 1 }];
+          narrativeLocal += ` and gains ${ef.type}`;
+        } else if (['debuff','dot','slow','stun','drain'].includes(ef.type)) {
+          newState.playerActiveEffects = [...(newState.playerActiveEffects || []), { effect: ef, turnsRemaining: ef.duration || 1 }];
+          narrativeLocal += ` and affects the player with ${ef.type}`;
+        }
+      });
+    }
+    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
+    return { newState, newPlayerStats, narrative: narrativeLocal };
+  }
 
   // Resolve enemy/actor attack via d20 + attack bonus
   const attackBonus = Math.max(0, Math.floor(actor.damage / 8));

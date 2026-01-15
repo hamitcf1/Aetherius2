@@ -4,12 +4,12 @@ import { SparkParticles } from '../components/BlacksmithModal';
 
 // Mock requestAnimationFrame for deterministic behavior
 beforeAll(() => {
-  jest.useFakeTimers && jest.useFakeTimers();
+  vi.useFakeTimers && vi.useFakeTimers();
 });
 
 afterEach(() => {
   cleanup();
-  jest.runOnlyPendingTimers && jest.runOnlyPendingTimers();
+  vi.runOnlyPendingTimers && vi.runOnlyPendingTimers();
 });
 
 describe('SparkParticles', () => {
@@ -24,7 +24,7 @@ describe('SparkParticles', () => {
 
     const { unmount } = render(<SparkParticles active={true} buttonRef={ref} /> as any);
     // Simulate some time passing for animation to start
-    jest.advanceTimersByTime(100);
+    vi.advanceTimersByTime(100);
 
     // Unmount should trigger cleanup which clears sparks
     unmount();
@@ -46,11 +46,11 @@ describe('SparkParticles', () => {
 
     // Rapidly toggle on/off several times
     rerender(<SparkParticles active={true} buttonRef={ref} /> as any);
-    jest.advanceTimersByTime(50);
+    vi.advanceTimersByTime(50);
     rerender(<SparkParticles active={false} buttonRef={ref} /> as any);
-    jest.advanceTimersByTime(50);
+    vi.advanceTimersByTime(50);
     rerender(<SparkParticles active={true} buttonRef={ref} /> as any);
-    jest.advanceTimersByTime(50);
+    vi.advanceTimersByTime(50);
 
     // Now unmount and ensure no sparks remain
     unmount();

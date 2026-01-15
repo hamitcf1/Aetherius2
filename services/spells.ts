@@ -105,7 +105,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 40,
     perkCost: 3,
     type: 'utility',
-    effects: [{ type: 'summon', name: 'Skeleton', duration: 60 }],
+    effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }],
     prerequisites: { level: 10 }
   },
   invisibility: {
@@ -272,12 +272,16 @@ export const createAbilityFromSpell = (spellId: string) => {
   if (!s) return null;
   return {
     id: `spell_${s.id}`,
+    spellId: s.id,
     name: s.name,
     type: 'magic' as const,
     damage: s.damage || 0,
+    heal: s.heal || 0,
     cost: s.cost,
-    description: s.description
-  };
+    effects: s.effects || [],
+    description: s.description,
+    spellType: s.type
+  } as any;
 };
 
 // NPC/dialogue-friendly helper: teach a spell to a character programmatically.

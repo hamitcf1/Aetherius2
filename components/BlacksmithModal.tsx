@@ -8,58 +8,75 @@ import { useAppContext } from '../AppContext';
 import { audioService } from '../services/audioService';
 
 // Spark particle component for blacksmith upgrade effect
-const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTMLButtonElement | null> }> = ({ active, buttonRef }) => {
+export const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTMLButtonElement | null> }> = ({ active, buttonRef }) => {
   const [sparks, setSparks] = useState<Array<{ id: number; x: number; y: number; vx: number; vy: number; life: number; color: string }>>([]);
   const animationRef = useRef<number | null>(null);
   
   useEffect(() => {
     if (!active || !buttonRef.current) return;
-    
-    const rect = buttonRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    
-    // Generate initial sparks
-    const seed = Date.now();
-    const initialSparks = Array.from({ length: 25 }, (_, i) => ({
-      id: seed + i,
-      x: centerX,
-      y: centerY,
-      vx: (Math.random() - 0.5) * 12,
-      vy: (Math.random() - 0.5) * 12 - 4,
-      life: 1,
-      color: Math.random() > 0.3 
-        ? `rgba(${255}, ${150 + Math.random() * 100}, ${Math.random() * 50}, 1)` // Orange/red
-        : `rgba(${255}, ${200 + Math.random() * 55}, ${100 + Math.random() * 100}, 1)` // Yellow/gold
-    }));
-    
-    setSparks(initialSparks);
-    
-    // Animate sparks
-    const animate = () => {
-      setSparks(prev => {
-        const updated = prev
-          .map(s => ({
-            ...s,
-            x: s.x + s.vx,
-            y: s.y + s.vy,
-            vy: s.vy + 0.3, // gravity
-            life: s.life - 0.025
-          }))
-          .filter(s => s.life > 0);
-        
-        if (updated.length === 0) {
-          animationRef.current = null;
-          return [];
+
+    try {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Generate initial sparks
+      const seed = Date.now();
+      const initialSparks = Array.from({ length: 25 }, (_, i) => ({
+        id: seed + i,
+        x: centerX,
+        y: centerY,
+        vx: (Math.random() - 0.5) * 12,
+        vy: (Math.random() - 0.5) * 12 - 4,
+        life: 1,
+        color: Math.random() > 0.3 
+          ? `rgba(${255}, ${150 + Math.random() * 100}, ${Math.random() * 50}, 1)` // Orange/red
+          : `rgba(${255}, ${200 + Math.random() * 55}, ${100 + Math.random() * 100}, 1)` // Yellow/gold
+      }));
+
+      setSparks(initialSparks);
+
+      // Animate sparks
+      const animate = () => {
+        try {
+          setSparks(prev => {
+            const updated = prev
+              .map(s => ({
+                ...s,
+                x: s.x + s.vx,
+                y: s.y + s.vy,
+                vy: s.vy + 0.3, // gravity
+                life: s.life - 0.025
+              }))
+              .filter(s => s.life > 0);
+
+            if (updated.length === 0) {
+              animationRef.current = null;
+              return [];
+            }
+
+            animationRef.current = requestAnimationFrame(animate);
+            return updated;
+          });
+        } catch (err) {
+          // Defensive: ensure any animation errors don't bubble to React and break the tree
+          // eslint-disable-next-line no-console
+          console.error('Spark animation error', err);
+          if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = null;
+          }
+          setSparks([]);
         }
-        
-        animationRef.current = requestAnimationFrame(animate);
-        return updated;
-      });
-    };
-    
-    animationRef.current = requestAnimationFrame(animate);
-    
+      };
+
+      animationRef.current = requestAnimationFrame(animate);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('SparkParticles effect error', err);
+      setSparks([]);
+    }
+
     return () => {
       // Ensure animation stops and any remaining sparks are cleared when the effect is torn down
       if (animationRef.current) {
@@ -70,16 +87,6 @@ const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTM
       setSparks([]);
     };
   }, [active, buttonRef]);
-
-  // Clean up any lingering timeout when the modal is unmounted
-  useEffect(() => {
-    return () => {
-      if (sparkTimeoutRef.current) {
-        clearTimeout(sparkTimeoutRef.current as any);
-        sparkTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   
   if (sparks.length === 0) return null;

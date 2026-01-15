@@ -521,9 +521,17 @@ const App: React.FC = () => {
   const handleLevelUpNotificationDismiss = useCallback((id: string) => {
     setLevelUpNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
+
+  // Synchronous guard to avoid race-condition double-queuing of pending levelups
+  const levelUpQueuedRef = useRef(false);
+
   const showLevelUpNotification = useCallback((characterName: string, newLevel: number) => {
-    const id = uniqueId();
-    setLevelUpNotifications(prev => [...prev, { id, characterName, newLevel }]);
+    // Prevent duplicate notifications for the same character/level
+    setLevelUpNotifications(prev => {
+      if (prev.some(p => p.characterName === characterName && p.newLevel === newLevel)) return prev;
+      const id = uniqueId();
+      return [...prev, { id, characterName, newLevel }];
+    });
   }, []);
 
   // Encumbrance calculation
@@ -566,6 +574,9 @@ const App: React.FC = () => {
     archetype?: string;
     previousXP: number;
   }>(null);
+
+  // If a player cancels a level-up, we keep it available so they can apply it later from the hero page
+  const [availableLevelUps, setAvailableLevelUps] = useState<Record<string, { charId: string; charName: string; newLevel: number; remainingXP: number; archetype?: string; previousXP: number }>>({});
 
   // Companions modal state
   const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
@@ -696,11 +707,14 @@ const App: React.FC = () => {
     try {
       // Expose transaction ledger accessor for debugging (temporary)
       (window as any).getTransactionLedger = () => getTransactionLedger();
+      // Expose level up helpers for integration tests and console demo
+      (window as any).cancelLevelUp = () => cancelLevelUp();
+      (window as any).availableLevelUps = () => availableLevelUps;
     } catch (e) {
       // ignore
     }
-    return () => { try { delete (window as any).openCompanions; } catch {} };
-  }, [openCompanions]);
+    return () => { try { delete (window as any).openCompanions; delete (window as any).cancelLevelUp; delete (window as any).availableLevelUps; } catch {} };
+  }, [openCompanions, availableLevelUps]);
 
   // Map stat to a representative color (hex)
   const getStatColor = (stat?: string) => {
@@ -3307,27 +3321,32 @@ const App: React.FC = () => {
             const xpForNextLevel = getXPForNextLevel(currentLevel);
             const xpProgress = getXPProgress(newXP, currentLevel);
 
-            // Check if we leveled up (XP progress >= required for next level)
+                  // Check if we leveled up (XP progress >= required for next level)
             if (xpProgress.current >= xpForNextLevel) {
               const newLevel = currentLevel + 1;
               const remainingXP = newXP; // Keep total XP
 
-              // Save pending level up to prompt user for choice
-              setPendingLevelUp({
-                charId: c.id,
-                charName: c.name,
-                newLevel,
-                remainingXP,
-                archetype: c.archetype,
-                previousXP: c.experience || 0,
-              });
+              // Avoid race-conditions where multiple xpChange updates in quick succession queue the same level up twice.
+              if (!levelUpQueuedRef.current) {
+                levelUpQueuedRef.current = true;
 
-              // Show Skyrim-style level up notification
-              showLevelUpNotification(c.name, newLevel);
+                // Save pending level up to prompt user for choice
+                setPendingLevelUp({
+                  charId: c.id,
+                  charName: c.name,
+                  newLevel,
+                  remainingXP,
+                  archetype: c.archetype,
+                  previousXP: c.experience || 0,
+                });
 
-              // Informally record XP gain but do not auto-apply level or stat bonuses
-              setSaveMessage(`🎉 ${c.name} earned enough experience to level up — confirm to apply.`);
-              setTimeout(() => setSaveMessage(null), 3500);
+                // Show Skyrim-style level up notification
+                showLevelUpNotification(c.name, newLevel);
+
+                // Informally record XP gain but do not auto-apply level or stat bonuses
+                setSaveMessage(`🎉 ${c.name} earned enough experience to level up — confirm to apply.`);
+                setTimeout(() => setSaveMessage(null), 3500);
+              }
 
               return { ...c, experience: newXP };
             }
@@ -3546,13 +3565,28 @@ const App: React.FC = () => {
     }));
 
     setPendingLevelUp(null);
+    // Remove any available-level entry for this character (applied now)
+    setAvailableLevelUps(prev => {
+      const copy = { ...prev };
+      delete copy[p.charId];
+      return copy;
+    });
+    // Reset queued guard so subsequent level-ups can be queued in future
+    levelUpQueuedRef.current = false;
     setSaveMessage(`Level ${p.newLevel} applied.`);
     setTimeout(() => setSaveMessage(null), 2500);
   };
 
   const cancelLevelUp = () => {
-    // Simply clear the pending prompt; XP remains as-is so player can choose later
+    // If a pending level up exists, move it to the available pool so the player can apply it later
+    if (pendingLevelUp) {
+      setAvailableLevelUps(prev => ({ ...prev, [pendingLevelUp.charId]: pendingLevelUp }));
+    }
+
+    // Clear pending prompt; XP remains as-is so player can choose later
     setPendingLevelUp(null);
+    // Reset queued guard on cancel as well
+    levelUpQueuedRef.current = false;
     setSaveMessage('Level up postponed.');
     setTimeout(() => setSaveMessage(null), 2000);
   };
@@ -3822,6 +3856,20 @@ const App: React.FC = () => {
     if (pendingLevelUp) {
       setSaveMessage('A level up is already awaiting confirmation.');
       setTimeout(() => setSaveMessage(null), 2000);
+      return;
+    }
+
+    // If an available level-up exists for this character (postponed earlier), restore it to pending
+    const available = availableLevelUps[char.id];
+    if (available) {
+      setPendingLevelUp(available);
+      setAvailableLevelUps(prev => {
+        const copy = { ...prev };
+        delete copy[char.id];
+        return copy;
+      });
+      setSaveMessage(`${char.name} has a pending level up — confirm to apply.`);
+      setTimeout(() => setSaveMessage(null), 3000);
       return;
     }
 
@@ -4187,6 +4235,7 @@ const App: React.FC = () => {
                 hasBedroll={hasBedroll}
                 onRequestLevelUp={() => requestLevelUp(activeCharacter)}
                 onOpenPerkTree={() => setPerkModalOpen(true)}
+                levelUpAvailable={!!availableLevelUps[activeCharacter.id]}
               />
             )}
             {activeTab === TABS.INVENTORY && activeCharacter && (
