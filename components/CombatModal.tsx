@@ -310,6 +310,55 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [showRoll, setShowRoll] = useState(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
   const [rollActor, setRollActor] = useState<'player' | 'enemy' | 'ally' | null>(null);
+
+  // Animation helper state & ref for D20 wheel-style roll animation
+  const rollAnimRef = useRef<number | null>(null);
+  const animateRoll = (finalValue: number, duration: number = 3000) => new Promise<void>((resolve) => {
+    // cancel any existing animation
+    if (rollAnimRef.current) {
+      cancelAnimationFrame(rollAnimRef.current);
+      rollAnimRef.current = null;
+    }
+
+    setShowRoll(true);
+    const start = performance.now();
+    const revolutions = 6; // full 6 rotations (configurable)
+    const totalSteps = revolutions * 20 + ((finalValue - 1 + 20) % 20);
+    let lastStep = -1;
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const loop = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(1, duration > 0 ? elapsed / duration : 1);
+      const eased = easeOutCubic(t);
+      const step = Math.floor(eased * totalSteps);
+      if (step !== lastStep) {
+        const display = (step % 20) + 1;
+        setRollValue(display);
+        lastStep = step;
+      }
+
+      if (t >= 1) {
+        // ensure final value is exact
+        setRollValue(finalValue);
+        rollAnimRef.current = null;
+        resolve();
+        return;
+      }
+
+      rollAnimRef.current = requestAnimationFrame(loop);
+    };
+
+    rollAnimRef.current = requestAnimationFrame(loop);
+  });
+
+  // Cleanup on unmount to avoid RAF leaks
+  useEffect(() => {
+    return () => {
+      if (rollAnimRef.current) cancelAnimationFrame(rollAnimRef.current);
+    };
+  }, []);
+
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
   const [awaitingCompanionAction, setAwaitingCompanionAction] = useState(false);
   const enemyRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -601,14 +650,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       const actorId = currentState.currentTurnActor;
       const actorIsAlly = !!(currentState.allies || []).find(a => a.id === actorId);
       setRollActor(actorIsAlly ? 'ally' : 'enemy');
-      setShowRoll(true);
-      let finalEnemyRoll = Math.floor(Math.random() * 20) + 1;
-      for (let i = 0; i < 6; i++) {
-        setRollValue(Math.floor(Math.random() * 20) + 1);
-        // eslint-disable-next-line no-await-in-loop
-        await waitMs(Math.floor((60 + i * 30) * timeScale));
-      }
-      setRollValue(finalEnemyRoll);
+      const finalEnemyRoll = Math.floor(Math.random() * 20) + 1;
+      // animate wheel-style roll with ease-out for smooth stop
+      await animateRoll(finalEnemyRoll, Math.floor(3000 * timeScale));
       await waitMs(Math.floor(220 * timeScale));
       setShowRoll(false);
       setRollActor(null);
@@ -775,20 +819,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
-    setShowRoll(true);
 
     // If we were in a pending targeting flow, clear it after confirming
     if (pendingTargeting && pendingTargeting.abilityId === abilityId) {
       setPendingTargeting(null);
-    }    // quick flicker of numbers to simulate roll
-    for (let i = 0; i < 8; i++) {
-      setRollValue(Math.floor(Math.random() * 20) + 1);
-      // shorten time as it progresses
-      // eslint-disable-next-line no-await-in-loop
-      await waitMs(Math.floor((50 + i * 20) * timeScale));
     }
-    // final settle
-    setRollValue(finalRoll);
+
+    // animate wheel-style roll with ease-out for smooth stop
+    await animateRoll(finalRoll, Math.floor(3000 * timeScale));
     await waitMs(Math.floor(220 * timeScale));
     setShowRoll(false);
     setRollActor(null);
