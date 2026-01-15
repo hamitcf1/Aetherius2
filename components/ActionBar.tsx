@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings, Globe, SlidersHorizontal } from 'lucide-react';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings, Globe, SlidersHorizontal, Bot } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
@@ -100,6 +100,18 @@ const ActionBar: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  
+  // ESC key handler for settings modal
+  useEffect(() => {
+    if (!showSettingsModal) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSettingsModal(false);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showSettingsModal]);
   
   // Music volume state
   const [musicVolume, setMusicVolume] = useState(() => audioService.getConfig().musicVolume);
@@ -307,12 +319,6 @@ const ActionBar: React.FC = () => {
             <span className="ml-auto text-xs text-skyrim-text/60">{AVAILABLE_LANGUAGES.find(l => l.code === language)?.flag}</span>
           </button>
           
-          {typeof setAiModel === 'function' && (
-            <div className="flex flex-col gap-1">
-              <div className="text-xs text-gray-500 font-bold">AI Model</div>
-              <AIModelSelector currentModel={aiModel || 'gemma-3-27b-it'} onSelect={setAiModel} />
-            </div>
-          )}
           {/* Theme Selector */}
           {colorTheme !== undefined && setColorTheme && (
             <div className="flex flex-col gap-1">
@@ -506,6 +512,20 @@ const ActionBar: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {/* AI Model Selection */}
+            {typeof setAiModel === 'function' && (
+              <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot size={16} className="text-skyrim-gold" />
+                  <span className="text-sm font-bold text-skyrim-gold uppercase">AI Model</span>
+                </div>
+                <AIModelSelector currentModel={aiModel || 'gemma-3-27b-it'} onSelect={setAiModel} />
+                <p className="text-[10px] text-gray-500 mt-2 italic">
+                  Choose the AI model powering your adventure
+                </p>
+              </div>
+            )}
 
             {/* Audio Settings */}
             <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">

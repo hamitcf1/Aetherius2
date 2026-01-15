@@ -42,8 +42,15 @@ export const SKYRIM_LOCATIONS: MapLocation[] = [
   
   // Dungeons
   { id: 'bleak_falls_barrow', name: 'Bleak Falls Barrow', type: 'dungeon', x: 38, y: 58, hold: 'Whiterun Hold', description: 'An ancient Nordic tomb infested with draugr.', dangerLevel: 'dangerous', rumors: ['Bandits guard the entrance', 'The Golden Claw opens the inner sanctum', 'A Word Wall lies within'] },
-  { id: 'labyrinthian', name: 'Labyrinthian', type: 'ruin', x: 34, y: 30, hold: 'Hjaalmarch', description: 'Vast ruins of an ancient Nordic city.', dangerLevel: 'deadly', rumors: ['Dragon priests ruled here', 'The Staff of Magnus awaits', 'Many enter, few return'] },
-  { id: 'blackreach', name: 'Blackreach', type: 'dungeon', x: 50, y: 36, description: 'A massive underground Dwemer cavern.', dangerLevel: 'deadly', rumors: ['Crimson Nirnroot grows here', 'The Falmer claim these depths', 'Dwemer automatons still patrol'] },
+  { id: 'labyrinthian', name: 'Labyrinthian', type: 'dungeon', x: 34, y: 30, hold: 'Hjaalmarch', description: 'Vast ruins of an ancient Nordic city. Twisting corridors with ancient guardians.', dangerLevel: 'deadly', rumors: ['Dragon priests ruled here', 'The Staff of Magnus awaits', 'Many enter, few return'] },
+  { id: 'blackreach', name: 'Blackreach', type: 'dungeon', x: 50, y: 36, description: 'A massive underground Dwemer cavern. Bioluminescent fungi and Falmer hunters roam.', dangerLevel: 'deadly', rumors: ['Crimson Nirnroot grows here', 'The Falmer claim these depths', 'Dwemer automatons still patrol'] },
+  { id: 'vampire_lair', name: 'Vampire Lair', type: 'dungeon', x: 26, y: 28, hold: 'Hjaalmarch', description: 'A dark lair saturated with blood magics near Morthal.', dangerLevel: 'dangerous', rumors: ['Vampires have been seen nearby', 'Blood altars glow in darkness', 'The undead feast on travelers'] },
+  { id: 'frost_spider_den', name: 'Frost Spider Den', type: 'cave', x: 68, y: 14, hold: 'Winterhold', description: 'A nest of giant frost spiders and web traps.', dangerLevel: 'moderate', rumors: ['Silvery silk glistens in cold air', 'The broodmother guards her eggs', 'Spider venom fetches a good price'] },
+  { id: 'troll_cave', name: 'Troll Cave', type: 'cave', x: 20, y: 50, hold: 'Whiterun Hold', description: 'A shallow cave dominated by a territorial troll near Rorikstead.', dangerLevel: 'moderate', rumors: ['The smell of damp stone and rotting meat', 'A troll patriarch claims the depths', 'Hunters avoid this place'] },
+  { id: 'daedric_shrine', name: 'Daedric Shrine', type: 'dungeon', x: 74, y: 16, hold: 'Winterhold', description: 'A warped shrine with daedric guardians and dark bargains.', dangerLevel: 'deadly', rumors: ['Whispers in a language you do not know', 'Power comes at a terrible price', 'Dremora patrol the halls'] },
+  { id: 'ice_cavern', name: 'Shattered Ice Cavern', type: 'cave', x: 42, y: 10, hold: 'The Pale', description: 'A winding cave of ice and whirling winds.', dangerLevel: 'dangerous', rumors: ['Breath clouds in the cold air', 'Ice wolves hunt in packs', 'Frozen treasures await the brave'] },
+  { id: 'mineshaft', name: 'Abandoned Mineshaft', type: 'dungeon', x: 86, y: 75, hold: 'The Rift', description: 'Collapsed galleries and bandit squatters near Riften.', dangerLevel: 'moderate', rumors: ['Echoes of pickaxes and falling rock', 'Bandits claim the depths', 'Ore fragments litter the floor'] },
+  { id: 'forsworn_camp', name: 'Forsworn Camp', type: 'dungeon', x: 12, y: 52, hold: 'The Reach', description: 'A tangled network of stone altars and forsworn brutes near Markarth.', dangerLevel: 'dangerous', rumors: ['Wild drums and bitter smoke', 'The Forsworn worship old gods', 'Briar matrons lead the clans'] },
 ];
 
 // Find location by name
@@ -77,6 +84,7 @@ interface SkyrimMapProps {
   questLocations?: Array<{ name: string; questName: string }>;
   discoveredLocations?: DiscoveredLocation[]; // New locations discovered during gameplay
   onEnterDungeon?: (locationName: string) => void; // Triggered when player clicks the explicit "Enter Dungeon" button
+  clearedDungeons?: Array<{ dungeonId: string; clearCount: number }>; // Track cleared dungeons
 }
 
 export const SkyrimMap: React.FC<SkyrimMapProps> = ({
@@ -87,6 +95,7 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
   questLocations = [],
   discoveredLocations = [],
   onEnterDungeon,
+  clearedDungeons = [],
 }) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -585,8 +594,26 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
               )}
 
               {/* Explicit dungeon entry button - prevents accidental triggers */}
-              {selectedLocation.type === 'dungeon' && (
-                <button onClick={() => onEnterDungeon && onEnterDungeon(selectedLocation.name)} className="text-xs bg-red-900/60 text-red-300 px-2 py-1 rounded">Enter Dungeon</button>
+              {(selectedLocation.type === 'dungeon' || selectedLocation.type === 'cave') && (
+                (() => {
+                  const clearedData = clearedDungeons.find(d => d.dungeonId.includes(selectedLocation.id) || selectedLocation.name.toLowerCase().includes(d.dungeonId.replace(/_dg$/, '').replace(/_/g, ' ')));
+                  const isCleared = clearedData && clearedData.clearCount > 0;
+                  return (
+                    <div className="flex flex-col gap-1">
+                      {isCleared && (
+                        <span className="text-xs bg-green-900/50 text-green-400 px-2 py-1 rounded">
+                          ✓ Cleared {clearedData.clearCount > 1 ? `(${clearedData.clearCount}x)` : ''}
+                        </span>
+                      )}
+                      <button 
+                        onClick={() => onEnterDungeon && onEnterDungeon(selectedLocation.name)} 
+                        className={`text-xs px-2 py-1 rounded ${isCleared ? 'bg-orange-900/60 text-orange-300' : 'bg-red-900/60 text-red-300'}`}
+                      >
+                        {isCleared ? 'Re-enter (Stronger Enemies)' : 'Enter Dungeon'}
+                      </button>
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>

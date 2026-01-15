@@ -135,6 +135,8 @@ export interface Character {
   lastPlayed: number;
   // Completed combat IDs (persisted) for deduplication and replay prevention
   completedCombats?: string[];
+  // Cleared dungeon IDs with clearance count (for tracking re-entries with scaling enemies)
+  clearedDungeons?: Array<{ dungeonId: string; clearCount: number; lastCleared: number }>;
 }
 
 export type EquipmentSlot = 'head' | 'chest' | 'hands' | 'feet' | 'weapon' | 'offhand' | 'ring' | 'necklace';

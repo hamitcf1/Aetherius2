@@ -230,6 +230,42 @@ export const forgetSpell = (characterId: string, spellId: string) => {
   }
 };
 
+// Refund all learned spells and return total perk points spent
+export const refundAllSpells = (characterId: string): { refundedPoints: number; spellsCleared: number } => {
+  const learned = getLearnedSpellIds(characterId);
+  let totalPoints = 0;
+  for (const spellId of learned) {
+    const spell = getSpellById(spellId);
+    totalPoints += spell?.perkCost || 1;
+  }
+  try {
+    storage.setItem(`${STORAGE_PREFIX}${characterId}`, JSON.stringify([]));
+    return { refundedPoints: totalPoints, spellsCleared: learned.length };
+  } catch (e) {
+    try { require('./logger').log.warn('Failed to clear learned spells for refund', e); } catch (e2) { /* fallback */ }
+    return { refundedPoints: 0, spellsCleared: 0 };
+  }
+};
+
+// Get spell school/category
+export const getSpellSchool = (spell: Spell): string => {
+  if (spell.type === 'heal') return 'Restoration';
+  if (spell.type === 'damage') {
+    if (spell.id.includes('fire') || spell.id.includes('flame')) return 'Destruction';
+    if (spell.id.includes('ice') || spell.id.includes('frost')) return 'Destruction';
+    if (spell.id.includes('lightning') || spell.id.includes('spark') || spell.id.includes('shock')) return 'Destruction';
+    return 'Destruction';
+  }
+  if (spell.type === 'buff') return 'Alteration';
+  if (spell.type === 'debuff') return 'Illusion';
+  if (spell.type === 'utility') {
+    if (spell.id.includes('summon') || spell.id.includes('conjur')) return 'Conjuration';
+    if (spell.id.includes('invisible') || spell.id.includes('illusion')) return 'Illusion';
+    return 'Alteration';
+  }
+  return 'General';
+};
+
 // Minimal cast handler: returns a CombatAbility-like object representing the spell
 export const createAbilityFromSpell = (spellId: string) => {
   const s = getSpellById(spellId);

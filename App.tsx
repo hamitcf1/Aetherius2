@@ -3620,8 +3620,8 @@ const App: React.FC = () => {
         const def = PERK_DEFINITIONS.find(d => d.id === id);
         if (!def) continue;
         const max = def.maxRank || 1;
-        const existing = nextPerks.find(p => p.id === id);
-        let currRank = existing?.rank || 0;
+        let existingIndex = nextPerks.findIndex(p => p.id === id);
+        let currRank = existingIndex >= 0 ? (nextPerks[existingIndex].rank || 0) : 0;
         let applied = 0;
         while (applied < wantCount && pts > 0 && currRank < max) {
           // apply one rank
@@ -3630,12 +3630,14 @@ const App: React.FC = () => {
             const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
             updatedStats = { ...updatedStats, [key]: prev + def.effect.amount };
           }
-          if (existing) {
-            for (let i = 0; i < nextPerks.length; i++) {
-              if (nextPerks[i].id === id) { nextPerks[i] = { ...nextPerks[i], rank: (nextPerks[i].rank || 0) + 1 }; break; }
-            }
+          if (existingIndex >= 0) {
+            // Perk exists, increment its rank
+            nextPerks[existingIndex] = { ...nextPerks[existingIndex], rank: (nextPerks[existingIndex].rank || 0) + 1 };
           } else {
+            // Perk doesn't exist, add it with rank 1
             nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: 1, mastery: 0, description: def.description });
+            // Update existingIndex so subsequent iterations in this while loop can find it
+            existingIndex = nextPerks.length - 1;
           }
           currRank += 1;
           applied += 1;
@@ -3700,6 +3702,50 @@ const App: React.FC = () => {
       forced = forced + 1;
       setDirtyEntities(d => new Set([...d, c.id]));
       return { ...c, stats: updatedStats, perks: newPerks, perkPoints: pts, forcedPerkUnlocks: forced } as Character;
+    }));
+  };
+
+  // Refund all perks - clears all perks and restores spent perk points
+  const refundAllPerks = () => {
+    if (!currentCharacterId) return;
+    setCharacters(prev => prev.map(c => {
+      if (c.id !== currentCharacterId) return c;
+      
+      // Calculate total points spent on perks
+      let totalRefund = 0;
+      const perks = c.perks || [];
+      for (const p of perks) {
+        const def = PERK_DEFINITIONS.find(d => d.id === p.id);
+        totalRefund += p.rank || 0;
+        totalRefund += (p.mastery || 0) * (def?.masteryCost || 3);
+      }
+
+      if (totalRefund === 0) {
+        showToast && showToast('No perks to refund.', 'info');
+        return c;
+      }
+
+      // Reset stats from perk effects
+      let updatedStats = { ...c.stats };
+      for (const p of perks) {
+        const def = PERK_DEFINITIONS.find(d => d.id === p.id);
+        if (def?.effect?.type === 'stat') {
+          const key = def.effect.key as keyof typeof updatedStats;
+          const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+          const amountToRemove = (def.effect.amount || 0) * (p.rank || 0);
+          updatedStats = { ...updatedStats, [key]: Math.max(0, prev - amountToRemove) };
+        }
+      }
+
+      showToast && showToast(`Refunded ${totalRefund} perk point${totalRefund !== 1 ? 's' : ''}!`, 'success');
+      setDirtyEntities(d => new Set([...d, c.id]));
+      return { 
+        ...c, 
+        stats: updatedStats, 
+        perks: [], 
+        perkPoints: (c.perkPoints || 0) + totalRefund,
+        forcedPerkUnlocks: 0  // Reset force unlocks on refund
+      } as Character;
     }));
   };
 
@@ -3780,7 +3826,7 @@ const App: React.FC = () => {
           {/* Global Weather Effect on login page */}
           {weatherEffect !== 'none' && (
             <SnowEffect 
-              settings={{ intensity: weatherIntensity }} 
+              settings={{ intensity: weatherIntensity, enableMouseInteraction: true }} 
               theme={colorTheme} 
               weatherType={weatherEffect} 
             />
@@ -3878,6 +3924,7 @@ const App: React.FC = () => {
         character={activeCharacter as any}
         onConfirm={(perkIds: string[]) => { applyPerks(perkIds); setPerkModalOpen(false); }}
         onForceUnlock={(id: string) => { forceUnlockPerk(id); setPerkModalOpen(false); }}
+        onRefundAll={() => { refundAllPerks(); setPerkModalOpen(false); }}
       />
 
       <CompanionsModal
@@ -4169,11 +4216,23 @@ const App: React.FC = () => {
           inventory={items}
           onClose={(result) => {
             setDungeonOpen(false);
-            setDungeonId(null);
             if (result?.rewards) handleApplyDungeonRewards(result.rewards);
-            if (result?.cleared) {
-              showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: `${result.cleared ? 'You cleared the dungeon.' : ''}`, type: 'quest-completed' });
+            if (result?.cleared && dungeonId) {
+              // Track cleared dungeon for re-entry with scaling enemies
+              setCharacters(prev => prev.map(c => {
+                if (c.id !== currentCharacterId) return c;
+                const existing = (c.clearedDungeons || []).find(d => d.dungeonId === dungeonId);
+                const newCleared = existing 
+                  ? c.clearedDungeons!.map(d => d.dungeonId === dungeonId 
+                      ? { ...d, clearCount: d.clearCount + 1, lastCleared: Date.now() } 
+                      : d)
+                  : [...(c.clearedDungeons || []), { dungeonId: dungeonId!, clearCount: 1, lastCleared: Date.now() }];
+                setDirtyEntities(d => new Set([...d, c.id]));
+                return { ...c, clearedDungeons: newCleared };
+              }));
+              showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: 'You have conquered this dungeon!', type: 'quest-completed' });
             }
+            setDungeonId(null);
           }}
           onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
@@ -4391,7 +4450,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         {/* Global Weather Effect */}
         {weatherEffect !== 'none' && (
           <SnowEffect 
-            settings={{ intensity: weatherIntensity }} 
+            settings={{ intensity: weatherIntensity, enableMouseInteraction: true }} 
             theme={colorTheme} 
             weatherType={weatherEffect} 
           />

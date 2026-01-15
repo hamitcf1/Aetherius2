@@ -3180,6 +3180,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         questLocations={questLocations}
         discoveredLocations={discoveredLocations}
         onEnterDungeon={onEnterDungeon}
+        clearedDungeons={character?.clearedDungeons || []}
       />
     </div>
   );

@@ -18,6 +18,37 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.8',
+    date: '2026-01-14',
+    title: 'Major Bug Fixes & QoL Improvements',
+    changes: [
+      { type: 'fix', text: 'Perk Spending Bug: Fixed issue where spending multiple points on a perk only gave 1 rank' },
+      { type: 'fix', text: 'Dungeon Rest Bug: Rest healing now properly caps at character max stats instead of 9999' },
+      { type: 'fix', text: 'Dungeon Vitals: Dungeon now uses actual character HP/MP/SP instead of hardcoded 100' },
+      { type: 'feature', text: 'Cleared Dungeon Tracking: Dungeons track clear count, re-entry scales enemies by 25% per clear' },
+      { type: 'improvement', text: 'More Dungeon Locations: Added 8 new dungeon locations to map (Vampire Lair, Spider Den, etc.)' },
+      { type: 'improvement', text: 'Settings Modal: AI model selector moved from Actions menu to Settings for cleaner UI' },
+      { type: 'fix', text: 'Settings Modal ESC: Settings modal now closes with ESC key press' },
+      { type: 'improvement', text: 'Empowered Spells: Empowered spell variants now show in spell list when base spell is learned' },
+      { type: 'fix', text: 'Weather Physics: Mouse interaction for snow/rain particles now enabled by default' }
+    ]
+  },
+  {
+    version: '0.5.7',
+    date: '2026-01-14',
+    title: 'Dungeon Overhaul, Spell/Perk Refunds',
+    changes: [
+      { type: 'feature', text: 'Perk Refund: Added "Refund All" button to reset all perks and recover spent perk points' },
+      { type: 'feature', text: 'Spell Refund: Added "Refund All" button to forget all spells and recover spent points' },
+      { type: 'improvement', text: 'Spells Modal: Complete redesign with magic school categories (Destruction, Restoration, etc.) and two-panel layout' },
+      { type: 'feature', text: 'Dungeon System: Complete overhaul with Slay the Spire style branching paths' },
+      { type: 'improvement', text: 'Dungeon UI: New grid-based map with clear node types, connections, and path visualization' },
+      { type: 'fix', text: 'Dungeon Rest: Resting now properly auto-advances to next node' },
+      { type: 'improvement', text: 'Dungeon Events: Interactive event choices with clear outcome indicators' },
+      { type: 'improvement', text: 'Dungeon Side Panel: Shows current location, selected node actions, and party status' }
+    ]
+  },
+  {
     version: '0.5.6',
     date: '2026-01-14',
     title: 'UI/UX Polish, Sound Effects & Bug Fixes',

@@ -1010,6 +1010,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 const s = getSpellById(id);
                 const cost = s?.perkCost || 1;
                 updateCharacter('perkPoints', Math.max(0, (character.perkPoints || 0) - cost));
+            }} onRefund={(pointsRefunded: number) => {
+                // Add refunded points back to character
+                updateCharacter('perkPoints', (character.perkPoints || 0) + pointsRefunded);
             }} />
           )}
           

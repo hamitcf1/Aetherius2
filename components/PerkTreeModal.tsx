@@ -3,7 +3,7 @@ import ModalWrapper from './ModalWrapper';
 import { PERK_DEFINITIONS, PerkDef } from '../data/perkDefinitions';
 import PERK_BALANCE from '../data/perkBalance';
 import { Perk, Character } from '../types';
-import { Check, Lock, ChevronDown, ChevronRight, Sparkles, Shield, Sword, Heart, Star } from 'lucide-react';
+import { Check, Lock, ChevronDown, ChevronRight, Sparkles, Shield, Sword, Heart, Star, RefreshCcw } from 'lucide-react';
 
 interface Props {
   open: boolean;
@@ -11,6 +11,7 @@ interface Props {
   character: Character;
   onConfirm: (perkIds: string[]) => void;
   onForceUnlock?: (perkId: string) => void;
+  onRefundAll?: () => void;
 }
 
 const SKILL_CATEGORIES: Record<string, { label: string; skills: string[] }> = {
@@ -48,11 +49,12 @@ function formatRequirement(req: string): string {
   return req;
 }
 
-export default function PerkTreeModal({ open, onClose, character, onConfirm, onForceUnlock }: Props) {
+export default function PerkTreeModal({ open, onClose, character, onConfirm, onForceUnlock, onRefundAll }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [stagedMap, setStagedMap] = useState<Record<string, number>>({});
   const [stagedMaster, setStagedMaster] = useState<Record<string, boolean>>({});
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ attributes: true, combat: true });
+  const [showRefundConfirm, setShowRefundConfirm] = useState(false);
 
   const defs = useMemo(() => PERK_DEFINITIONS, []);
   
@@ -86,6 +88,21 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
   const toggleCategory = (cat: string) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
   const selectedDef = selected ? defs.find(d => d.id === selected) : null;
 
+  // Calculate total points spent on perks
+  const totalSpentOnPerks = useMemo(() => {
+    return (character.perks || []).reduce((sum, p) => {
+      const def = defs.find(d => d.id === p.id);
+      const rankCost = p.rank || 0;
+      const masteryCost = (p.mastery || 0) * (def?.masteryCost || 3);
+      return sum + rankCost + masteryCost;
+    }, 0);
+  }, [character.perks, defs]);
+
+  const handleRefundAll = () => {
+    setShowRefundConfirm(false);
+    onRefundAll?.();
+  };
+
   return (
     <ModalWrapper open={open} onClose={onClose} preventOutsideClose>
       <div className="w-full max-w-[900px] h-[min(85vh,700px)] flex flex-col bg-skyrim-paper rounded border border-skyrim-border overflow-hidden">
@@ -93,9 +110,17 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
           <h3 className="text-lg font-bold text-skyrim-gold flex items-center gap-2">
             <Sparkles size={18} /> Perk Tree
           </h3>
-          <div className="text-sm text-skyrim-text">
-            Points: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
-            {stagedPoints > 0 && <span className="ml-2 text-amber-400">(-{stagedPoints})</span>}
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-skyrim-text">
+              Points: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
+              {stagedPoints > 0 && <span className="ml-2 text-amber-400">(-{stagedPoints})</span>}
+              {totalSpentOnPerks > 0 && <span className="ml-2 text-blue-300">({totalSpentOnPerks} spent)</span>}
+            </div>
+            {totalSpentOnPerks > 0 && onRefundAll && (
+              <button onClick={() => setShowRefundConfirm(true)} className="px-2 py-1 text-xs bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1">
+                <RefreshCcw size={12} /> Refund All
+              </button>
+            )}
           </div>
         </div>
 
@@ -257,6 +282,30 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
           </div>
         </div>
       </div>
+
+      {/* Refund Confirmation Modal */}
+      {showRefundConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+          <div className="bg-skyrim-paper p-4 rounded border border-skyrim-border max-w-md">
+            <h4 className="font-semibold text-lg text-skyrim-gold">Refund All Perks?</h4>
+            <p className="text-sm text-skyrim-text mt-2">
+              This will reset all <span className="text-red-400 font-bold">{(character.perks || []).length}</span> unlocked perks 
+              and refund <span className="text-green-400 font-bold">{totalSpentOnPerks}</span> perk point{totalSpentOnPerks !== 1 ? 's' : ''}.
+            </p>
+            <p className="text-xs text-skyrim-text/70 mt-2">
+              You can re-allocate perks later by spending perk points again.
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={handleRefundAll} className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-500">
+                Refund All ({totalSpentOnPerks} pts)
+              </button>
+              <button onClick={() => setShowRefundConfirm(false)} className="flex-1 px-3 py-2 border border-skyrim-border text-skyrim-text rounded hover:bg-skyrim-paper/30">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModalWrapper>
   );
 }
