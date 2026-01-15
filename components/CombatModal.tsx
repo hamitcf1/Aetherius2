@@ -273,25 +273,31 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // Pending targeting for abilities which require explicit target selection (heals/buffs)
   const [pendingTargeting, setPendingTargeting] = useState<null | { abilityId: string; abilityName: string; allow: 'allies' | 'enemies' | 'both' }>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  // Track if target change was user-initiated (to avoid toast spam from auto-selection)
+  const userInitiatedTargetChange = useRef(false);
 
   // Show a toast and a brief visual pulse whenever the selectedTarget changes
+  // Only show toast if it was user-initiated
   useEffect(() => {
     if (!selectedTarget) return;
     setRecentlyHighlighted(selectedTarget);
 
-    // Resolve human-readable name for toast
-    let name = 'Target';
-    if (selectedTarget === 'player') name = getEasterEggName(character.name);
-    else {
-      const ally = (combatState.allies || []).find(a => a.id === selectedTarget);
-      const enemy = (combatState.enemies || []).find(e => e.id === selectedTarget);
-      if (ally) name = ally.name;
-      else if (enemy) name = enemy.name;
-    }
-
-    if (showToast) {
+    // Only show toast if this was a user-initiated selection
+    if (userInitiatedTargetChange.current && showToast) {
+      // Resolve human-readable name for toast
+      let name = 'Target';
+      if (selectedTarget === 'player') name = getEasterEggName(character.name);
+      else {
+        const ally = (combatState.allies || []).find(a => a.id === selectedTarget);
+        const enemy = (combatState.enemies || []).find(e => e.id === selectedTarget);
+        if (ally) name = ally.name;
+        else if (enemy) name = enemy.name;
+      }
       showToast(`Target selected: ${name}`, 'info');
     }
+    
+    // Reset the flag
+    userInitiatedTargetChange.current = false;
 
     const t = setTimeout(() => setRecentlyHighlighted(null), 900);
     return () => clearTimeout(t);
@@ -340,15 +346,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [localInventory, character]);
 
   // If the currently selected target dies, auto-select the next alive enemy
+  // BUT only if we're not in pendingTargeting mode for heals/buffs
   useEffect(() => {
+    // Skip auto-selection if we're in targeting mode for allies (heals/buffs)
+    if (pendingTargeting) return;
+    
     if (selectedTarget) {
+      // Only auto-switch if current target is an enemy that died
       const tgt = combatState.enemies.find(e => e.id === selectedTarget);
-      if (!tgt || tgt.currentHealth <= 0) {
+      if (tgt && tgt.currentHealth <= 0) {
         const firstAlive = combatState.enemies.find(e => e.currentHealth > 0);
         setSelectedTarget(firstAlive ? firstAlive.id : null);
       }
+      // If selected target is an ally or 'player', don't auto-switch
     }
-  }, [combatState.enemies, selectedTarget]);
+  }, [combatState.enemies, selectedTarget, pendingTargeting]);
 
   const equipItem = (item: InventoryItem, slot: EquipmentSlot) => {
     if (item.equippedBy && item.equippedBy !== 'player') {
@@ -381,12 +393,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     });
   };
   // Auto-select first alive enemy
+  // BUT only if we're not in pendingTargeting mode for heals/buffs
   useEffect(() => {
+    // Skip auto-selection if we're in targeting mode for allies (heals/buffs)
+    if (pendingTargeting) return;
+    
     if (!selectedTarget) {
       const firstAlive = combatState.enemies.find(e => e.currentHealth > 0);
       if (firstAlive) setSelectedTarget(firstAlive.id);
     }
-  }, [combatState.enemies, selectedTarget]);
+  }, [combatState.enemies, selectedTarget, pendingTargeting]);
 
   // Slow down combat animations at higher player levels for more dramatic pacing
   const timeScale = 1 + Math.floor((character?.level || 1) / 20) * 0.25;
@@ -986,7 +1002,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
         <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
-          <div ref={playerRef} className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''}`} style={{ background: 'var(--skyrim-paper, #1a1a1a)' }}>
+          <div 
+            ref={playerRef} 
+            className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''} ${selectedTarget === 'player' ? 'ring-2 ring-green-400/50' : ''} ${pendingTargeting ? 'cursor-pointer hover:ring-2 hover:ring-green-400/30' : ''}`} 
+            style={{ background: 'var(--skyrim-paper, #1a1a1a)' }}
+            onClick={() => {
+              // Allow clicking on self during targeting mode
+              if (pendingTargeting && (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both')) {
+                userInitiatedTargetChange.current = true;
+                setSelectedTarget('player');
+              }
+            }}
+          >
             <h3 className="text-lg font-bold text-amber-100 mb-3">{getEasterEggName(character.name)}</h3>
             <div className="space-y-3">
               <HealthBar 
@@ -1048,11 +1075,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         // If pendingTargeting is active, restrict selection to allies
                         if (pendingTargeting) {
                           if (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both') {
+                            userInitiatedTargetChange.current = true;
                             setSelectedTarget(ally.id);
                           } else {
                             if (showToast) showToast('This ability cannot target allies.', 'warning');
                           }
                         } else {
+                          userInitiatedTargetChange.current = true;
                           setSelectedTarget(ally.id);
                         }
                       }}
@@ -1079,6 +1108,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       if (pendingTargeting && pendingTargeting.allow === 'allies') {
                         if (showToast) showToast('This ability cannot target enemies.', 'warning');
                       } else {
+                        userInitiatedTargetChange.current = true;
                         setSelectedTarget(enemy.id);
                       }
                     }}
@@ -1181,14 +1211,27 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <div className="text-sm font-semibold">Choose target for <span className="text-amber-300">{pendingTargeting.abilityName}</span></div>
                     <div className="flex gap-2">
                       <button onClick={() => {
-                        // Apply to self (pass undefined target)
+                        // Apply to self - explicitly set target to 'player'
+                        setSelectedTarget('player');
+                        const abilityIdToUse = pendingTargeting!.abilityId;
                         setPendingTargeting(null);
-                        handlePlayerAction('attack', pendingTargeting!.abilityId);
+                        // Use setTimeout to ensure state is updated before action
+                        setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
                       }} disabled={!isPlayerTurn || isAnimating} className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
                       <button onClick={() => {
-                        // Confirm selected target
+                        // Confirm selected target (must be self or ally for heals)
+                        const currentTarget = selectedTarget;
+                        const isValidTarget = currentTarget === 'player' || 
+                          (combatState.allies || []).some(a => a.id === currentTarget);
+                        
+                        if (!isValidTarget) {
+                          if (showToast) showToast('Please select yourself or an ally for this ability.', 'warning');
+                          return;
+                        }
+                        
+                        const abilityIdToUse = pendingTargeting!.abilityId;
                         setPendingTargeting(null);
-                        handlePlayerAction('attack', pendingTargeting!.abilityId);
+                        handlePlayerAction('attack', abilityIdToUse);
                       }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
                     </div>
                     <button onClick={() => setPendingTargeting(null)} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
@@ -1437,14 +1480,26 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               <div className="mt-2 p-2 bg-stone-800 rounded flex items-center gap-2">
                 <div className="flex-1 text-xs text-stone-100">Choose target for <span className="text-amber-300">{pendingTargeting.abilityName}</span></div>
                 <button onClick={() => {
-                  // Use on self
+                  // Use on self - explicitly set target to 'player'
+                  setSelectedTarget('player');
+                  const abilityIdToUse = pendingTargeting!.abilityId;
                   setPendingTargeting(null);
-                  handlePlayerAction('attack', pendingTargeting!.abilityId);
+                  setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
                 }} disabled={!isPlayerTurn || isAnimating} className="px-3 py-1 rounded bg-green-700 text-white text-xs">Use Self</button>
                 <button onClick={() => {
-                  // Confirm selected target
+                  // Confirm selected target (must be self or ally for heals)
+                  const currentTarget = selectedTarget;
+                  const isValidTarget = currentTarget === 'player' || 
+                    (combatState.allies || []).some(a => a.id === currentTarget);
+                  
+                  if (!isValidTarget) {
+                    if (showToast) showToast('Please select yourself or an ally.', 'warning');
+                    return;
+                  }
+                  
+                  const abilityIdToUse = pendingTargeting!.abilityId;
                   setPendingTargeting(null);
-                  handlePlayerAction('attack', pendingTargeting!.abilityId);
+                  handlePlayerAction('attack', abilityIdToUse);
                 }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} className="px-3 py-1 rounded bg-blue-700 text-white text-xs">Confirm</button>
                 <button onClick={() => setPendingTargeting(null)} className="px-2 py-1 rounded border border-stone-700 text-stone-300 text-xs">Cancel</button>
               </div>
