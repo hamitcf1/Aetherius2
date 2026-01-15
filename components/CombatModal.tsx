@@ -220,6 +220,7 @@ const ActionButton: React.FC<{
       onClick={onClick}
       disabled={isDisabled}
       title={tooltipText}
+      data-sfx="button_click"
       className={`
         relative p-3 sm:p-3 lg:p-3 py-3 rounded-lg border-2 text-left transition-all w-full text-base sm:text-sm
         ${isDisabled 
@@ -1227,7 +1228,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold text-stone-400">ABILITIES</h3>
               <div className="flex items-center gap-2">
-                <button onClick={() => setEquipModalOpen(true)} className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700">Equipment</button>
+                <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700">Equipment</button>
               </div>
             </div>
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
@@ -1275,7 +1276,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         setPendingTargeting(null);
                         // Use setTimeout to ensure state is updated before action
                         setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
-                      }} disabled={!isPlayerTurn || isAnimating} className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
+                      }} disabled={!isPlayerTurn || isAnimating} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
                       <button onClick={() => {
                         // Confirm selected target (must be self or ally for heals)
                         const currentTarget = selectedTarget;
@@ -1290,9 +1291,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         const abilityIdToUse = pendingTargeting!.abilityId;
                         setPendingTargeting(null);
                         handlePlayerAction('attack', abilityIdToUse);
-                      }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
+                      }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
                     </div>
-                    <button onClick={() => setPendingTargeting(null)} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
+                    <button onClick={() => setPendingTargeting(null)} data-sfx="button_click" className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
                   </div>
                 ) : (
                   playerStats.abilities.map(ability => (
@@ -1324,6 +1325,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <button
                       onClick={() => setShowItemSelection(true)}
                       disabled={!isPlayerTurn || isAnimating}
+                      data-sfx="button_click"
                       className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       🧪 Use Item ({getUsableItems().length})
@@ -1419,7 +1421,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             <div className="mb-2">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-bold text-stone-400">ABILITIES</span>
-                <button onClick={() => setEquipModalOpen(true)} className="px-2 py-0.5 text-[10px] rounded bg-blue-800 hover:bg-blue-700">⚔ Equip</button>
+                <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-0.5 text-[10px] rounded bg-blue-800 hover:bg-blue-700">⚔ Equip</button>
               </div>
               <div className="grid grid-cols-3 gap-1">
                 {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
@@ -1457,6 +1459,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       disabled={!isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)}
                       onClick={() => handlePlayerAction('attack', ability.id)}
                       title={ability.description || `${ability.name} - ${ability.type} ability`}
+                      data-sfx="button_click"
                       className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${
                         !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)
                           ? 'bg-stone-700 text-stone-500 opacity-50'
@@ -1480,6 +1483,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               <button
                 onClick={() => handlePlayerAction('defend')}
                 disabled={!isPlayerTurn || isAnimating}
+                data-sfx="button_click"
                 className="flex-1 py-2 rounded bg-blue-900/60 border border-blue-700/50 text-blue-200 text-xs font-bold disabled:opacity-50"
               >
                 🛡️ Defend
@@ -1489,6 +1493,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 <button
                   onClick={() => setShowItemSelection(!showItemSelection)}
                   disabled={!isPlayerTurn || isAnimating}
+                  data-sfx="button_click"
                   className="flex-1 py-2 rounded bg-green-900/60 border border-green-700/50 text-green-200 text-xs font-bold disabled:opacity-50"
                 >
                   🧪 Items ({getUsableItems().length})
@@ -1499,6 +1504,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 <button
                   onClick={() => handlePlayerAction('flee')}
                   disabled={!isPlayerTurn || isAnimating}
+                  data-sfx="button_click"
                   className="flex-1 py-2 rounded bg-yellow-900/60 border border-yellow-700/50 text-yellow-200 text-xs font-bold disabled:opacity-50"
                 >
                   🏃 Flee

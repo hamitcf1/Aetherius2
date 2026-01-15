@@ -1222,6 +1222,25 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Global click SFX handler (opt-in via data-sfx="<sound_key>")
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      try {
+        const el = (e.target as HTMLElement);
+        const sfxEl = el.closest<HTMLElement>('[data-sfx]');
+        if (!sfxEl) return;
+        const key = sfxEl.getAttribute('data-sfx') || 'button_click';
+        audioService.playSoundEffect(key as any);
+      } catch (err) {
+        // Never throw from global handler
+        console.warn('Global SFX handler error', err);
+      }
+    };
+
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
+
   // Start music based on game state - defined later after activeCharacter is available
   // Music initialization is handled in a separate useEffect below after activeCharacter definition
 
