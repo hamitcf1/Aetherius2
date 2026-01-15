@@ -2600,15 +2600,19 @@ const App: React.FC = () => {
   };
 
   // Dungeon reward handler
-  const handleApplyDungeonRewards = (rewards: { gold?: number; xp?: number; items?: any[] }) => {
+  const handleApplyDungeonRewards = (rewards: { gold?: number; xp?: number; items?: any[]; transactionId?: string }) => {
     if (!currentCharacterId || !activeCharacter) return;
-    const tx = `dungeon_${uniqueId()}`;
-    handleGameUpdate({ transactionId: tx, goldChange: rewards.gold || 0, xpChange: rewards.xp || 0, newItems: rewards.items || [] });
-    if ((rewards.gold || 0) > 0 || (rewards.xp || 0) > 0) {
-      showToast(`Gained ${rewards.gold || 0} gold and ${rewards.xp || 0} XP`, 'success');
-    }
-    if (rewards.items && rewards.items.length) {
-      showToast(`Found: ${rewards.items.map(i => i.name).join(', ')}`, 'success');
+    // Use provided transactionId if available (from combat finalizeLoot), otherwise generate new one
+    const tx = rewards.transactionId || `dungeon_${uniqueId()}`;
+    // Only apply if we have actual rewards to give
+    if ((rewards.gold || 0) > 0 || (rewards.xp || 0) > 0 || (rewards.items && rewards.items.length > 0)) {
+      handleGameUpdate({ transactionId: tx, goldChange: rewards.gold || 0, xpChange: rewards.xp || 0, newItems: rewards.items || [] });
+      if ((rewards.gold || 0) > 0 || (rewards.xp || 0) > 0) {
+        showToast(`Gained ${rewards.gold || 0} gold and ${rewards.xp || 0} XP`, 'success');
+      }
+      if (rewards.items && rewards.items.length) {
+        showToast(`Found: ${rewards.items.map(i => i.name).join(', ')}`, 'success');
+      }
     }
   };
 
@@ -4236,6 +4240,7 @@ const App: React.FC = () => {
           }}
           onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
+          showToast={showToast}
         />
 
         {/* Combat Modal - Full screen overlay when combat is active */}

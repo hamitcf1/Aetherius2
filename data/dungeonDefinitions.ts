@@ -19,6 +19,7 @@ const simpleEnemy = (id: string, name: string, type: CombatEnemy['type'], level:
 
 // NOTE: These definitions are intentionally data-focused and small. Gameplay scaling and
 // final tuning occurs in the dungeon service and combat integration.
+// UPDATED: All dungeons now have extensive branching paths with 3+ branches at each junction
 
 export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
   {
@@ -34,11 +35,29 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
     bossNodeId: 'bfb_boss',
     completionRewards: { gold: 120, xp: 300, items: [{ name: 'Golden Claw (trinket)', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
     nodes: [
-      { id: 'bfb_start', type: 'start', name: 'Entrance Hall', x: 10, y: 50, connections: ['bfb_path1'] },
-      { id: 'bfb_path1', type: 'combat', name: 'Bandit Ambush', description: 'A small band of raiders ambushes the party.', x: 30, y: 40, connections: ['bfb_rest'], enemies: [simpleEnemy('b1','Bandit Vagrant','humanoid',1,30,6,40,10)] },
-      { id: 'bfb_rest', type: 'rest', name: 'Dusty Alcove', description: 'A sheltered alcove to catch your breath.', x: 50, y: 45, connections: ['bfb_event'] , restAmount: { health: 15, stamina: 15 }},
-      { id: 'bfb_event', type: 'event', name: 'Collapsed Passage', description: 'The ceiling has partially collapsed. A weak spot might yield supplies.', x: 70, y: 42, connections: ['bfb_boss'], eventText: 'You clear rubble and find a small pouch of coins.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 30 }] },
-      { id: 'bfb_boss', type: 'boss', name: 'Draugr Wight', description: 'A restless draugr rises to challenge you.', x: 90, y: 50, connections: [], enemies: [simpleEnemy('bw1','Draugr Wight','undead',3,120,16,180,50,true)] }
+      // Row 0: Start
+      { id: 'bfb_start', type: 'start', name: 'Entrance Hall', x: 5, y: 50, connections: ['bfb_event1', 'bfb_combat1', 'bfb_empty1'] },
+      // Row 1: Three paths
+      { id: 'bfb_event1', type: 'event', name: 'Suspicious Altar', x: 20, y: 20, connections: ['bfb_combat2', 'bfb_rest1'], eventText: 'A strange altar hums with energy.', eventChoices: [{ label: 'Touch', outcome: 'reward', value: 25 }, { label: 'Smash', outcome: 'damage', value: 10 }] },
+      { id: 'bfb_combat1', type: 'combat', name: 'Bandit Ambush', description: 'A small band of raiders.', x: 20, y: 50, connections: ['bfb_rest1', 'bfb_combat2', 'bfb_reward1'], enemies: [simpleEnemy('b1','Bandit Vagrant','humanoid',1,30,6,40,10)] },
+      { id: 'bfb_empty1', type: 'empty', name: 'Dusty Corridor', x: 20, y: 80, connections: ['bfb_reward1', 'bfb_combat3'] },
+      // Row 2: Mix of types with cross-connections
+      { id: 'bfb_combat2', type: 'combat', name: 'Draugr Patrol', x: 40, y: 15, connections: ['bfb_elite1', 'bfb_rest2'], enemies: [simpleEnemy('d1','Draugr','undead',2,45,8,60,15)] },
+      { id: 'bfb_rest1', type: 'rest', name: 'Hidden Alcove', x: 40, y: 35, connections: ['bfb_elite1', 'bfb_event2'], restAmount: { health: 20, stamina: 15 } },
+      { id: 'bfb_reward1', type: 'reward', name: 'Burial Urn', x: 40, y: 65, connections: ['bfb_event2', 'bfb_combat4'], rewards: { gold: 35, items: [{ name: 'Ancient Nord Arrow', type: 'ammo', quantity: 5, rarity: 'common' }] } },
+      { id: 'bfb_combat3', type: 'combat', name: 'Spider Nest', x: 40, y: 85, connections: ['bfb_combat4', 'bfb_rest2'], enemies: [simpleEnemy('sp1','Frostbite Spider','beast',1,25,5,35,8)] },
+      // Row 3: Convergence toward elite
+      { id: 'bfb_elite1', type: 'elite', name: 'Draugr Overlord', x: 60, y: 25, connections: ['bfb_event3', 'bfb_rest3'], enemies: [simpleEnemy('do1','Draugr Overlord','undead',3,80,14,100,30)] },
+      { id: 'bfb_event2', type: 'event', name: 'Collapsed Passage', x: 60, y: 50, connections: ['bfb_rest3', 'bfb_combat5'], eventText: 'Rubble blocks the way. You might find something useful.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 30 }, { label: 'Force through', outcome: 'damage', value: 15 }] },
+      { id: 'bfb_combat4', type: 'combat', name: 'Skeevers', x: 60, y: 75, connections: ['bfb_combat5', 'bfb_reward2'], enemies: [simpleEnemy('sk1','Skeever','beast',1,20,4,25,5), simpleEnemy('sk2','Skeever','beast',1,20,4,25,5)] },
+      { id: 'bfb_rest2', type: 'rest', name: 'Warm Spring', x: 60, y: 95, connections: ['bfb_reward2'], restAmount: { health: 25, magicka: 15, stamina: 20 } },
+      // Row 4: Pre-boss area
+      { id: 'bfb_event3', type: 'event', name: 'Word Wall', x: 75, y: 20, connections: ['bfb_boss'], eventText: 'Ancient words echo in your mind...', eventChoices: [{ label: 'Meditate', outcome: 'reward', value: 50 }] },
+      { id: 'bfb_rest3', type: 'rest', name: 'Sanctuary', x: 75, y: 40, connections: ['bfb_boss'], restAmount: { health: 30, magicka: 20, stamina: 25 } },
+      { id: 'bfb_combat5', type: 'combat', name: 'Draugr Guards', x: 75, y: 60, connections: ['bfb_boss'], enemies: [simpleEnemy('dg1','Draugr','undead',2,40,8,50,12), simpleEnemy('dg2','Draugr','undead',2,40,8,50,12)] },
+      { id: 'bfb_reward2', type: 'reward', name: 'Ancient Chest', x: 75, y: 85, connections: ['bfb_boss'], rewards: { gold: 60, items: [{ name: 'Nordic Dagger', type: 'weapon', quantity: 1, rarity: 'uncommon' }] } },
+      // Boss
+      { id: 'bfb_boss', type: 'boss', name: 'Draugr Death Overlord', x: 95, y: 50, connections: [], enemies: [simpleEnemy('bw1','Draugr Death Overlord','undead',4,150,18,200,60,true)] }
     ]
   },
 
@@ -55,12 +74,25 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
     bossNodeId: 'bh_boss',
     completionRewards: { gold: 240, xp: 500, items: [{ name: 'Worn Bandit Helm', type: 'apparel', quantity: 1, rarity: 'uncommon' as LootRarity }] },
     nodes: [
-      { id: 'bh_start', type: 'start', name: 'Camp Entrance', x: 10, y: 50, connections: ['bh_path1','bh_path2'] },
-      { id: 'bh_path1', type: 'combat', name: 'Patrols', x: 30, y: 35, connections: ['bh_elite'], enemies: [simpleEnemy('bb1','Bandit', 'humanoid', 2, 55, 10, 80, 20)] },
-      { id: 'bh_path2', type: 'event', name: 'Tinder Pile', x: 30, y: 65, connections: ['bh_reward'], eventText: 'A stash of supplies sits under a tarp.', eventChoices: [{ label: 'Check', outcome: 'reward', value: 40 }] },
-      { id: 'bh_elite', type: 'elite', name: 'Elite Watch', x: 60, y: 40, connections: ['bh_boss'], enemies: [simpleEnemy('be1','Bandit Captain','humanoid',4,160,20,220,40)] },
-      { id: 'bh_reward', type: 'reward', name: 'Hidden Cache', x: 60, y: 70, connections: ['bh_boss'], rewards: { gold: 60, items: [{ name: 'Minor Health Potion', type: 'potion', quantity: 1, rarity: 'common' }] } },
-      { id: 'bh_boss', type: 'boss', name: 'Bandit Warlord', x: 90, y: 50, connections: [], enemies: [simpleEnemy('bboss','Bandit Warlord','humanoid',6,300,36,600,150,true)] }
+      { id: 'bh_start', type: 'start', name: 'Camp Entrance', x: 5, y: 50, connections: ['bh_combat1', 'bh_event1', 'bh_empty1', 'bh_combat2'] },
+      { id: 'bh_combat1', type: 'combat', name: 'Patrol', x: 20, y: 15, connections: ['bh_elite1', 'bh_reward1'], enemies: [simpleEnemy('bb1','Bandit', 'humanoid', 2, 55, 10, 80, 20)] },
+      { id: 'bh_event1', type: 'event', name: 'Tinder Pile', x: 20, y: 35, connections: ['bh_reward1', 'bh_rest1'], eventText: 'Supplies under a tarp.', eventChoices: [{ label: 'Check', outcome: 'reward', value: 40 }] },
+      { id: 'bh_empty1', type: 'empty', name: 'Empty Tent', x: 20, y: 65, connections: ['bh_rest1', 'bh_combat3'] },
+      { id: 'bh_combat2', type: 'combat', name: 'Guard Dogs', x: 20, y: 85, connections: ['bh_combat3', 'bh_event2'], enemies: [simpleEnemy('dog1','War Dog','beast',2,40,8,50,10), simpleEnemy('dog2','War Dog','beast',2,40,8,50,10)] },
+      { id: 'bh_elite1', type: 'elite', name: 'Bandit Chief', x: 40, y: 10, connections: ['bh_rest2', 'bh_event3'], enemies: [simpleEnemy('bc1','Bandit Chief','humanoid',4,100,16,150,40)] },
+      { id: 'bh_reward1', type: 'reward', name: 'Stolen Goods', x: 40, y: 30, connections: ['bh_rest2', 'bh_combat4'], rewards: { gold: 80, items: [{ name: 'Lockpick', type: 'misc', quantity: 3, rarity: 'common' }] } },
+      { id: 'bh_rest1', type: 'rest', name: 'Prisoner Cell', x: 40, y: 50, connections: ['bh_combat4', 'bh_event3'], restAmount: { health: 25, stamina: 20 } },
+      { id: 'bh_combat3', type: 'combat', name: 'Thugs', x: 40, y: 70, connections: ['bh_event3', 'bh_reward2'], enemies: [simpleEnemy('bt1','Bandit Thug','humanoid',3,70,12,90,25)] },
+      { id: 'bh_event2', type: 'event', name: 'Trap Room', x: 40, y: 90, connections: ['bh_reward2'], eventText: 'Pressure plates everywhere...', eventChoices: [{ label: 'Careful', outcome: 'reward', value: 50 }, { label: 'Rush', outcome: 'damage', value: 25 }] },
+      { id: 'bh_rest2', type: 'rest', name: 'Safe Corner', x: 60, y: 20, connections: ['bh_combat5', 'bh_elite2'], restAmount: { health: 30, magicka: 15, stamina: 25 } },
+      { id: 'bh_combat4', type: 'combat', name: 'Archers', x: 60, y: 40, connections: ['bh_elite2', 'bh_event4'], enemies: [simpleEnemy('ba1','Bandit Archer','humanoid',3,50,10,70,20), simpleEnemy('ba2','Bandit Archer','humanoid',3,50,10,70,20)] },
+      { id: 'bh_event3', type: 'event', name: 'Hostage', x: 60, y: 60, connections: ['bh_event4', 'bh_combat6'], eventText: 'A prisoner begs for help.', eventChoices: [{ label: 'Free', outcome: 'reward', value: 30 }, { label: 'Ignore', outcome: 'nothing' }] },
+      { id: 'bh_reward2', type: 'reward', name: 'Hidden Cache', x: 60, y: 80, connections: ['bh_combat6'], rewards: { gold: 60, items: [{ name: 'Health Potion', type: 'potion', quantity: 2, rarity: 'common' }] } },
+      { id: 'bh_combat5', type: 'combat', name: 'Elite Guards', x: 75, y: 25, connections: ['bh_boss'], enemies: [simpleEnemy('eg1','Bandit Marauder','humanoid',4,90,14,120,35)] },
+      { id: 'bh_elite2', type: 'elite', name: 'Bandit Plunderer', x: 75, y: 45, connections: ['bh_boss'], enemies: [simpleEnemy('bp1','Bandit Plunderer','humanoid',5,120,18,180,50)] },
+      { id: 'bh_event4', type: 'event', name: 'Armory', x: 75, y: 65, connections: ['bh_boss'], eventText: 'Weapons rack with various arms.', eventChoices: [{ label: 'Arm up', outcome: 'reward', value: 40 }] },
+      { id: 'bh_combat6', type: 'combat', name: 'Last Stand', x: 75, y: 85, connections: ['bh_boss'], enemies: [simpleEnemy('ls1','Bandit Outlaw','humanoid',3,60,11,80,25), simpleEnemy('ls2','Bandit','humanoid',2,50,9,60,20)] },
+      { id: 'bh_boss', type: 'boss', name: 'Bandit Warlord', x: 95, y: 50, connections: [], enemies: [simpleEnemy('bboss','Bandit Warlord','humanoid',6,300,36,600,150,true)] }
     ]
   },
 
@@ -77,95 +109,140 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
     bossNodeId: 'lab_boss',
     completionRewards: { gold: 480, xp: 1200, items: [{ name: 'Staff Fragment', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
     nodes: [
-      { id: 'lab_start', type: 'start', name: 'Outer Gate', x: 5, y: 50, connections: ['lab_path1','lab_path2'] },
-      { id: 'lab_path1', type: 'combat', name: 'Dwemer Automata', x: 30, y: 35, connections: ['lab_event'], enemies: [simpleEnemy('da1','Automaton Guard','automaton',7,220,26,420,80)] },
-      { id: 'lab_path2', type: 'empty', name: 'Dusty Hall', x: 30, y: 65, connections: ['lab_reward'] , description: 'A room of broken pillars. Not much here.'},
-      { id: 'lab_event', type: 'event', name: 'Unstable Runestone', x: 55, y: 40, connections: ['lab_elite'], eventText: 'A runestone hums with power. It might weaken enemies or hurt you.', eventChoices: [{ label: 'Invoke', outcome: 'damage', value: 40 }, { label: 'Harness', outcome: 'reward', value: 90 }] },
-      { id: 'lab_reward', type: 'reward', name: 'Lofted Chest', x: 55, y: 70, connections: ['lab_elite'], rewards: { gold: 120, items: [{ name: 'Dwemer Coil', type: 'misc', quantity: 1, rarity: 'uncommon' }] } },
-      { id: 'lab_elite', type: 'elite', name: 'Rune Warden', x: 75, y: 55, connections: ['lab_boss'], enemies: [simpleEnemy('rw1','Rune Warden','automaton',9,360,48,900,200)] },
+      { id: 'lab_start', type: 'start', name: 'Outer Gate', x: 5, y: 50, connections: ['lab_combat1', 'lab_event1', 'lab_empty1', 'lab_reward1'] },
+      { id: 'lab_combat1', type: 'combat', name: 'Automaton Sentry', x: 18, y: 10, connections: ['lab_elite1', 'lab_rest1'], enemies: [simpleEnemy('da1','Dwemer Sphere','automaton',7,180,24,350,70)] },
+      { id: 'lab_event1', type: 'event', name: 'Unstable Runestone', x: 18, y: 35, connections: ['lab_rest1', 'lab_combat2'], eventText: 'A runestone hums with power.', eventChoices: [{ label: 'Invoke', outcome: 'damage', value: 40 }, { label: 'Harness', outcome: 'reward', value: 90 }] },
+      { id: 'lab_empty1', type: 'empty', name: 'Dusty Hall', x: 18, y: 65, connections: ['lab_combat2', 'lab_event2'] },
+      { id: 'lab_reward1', type: 'reward', name: 'Lofted Chest', x: 18, y: 90, connections: ['lab_event2', 'lab_combat3'], rewards: { gold: 100, items: [{ name: 'Dwemer Cog', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
+      { id: 'lab_elite1', type: 'elite', name: 'Centurion Guardian', x: 35, y: 15, connections: ['lab_rest2', 'lab_combat4'], enemies: [simpleEnemy('cg1','Dwemer Centurion','automaton',9,300,40,700,150)] },
+      { id: 'lab_rest1', type: 'rest', name: 'Ancient Library', x: 35, y: 30, connections: ['lab_combat4', 'lab_event3'], restAmount: { health: 35, magicka: 30, stamina: 30 } },
+      { id: 'lab_combat2', type: 'combat', name: 'Spider Workers', x: 35, y: 50, connections: ['lab_event3', 'lab_reward2'], enemies: [simpleEnemy('sw1','Dwemer Spider','automaton',6,100,18,200,40), simpleEnemy('sw2','Dwemer Spider','automaton',6,100,18,200,40)] },
+      { id: 'lab_event2', type: 'event', name: 'Lever Puzzle', x: 35, y: 70, connections: ['lab_reward2', 'lab_combat5'], eventText: 'Three levers control the gates.', eventChoices: [{ label: 'Solve', outcome: 'reward', value: 120 }, { label: 'Force', outcome: 'damage', value: 50 }] },
+      { id: 'lab_combat3', type: 'combat', name: 'Falmer Scouts', x: 35, y: 90, connections: ['lab_combat5'], enemies: [simpleEnemy('fs1','Falmer','humanoid',7,150,22,320,60)] },
+      { id: 'lab_rest2', type: 'rest', name: 'Hot Springs', x: 52, y: 20, connections: ['lab_elite2', 'lab_event4'], restAmount: { health: 40, magicka: 35, stamina: 35 } },
+      { id: 'lab_combat4', type: 'combat', name: 'Ballistae', x: 52, y: 35, connections: ['lab_elite2', 'lab_combat6'], enemies: [simpleEnemy('bal1','Dwemer Ballista','automaton',8,200,30,450,90)] },
+      { id: 'lab_event3', type: 'event', name: 'Tonal Lock', x: 52, y: 50, connections: ['lab_combat6', 'lab_reward3'], eventText: 'Musical tones echo in sequence.', eventChoices: [{ label: 'Repeat', outcome: 'reward', value: 100 }] },
+      { id: 'lab_reward2', type: 'reward', name: 'Resonator Core', x: 52, y: 65, connections: ['lab_reward3', 'lab_rest3'], rewards: { gold: 150, items: [{ name: 'Soul Gem (Greater)', type: 'misc', quantity: 1, rarity: 'rare' }] } },
+      { id: 'lab_combat5', type: 'combat', name: 'Chaurus', x: 52, y: 85, connections: ['lab_rest3'], enemies: [simpleEnemy('ch1','Chaurus','beast',7,140,20,280,55), simpleEnemy('ch2','Chaurus Hunter','beast',8,160,25,350,70)] },
+      { id: 'lab_elite2', type: 'elite', name: 'Rune Warden', x: 70, y: 25, connections: ['lab_event5', 'lab_boss'], enemies: [simpleEnemy('rw1','Rune Warden','automaton',9,360,48,900,200)] },
+      { id: 'lab_combat6', type: 'combat', name: 'Sphere Squadron', x: 70, y: 45, connections: ['lab_event5', 'lab_boss'], enemies: [simpleEnemy('ss1','Dwemer Sphere','automaton',7,180,24,350,70), simpleEnemy('ss2','Dwemer Sphere','automaton',7,180,24,350,70)] },
+      { id: 'lab_reward3', type: 'reward', name: 'Research Cache', x: 70, y: 60, connections: ['lab_boss'], rewards: { gold: 200, items: [{ name: 'Dwemer Schematic', type: 'misc', quantity: 1, rarity: 'epic' }] } },
+      { id: 'lab_rest3', type: 'rest', name: 'Hidden Sanctuary', x: 70, y: 80, connections: ['lab_boss'], restAmount: { health: 50, magicka: 40, stamina: 45 } },
+      { id: 'lab_event4', type: 'event', name: 'Power Core', x: 85, y: 30, connections: ['lab_boss'], eventText: 'A glowing core pulses with energy.', eventChoices: [{ label: 'Absorb', outcome: 'reward', value: 150 }, { label: 'Destroy', outcome: 'damage', value: 60 }] },
+      { id: 'lab_event5', type: 'event', name: 'Pressure Hallway', x: 85, y: 45, connections: ['lab_boss'], eventText: 'Blades spin in the corridor ahead.', eventChoices: [{ label: 'Time it', outcome: 'nothing' }, { label: 'Sprint', outcome: 'damage', value: 40 }] },
       { id: 'lab_boss', type: 'boss', name: 'Ancient Constructor', x: 95, y: 50, connections: [], enemies: [simpleEnemy('labboss','Ancient Constructor','automaton',12,900,80,2400,400,true)] }
     ]
   },
 
-  // More dungeons (11+ additional) kept concise but meeting variety and branching
   {
-    id: 'blackreach_dg', name: 'Blackreach Depths', description: 'A cavern of bioluminescent fungi and Falmer hunters.', location: 'Blackreach', difficulty: 'hard', recommendedLevel: 7, theme: 'ice_cave', ambientDescription: 'A cold vast cavern with glows on the stone.', startNodeId: 'br_start', bossNodeId: 'br_boss', completionRewards: { gold: 340, xp: 900, items: [{ name: 'Crimson Piece', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] }, nodes: [
-      { id: 'br_start', type: 'start', name: 'Sunken Curtain', x: 10, y: 50, connections: ['br_path1','br_path2'] },
-      { id: 'br_path1', type: 'combat', name: 'Falmer Patrol', x: 30, y: 35, connections: ['br_rest'], enemies: [simpleEnemy('f1','Falmer Scout','humanoid',6,140,18,260,40)] },
-      { id: 'br_path2', type: 'empty', name: 'Fungal Basin', x: 30, y: 65, connections: ['br_reward'] },
-      { id: 'br_rest', type: 'rest', name: 'Warm Spring', x: 55, y: 45, connections: ['br_elite'], restAmount: { health: 30 } },
-      { id: 'br_reward', type: 'reward', name: 'Sack in Roots', x: 55, y: 70, connections: ['br_elite'], rewards: { items: [{ name: 'Ectoplasm', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
-      { id: 'br_elite', type: 'elite', name: 'Deep Hunter', x: 75, y: 55, connections: ['br_boss'], enemies: [simpleEnemy('dh1','Deep Hunter','humanoid',9,360,36,820,160)] },
+    id: 'blackreach_dg', name: 'Blackreach Depths', description: 'A cavern of bioluminescent fungi and Falmer hunters.', location: 'Blackreach', difficulty: 'hard', recommendedLevel: 7, theme: 'ice_cave', ambientDescription: 'A cold vast cavern with glows on the stone.', startNodeId: 'br_start', bossNodeId: 'br_boss', completionRewards: { gold: 340, xp: 900, items: [{ name: 'Crimson Nirnroot', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
+    nodes: [
+      { id: 'br_start', type: 'start', name: 'Sunken Entry', x: 5, y: 50, connections: ['br_combat1', 'br_event1', 'br_empty1'] },
+      { id: 'br_combat1', type: 'combat', name: 'Falmer Patrol', x: 20, y: 20, connections: ['br_rest1', 'br_combat2'], enemies: [simpleEnemy('f1','Falmer Scout','humanoid',6,140,18,260,40)] },
+      { id: 'br_event1', type: 'event', name: 'Glowing Mushrooms', x: 20, y: 50, connections: ['br_combat2', 'br_reward1'], eventText: 'Strange glowing fungi.', eventChoices: [{ label: 'Harvest', outcome: 'reward', value: 60 }] },
+      { id: 'br_empty1', type: 'empty', name: 'Fungal Basin', x: 20, y: 80, connections: ['br_reward1', 'br_combat3'] },
+      { id: 'br_rest1', type: 'rest', name: 'Warm Spring', x: 40, y: 15, connections: ['br_elite1', 'br_event2'], restAmount: { health: 30, magicka: 25 } },
+      { id: 'br_combat2', type: 'combat', name: 'Chaurus Nest', x: 40, y: 35, connections: ['br_elite1', 'br_event2'], enemies: [simpleEnemy('ch1','Chaurus','beast',6,120,16,220,45)] },
+      { id: 'br_reward1', type: 'reward', name: 'Sack in Roots', x: 40, y: 60, connections: ['br_event2', 'br_combat4'], rewards: { gold: 70, items: [{ name: 'Ectoplasm', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
+      { id: 'br_combat3', type: 'combat', name: 'Frostbite Spiders', x: 40, y: 85, connections: ['br_combat4', 'br_rest2'], enemies: [simpleEnemy('sp1','Giant Frostbite Spider','beast',5,100,14,180,35)] },
+      { id: 'br_elite1', type: 'elite', name: 'Falmer Shadowmaster', x: 60, y: 20, connections: ['br_rest3', 'br_boss'], enemies: [simpleEnemy('fsm','Falmer Shadowmaster','humanoid',8,280,32,650,120)] },
+      { id: 'br_event2', type: 'event', name: 'Dwarven Lift', x: 60, y: 45, connections: ['br_rest3', 'br_combat5'], eventText: 'An ancient lift mechanism.', eventChoices: [{ label: 'Activate', outcome: 'reward', value: 80 }, { label: 'Bypass', outcome: 'nothing' }] },
+      { id: 'br_combat4', type: 'combat', name: 'Falmer Hunters', x: 60, y: 65, connections: ['br_combat5', 'br_reward2'], enemies: [simpleEnemy('fh1','Falmer','humanoid',6,140,18,260,40), simpleEnemy('fh2','Falmer','humanoid',6,140,18,260,40)] },
+      { id: 'br_rest2', type: 'rest', name: 'Hidden Grotto', x: 60, y: 90, connections: ['br_reward2'], restAmount: { health: 35, stamina: 30 } },
+      { id: 'br_rest3', type: 'rest', name: 'Crystal Chamber', x: 75, y: 25, connections: ['br_boss'], restAmount: { health: 40, magicka: 35, stamina: 35 } },
+      { id: 'br_combat5', type: 'combat', name: 'Deep Stalkers', x: 75, y: 50, connections: ['br_boss'], enemies: [simpleEnemy('ds1','Deep Hunter','humanoid',9,360,36,820,160)] },
+      { id: 'br_reward2', type: 'reward', name: 'Falmer Hoard', x: 75, y: 75, connections: ['br_boss'], rewards: { gold: 120, items: [{ name: 'Falmer Ear', type: 'misc', quantity: 3, rarity: 'uncommon' }] } },
       { id: 'br_boss', type: 'boss', name: 'Falmer Chieftain', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fboss','Falmer Chieftain','humanoid',11,820,64,2000,300,true)] }
     ]
   },
 
   {
-    id: 'vampire_lair_dg', name: 'Vampire Lair', description: 'A dark lair saturated with blood magics.', location: 'Morthal', difficulty: 'medium', recommendedLevel: 5, theme: 'vampire_lair', ambientDescription: 'Dark halls with crimson sigils.', startNodeId: 'vl_start', bossNodeId: 'vl_boss', completionRewards: { gold: 260, xp: 700, items: [{ name: 'Bloodstone Shard', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] }, nodes: [
-      { id: 'vl_start', type: 'start', name: 'Stained Vestibule', x: 10, y: 50, connections: ['vl_combat'] },
-      { id: 'vl_combat', type: 'combat', name: 'Thrall Ambush', x: 40, y: 50, connections: ['vl_event'], enemies: [simpleEnemy('vt1','Vampire Thrall','undead',5,160,22,300,60)] },
-      { id: 'vl_event', type: 'event', name: 'Blood Altar', x: 65, y: 50, connections: ['vl_boss'], eventText: 'An altar hums. Sacrifice may grant power or danger.', eventChoices: [{ label: 'Offer', outcome: 'reward', value: 80 }, { label: 'Refuse', outcome: 'nothing' }] },
+    id: 'vampire_lair_dg', name: 'Vampire Lair', description: 'A dark lair saturated with blood magics.', location: 'Morthal', difficulty: 'medium', recommendedLevel: 5, theme: 'vampire_lair', ambientDescription: 'Dark halls with crimson sigils.', startNodeId: 'vl_start', bossNodeId: 'vl_boss', completionRewards: { gold: 260, xp: 700, items: [{ name: 'Bloodstone Shard', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
+    nodes: [
+      { id: 'vl_start', type: 'start', name: 'Stained Vestibule', x: 5, y: 50, connections: ['vl_combat1', 'vl_event1', 'vl_empty1'] },
+      { id: 'vl_combat1', type: 'combat', name: 'Thrall Ambush', x: 20, y: 20, connections: ['vl_rest1', 'vl_combat2'], enemies: [simpleEnemy('vt1','Vampire Thrall','undead',4,120,16,220,45)] },
+      { id: 'vl_event1', type: 'event', name: 'Blood Fountain', x: 20, y: 50, connections: ['vl_combat2', 'vl_reward1'], eventText: 'A fountain of blood bubbles.', eventChoices: [{ label: 'Drink', outcome: 'damage', value: 20 }, { label: 'Avoid', outcome: 'nothing' }] },
+      { id: 'vl_empty1', type: 'empty', name: 'Dusty Crypt', x: 20, y: 80, connections: ['vl_reward1', 'vl_combat3'] },
+      { id: 'vl_rest1', type: 'rest', name: 'Hidden Chamber', x: 40, y: 15, connections: ['vl_elite1', 'vl_event2'], restAmount: { health: 25, magicka: 20 } },
+      { id: 'vl_combat2', type: 'combat', name: 'Vampire Spawn', x: 40, y: 35, connections: ['vl_elite1', 'vl_event2'], enemies: [simpleEnemy('vs1','Vampire Spawn','undead',5,140,18,280,55)] },
+      { id: 'vl_reward1', type: 'reward', name: 'Coffin Cache', x: 40, y: 60, connections: ['vl_event2', 'vl_combat4'], rewards: { gold: 80, items: [{ name: 'Vampire Dust', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
+      { id: 'vl_combat3', type: 'combat', name: 'Death Hounds', x: 40, y: 85, connections: ['vl_combat4', 'vl_rest2'], enemies: [simpleEnemy('dh1','Death Hound','beast',4,100,14,180,35), simpleEnemy('dh2','Death Hound','beast',4,100,14,180,35)] },
+      { id: 'vl_elite1', type: 'elite', name: 'Master Vampire', x: 60, y: 20, connections: ['vl_event3', 'vl_boss'], enemies: [simpleEnemy('mv1','Master Vampire','undead',7,260,28,540,100)] },
+      { id: 'vl_event2', type: 'event', name: 'Blood Altar', x: 60, y: 45, connections: ['vl_event3', 'vl_combat5'], eventText: 'An altar hums. Sacrifice may grant power.', eventChoices: [{ label: 'Offer', outcome: 'reward', value: 80 }, { label: 'Refuse', outcome: 'nothing' }] },
+      { id: 'vl_combat4', type: 'combat', name: 'Vampire Nightstalker', x: 60, y: 65, connections: ['vl_combat5', 'vl_reward2'], enemies: [simpleEnemy('vn1','Vampire Nightstalker','undead',6,180,22,360,70)] },
+      { id: 'vl_rest2', type: 'rest', name: 'Safe Corner', x: 60, y: 90, connections: ['vl_reward2'], restAmount: { health: 30, stamina: 25 } },
+      { id: 'vl_event3', type: 'event', name: 'Enchanting Table', x: 75, y: 25, connections: ['vl_boss'], eventText: 'A dark enchanting table.', eventChoices: [{ label: 'Use', outcome: 'reward', value: 60 }] },
+      { id: 'vl_combat5', type: 'combat', name: 'Gargoyles', x: 75, y: 50, connections: ['vl_boss'], enemies: [simpleEnemy('gar1','Gargoyle','beast',6,200,24,400,80)] },
+      { id: 'vl_reward2', type: 'reward', name: 'Blood Treasury', x: 75, y: 75, connections: ['vl_boss'], rewards: { gold: 120, items: [{ name: 'Ring of Blood Magic', type: 'apparel', quantity: 1, rarity: 'rare' }] } },
       { id: 'vl_boss', type: 'boss', name: 'Vampire Matriarch', x: 95, y: 50, connections: [], enemies: [simpleEnemy('vmb','Vampire Matriarch','undead',10,600,54,1500,220,true)] }
     ]
   },
 
   {
-    id: 'frost_spider_den_dg', name: 'Frost Spider Den', description: 'A nest of giant frost spiders and web traps.', location: 'Winterhold', difficulty: 'easy', recommendedLevel: 2, theme: 'ice_cave', ambientDescription: 'Silvery silk glistening in cold air.', startNodeId: 'fs_start', bossNodeId: 'fs_boss', completionRewards: { gold: 100, xp: 220, items: [{ name: 'Spider Venom', type: 'misc', quantity: 1, rarity: 'uncommon' as LootRarity }] }, nodes: [
-      { id: 'fs_start', type: 'start', name: 'Webbed Entry', x: 10, y: 50, connections: ['fs_combat'] },
-      { id: 'fs_combat', type: 'combat', name: 'Broodlings', x: 40, y: 50, connections: ['fs_rest'], enemies: [simpleEnemy('sp1','Frost Spiderling','beast',2,60,10,90,10)] },
-      { id: 'fs_rest', type: 'rest', name: 'Sticky Nook', x: 70, y: 50, connections: ['fs_boss'], restAmount: { stamina: 20 } },
+    id: 'frost_spider_den_dg', name: 'Frost Spider Den', description: 'A nest of giant frost spiders and web traps.', location: 'Winterhold', difficulty: 'easy', recommendedLevel: 2, theme: 'ice_cave', ambientDescription: 'Silvery silk glistening in cold air.', startNodeId: 'fs_start', bossNodeId: 'fs_boss', completionRewards: { gold: 100, xp: 220, items: [{ name: 'Spider Venom', type: 'misc', quantity: 1, rarity: 'uncommon' as LootRarity }] },
+    nodes: [
+      { id: 'fs_start', type: 'start', name: 'Webbed Entry', x: 5, y: 50, connections: ['fs_combat1', 'fs_event1', 'fs_empty1'] },
+      { id: 'fs_combat1', type: 'combat', name: 'Broodlings', x: 20, y: 20, connections: ['fs_rest1', 'fs_combat2'], enemies: [simpleEnemy('sp1','Frost Spiderling','beast',2,40,8,60,10), simpleEnemy('sp2','Frost Spiderling','beast',2,40,8,60,10)] },
+      { id: 'fs_event1', type: 'event', name: 'Cocooned Corpse', x: 20, y: 50, connections: ['fs_combat2', 'fs_reward1'], eventText: 'A body wrapped in webs.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 35 }] },
+      { id: 'fs_empty1', type: 'empty', name: 'Frozen Chamber', x: 20, y: 80, connections: ['fs_reward1', 'fs_combat3'] },
+      { id: 'fs_rest1', type: 'rest', name: 'Heated Pocket', x: 40, y: 15, connections: ['fs_elite1', 'fs_event2'], restAmount: { health: 20, stamina: 15 } },
+      { id: 'fs_combat2', type: 'combat', name: 'Webspinners', x: 40, y: 35, connections: ['fs_elite1', 'fs_event2'], enemies: [simpleEnemy('ws1','Webspinner Spider','beast',3,60,10,80,15)] },
+      { id: 'fs_reward1', type: 'reward', name: 'Adventurer Pack', x: 40, y: 60, connections: ['fs_event2', 'fs_combat4'], rewards: { gold: 40, items: [{ name: 'Torch', type: 'misc', quantity: 2, rarity: 'common' }] } },
+      { id: 'fs_combat3', type: 'combat', name: 'Ice Wraiths', x: 40, y: 85, connections: ['fs_combat4', 'fs_rest2'], enemies: [simpleEnemy('iw1','Ice Wraith','beast',3,50,12,90,20)] },
+      { id: 'fs_elite1', type: 'elite', name: 'Giant Spider', x: 60, y: 20, connections: ['fs_rest3', 'fs_boss'], enemies: [simpleEnemy('gs1','Giant Frostbite Spider','beast',4,150,16,200,40)] },
+      { id: 'fs_event2', type: 'event', name: 'Frozen Chest', x: 60, y: 45, connections: ['fs_rest3', 'fs_combat5'], eventText: 'Ice covers a chest.', eventChoices: [{ label: 'Thaw', outcome: 'reward', value: 50 }] },
+      { id: 'fs_combat4', type: 'combat', name: 'Ambush Spiders', x: 60, y: 65, connections: ['fs_combat5', 'fs_reward2'], enemies: [simpleEnemy('as1','Ambush Spider','beast',3,55,11,75,18)] },
+      { id: 'fs_rest2', type: 'rest', name: 'Sticky Nook', x: 60, y: 90, connections: ['fs_reward2'], restAmount: { stamina: 20, health: 15 } },
+      { id: 'fs_rest3', type: 'rest', name: 'Safe Ledge', x: 75, y: 25, connections: ['fs_boss'], restAmount: { health: 25, stamina: 20 } },
+      { id: 'fs_combat5', type: 'combat', name: 'Spider Guards', x: 75, y: 50, connections: ['fs_boss'], enemies: [simpleEnemy('sg1','Frost Spider','beast',3,70,12,100,22), simpleEnemy('sg2','Frost Spider','beast',3,70,12,100,22)] },
+      { id: 'fs_reward2', type: 'reward', name: 'Egg Sac Loot', x: 75, y: 75, connections: ['fs_boss'], rewards: { gold: 30, items: [{ name: 'Spider Egg', type: 'misc', quantity: 4, rarity: 'common' }] } },
       { id: 'fs_boss', type: 'boss', name: 'Broodmother', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fsboss','Frost Broodmother','beast',5,420,32,540,80,true)] }
     ]
   },
 
   {
-    id: 'troll_cave_dg', name: 'Troll Cave', description: 'A shallow cave dominated by a territorial troll.', location: 'Rorikstead', difficulty: 'easy', recommendedLevel: 2, theme: 'mine', ambientDescription: 'The smell of damp stone and rotting meat.', startNodeId: 'tc_start', bossNodeId: 'tc_boss', completionRewards: { gold: 80, xp: 160, items: [{ name: 'Troll Fat', type: 'misc', quantity: 1, rarity: 'common' as LootRarity }] }, nodes: [
-      { id: 'tc_start', type: 'start', name: 'Cave Mouth', x: 10, y: 50, connections: ['tc_path'] },
-      { id: 'tc_path', type: 'combat', name: 'Small Trolls', x: 50, y: 50, connections: ['tc_boss'], enemies: [simpleEnemy('t1','Cave Troll','beast',3,200,24,200,30)] },
-      { id: 'tc_boss', type: 'boss', name: 'Troll Patriarch', x: 90, y: 50, connections: [], enemies: [simpleEnemy('tboss','Troll Patriarch','beast',6,520,44,740,120,true)] }
-    ]
-  },
-
-  {
-    id: 'daedric_shrine_dg', name: 'Daedric Shrine', description: 'A warped shrine with daedric guardians and bargains.', location: 'Winterhold', difficulty: 'legendary', recommendedLevel: 15, theme: 'daedric_shrine', ambientDescription: 'Whispers in a language you do not know.', startNodeId: 'ds_start', bossNodeId: 'ds_boss', completionRewards: { gold: 1200, xp: 5000, items: [{ name: 'Daedric Relic', type: 'misc', quantity: 1, rarity: 'legendary' as LootRarity }] }, nodes: [
-      { id: 'ds_start', type: 'start', name: 'Ritual Gate', x: 10, y: 50, connections: ['ds_event'] },
-      { id: 'ds_event', type: 'event', name: 'Unholy Pact', x: 35, y: 45, connections: ['ds_elite'], eventText: 'A voice offers power for a price.', eventChoices: [{ label: 'Accept', outcome: 'reward', value: 400 }, { label: 'Decline', outcome: 'nothing' }] },
-      { id: 'ds_elite', type: 'elite', name: 'Daedra Knight', x: 65, y: 45, connections: ['ds_boss'], enemies: [simpleEnemy('dk1','Daedra Knight','daedra',15,1800,160,4200,800)] },
+    id: 'daedric_shrine_dg', name: 'Daedric Shrine', description: 'A warped shrine with daedric guardians and bargains.', location: 'Winterhold', difficulty: 'legendary', recommendedLevel: 15, theme: 'daedric_shrine', ambientDescription: 'Whispers in a language you do not know.', startNodeId: 'ds_start', bossNodeId: 'ds_boss', completionRewards: { gold: 1200, xp: 5000, items: [{ name: 'Daedric Relic', type: 'misc', quantity: 1, rarity: 'legendary' as LootRarity }] },
+    nodes: [
+      { id: 'ds_start', type: 'start', name: 'Ritual Gate', x: 5, y: 50, connections: ['ds_event1', 'ds_combat1', 'ds_empty1'] },
+      { id: 'ds_event1', type: 'event', name: 'Unholy Pact', x: 20, y: 20, connections: ['ds_rest1', 'ds_combat2'], eventText: 'A voice offers power for a price.', eventChoices: [{ label: 'Accept', outcome: 'reward', value: 400 }, { label: 'Decline', outcome: 'damage', value: 100 }] },
+      { id: 'ds_combat1', type: 'combat', name: 'Dremora Scout', x: 20, y: 50, connections: ['ds_combat2', 'ds_reward1'], enemies: [simpleEnemy('dsc1','Dremora','daedra',12,600,80,2000,400)] },
+      { id: 'ds_empty1', type: 'empty', name: 'Void Chamber', x: 20, y: 80, connections: ['ds_reward1', 'ds_combat3'] },
+      { id: 'ds_rest1', type: 'rest', name: 'Soul Trap', x: 40, y: 15, connections: ['ds_elite1', 'ds_event2'], restAmount: { health: 60, magicka: 50, stamina: 50 } },
+      { id: 'ds_combat2', type: 'combat', name: 'Atronachs', x: 40, y: 35, connections: ['ds_elite1', 'ds_event2'], enemies: [simpleEnemy('fa1','Flame Atronach','daedra',11,400,60,1500,300), simpleEnemy('sa1','Storm Atronach','daedra',11,450,55,1600,320)] },
+      { id: 'ds_reward1', type: 'reward', name: 'Daedra Heart', x: 40, y: 60, connections: ['ds_event2', 'ds_combat4'], rewards: { gold: 500, items: [{ name: 'Daedra Heart', type: 'misc', quantity: 1, rarity: 'epic' }] } },
+      { id: 'ds_combat3', type: 'combat', name: 'Scamps', x: 40, y: 85, connections: ['ds_combat4', 'ds_rest2'], enemies: [simpleEnemy('sc1','Scamp','daedra',10,300,45,1000,200), simpleEnemy('sc2','Scamp','daedra',10,300,45,1000,200)] },
+      { id: 'ds_elite1', type: 'elite', name: 'Daedra Knight', x: 60, y: 20, connections: ['ds_event3', 'ds_boss'], enemies: [simpleEnemy('dk1','Daedra Knight','daedra',15,1800,160,4200,800)] },
+      { id: 'ds_event2', type: 'event', name: 'Sigil Stone', x: 60, y: 45, connections: ['ds_event3', 'ds_combat5'], eventText: 'A sigil stone pulses with oblivion energy.', eventChoices: [{ label: 'Take', outcome: 'reward', value: 600 }, { label: 'Destroy', outcome: 'damage', value: 150 }] },
+      { id: 'ds_combat4', type: 'combat', name: 'Lurkers', x: 60, y: 65, connections: ['ds_combat5', 'ds_reward2'], enemies: [simpleEnemy('lu1','Lurker','daedra',13,800,100,3000,500)] },
+      { id: 'ds_rest2', type: 'rest', name: 'Sanctuary', x: 60, y: 90, connections: ['ds_reward2'], restAmount: { health: 70, magicka: 60, stamina: 60 } },
+      { id: 'ds_event3', type: 'event', name: 'Dark Bargain', x: 75, y: 25, connections: ['ds_boss'], eventText: 'Ultimate power, for a soul.', eventChoices: [{ label: 'Pay', outcome: 'damage', value: 200 }, { label: 'Refuse', outcome: 'nothing' }] },
+      { id: 'ds_combat5', type: 'combat', name: 'Dremora Kynval', x: 75, y: 50, connections: ['ds_boss'], enemies: [simpleEnemy('dky1','Dremora Kynval','daedra',14,1200,120,3500,600)] },
+      { id: 'ds_reward2', type: 'reward', name: 'Oblivion Cache', x: 75, y: 75, connections: ['ds_boss'], rewards: { gold: 800, items: [{ name: 'Black Soul Gem', type: 'misc', quantity: 1, rarity: 'legendary' }] } },
       { id: 'ds_boss', type: 'boss', name: 'Dremora Overlord', x: 95, y: 50, connections: [], enemies: [simpleEnemy('dboss','Dremora Overlord','daedra',18,3600,300,9000,2500,true)] }
     ]
   },
 
   {
-    id: 'ice_cavern_dg', name: 'Shattered Ice Cavern', description: 'A winding cave of ice and whirling winds.', location: 'The Pale', difficulty: 'medium', recommendedLevel: 4, theme: 'ice_cave', ambientDescription: 'Breath clouds in the cold air.', startNodeId: 'ic_start', bossNodeId: 'ic_boss', completionRewards: { gold: 200, xp: 480, items: [{ name: 'Ice Crystal', type: 'misc', quantity: 1, rarity: 'uncommon' as LootRarity }] }, nodes: [
-      { id: 'ic_start', type: 'start', name: 'Fractured Mouth', x: 10, y: 50, connections: ['ic_path1','ic_path2'] },
-      { id: 'ic_path1', type: 'combat', name: 'Ice Wolves', x: 30, y: 35, connections: ['ic_reward'], enemies: [simpleEnemy('iw1','Ice Wolf','beast',4,120,18,200,30)] },
-      { id: 'ic_path2', type: 'event', name: 'Frozen Cache', x: 30, y: 65, connections: ['ic_rest'], eventText: 'A cache of furs and supplies sits trapped under ice.', eventChoices: [{ label: 'Shatter', outcome: 'reward', value: 60 }] },
-      { id: 'ic_reward', type: 'reward', name: 'Glittering Pouch', x: 60, y: 40, connections: ['ic_boss'], rewards: { gold: 50, items: [{ name: 'Warm Fur', type: 'misc', quantity: 1, rarity: 'common' }] } },
-      { id: 'ic_rest', type: 'rest', name: 'Heated Chamber', x: 60, y: 70, connections: ['ic_boss'], restAmount: { health: 25, stamina: 25 } },
-      { id: 'ic_boss', type: 'boss', name: 'Frost Warg Matriarch', x: 95, y: 50, connections: [], enemies: [simpleEnemy('iwboss','Frost Warg Matriarch','beast',7,620,60,1200,200,true)] }
-    ]
-  },
-
-  {
-    id: 'mineshaft_dg', name: 'Abandoned Mineshaft', description: 'Collapsed galleries and bandit squatters.', location: 'Riften', difficulty: 'easy', recommendedLevel: 3, theme: 'mine', ambientDescription: 'Echoes of pickaxes and falling rock.', startNodeId: 'ms_start', bossNodeId: 'ms_boss', completionRewards: { gold: 170, xp: 340, items: [{ name: 'Ore Fragment', type: 'misc', quantity: 2, rarity: 'common' as LootRarity }] }, nodes: [
-      { id: 'ms_start', type: 'start', name: 'Shaft Mouth', x: 10, y: 50, connections: ['ms_combat'] },
-      { id: 'ms_combat', type: 'combat', name: 'Scrap Bandits', x: 40, y: 50, connections: ['ms_event'], enemies: [simpleEnemy('mb1','Pickman','humanoid',3,140,16,220,40)] },
-      { id: 'ms_event', type: 'event', name: 'Dead Cart', x: 65, y: 50, connections: ['ms_boss'], eventText: 'A cart collapsed with a glinting item beneath it.', eventChoices: [{ label: 'Heave', outcome: 'reward', value: 80 }] },
-      { id: 'ms_boss', type: 'boss', name: 'Pit Overseer', x: 95, y: 50, connections: [], enemies: [simpleEnemy('mboss','Pit Overseer','humanoid',5,420,36,540,120,true)] }
-    ]
-  },
-
-  {
-    id: 'forsworn_camp_dg', name: 'Forsworn Camp', description: 'A tangled network of stone altars and forsworn brutes.', location: 'Markarth', difficulty: 'medium', recommendedLevel: 6, theme: 'forsworn_camp', ambientDescription: 'Wild drums and bitter smoke.', startNodeId: 'fc_start', bossNodeId: 'fc_boss', completionRewards: { gold: 300, xp: 760, items: [{ name: 'Forsworn Token', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] }, nodes: [
-      { id: 'fc_start', type: 'start', name: 'Outskirts', x: 10, y: 50, connections: ['fc_path1','fc_path2'] },
-      { id: 'fc_path1', type: 'combat', name: 'Wildermen', x: 30, y: 35, connections: ['fc_elite'], enemies: [simpleEnemy('fw1','Wilderman','humanoid',5,180,20,320,60)] },
-      { id: 'fc_path2', type: 'event', name: 'Ritual Stones', x: 30, y: 65, connections: ['fc_reward'], eventText: 'A child’s offering lies there.', eventChoices: [{ label: 'Accept', outcome: 'reward', value: 60 }] },
-      { id: 'fc_elite', type: 'elite', name: 'Forsworn Champion', x: 65, y: 40, connections: ['fc_boss'], enemies: [simpleEnemy('fe1','Forsworn Champion','humanoid',8,420,44,980,180)] },
-      { id: 'fc_reward', type: 'reward', name: 'Headhunter Cache', x: 65, y: 72, connections: ['fc_boss'], rewards: { gold: 90, items: [{ name: 'Minor Health Potion', type: 'potion', quantity: 1, rarity: 'common' }] } },
+    id: 'forsworn_camp_dg', name: 'Forsworn Camp', description: 'A tangled network of stone altars and forsworn brutes.', location: 'Markarth', difficulty: 'medium', recommendedLevel: 6, theme: 'forsworn_camp', ambientDescription: 'Wild drums and bitter smoke.', startNodeId: 'fc_start', bossNodeId: 'fc_boss', completionRewards: { gold: 300, xp: 760, items: [{ name: 'Forsworn Token', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
+    nodes: [
+      { id: 'fc_start', type: 'start', name: 'Outskirts', x: 5, y: 50, connections: ['fc_combat1', 'fc_event1', 'fc_empty1'] },
+      { id: 'fc_combat1', type: 'combat', name: 'Scouts', x: 20, y: 20, connections: ['fc_rest1', 'fc_combat2'], enemies: [simpleEnemy('fw1','Forsworn','humanoid',5,150,18,280,50)] },
+      { id: 'fc_event1', type: 'event', name: 'Ritual Stones', x: 20, y: 50, connections: ['fc_combat2', 'fc_reward1'], eventText: 'A childs offering lies there.', eventChoices: [{ label: 'Accept', outcome: 'reward', value: 60 }] },
+      { id: 'fc_empty1', type: 'empty', name: 'Empty Tent', x: 20, y: 80, connections: ['fc_reward1', 'fc_combat3'] },
+      { id: 'fc_rest1', type: 'rest', name: 'Hidden Cave', x: 40, y: 15, connections: ['fc_elite1', 'fc_event2'], restAmount: { health: 30, stamina: 25 } },
+      { id: 'fc_combat2', type: 'combat', name: 'Wildermen', x: 40, y: 35, connections: ['fc_elite1', 'fc_event2'], enemies: [simpleEnemy('fw2','Forsworn Ravager','humanoid',6,180,22,340,65)] },
+      { id: 'fc_reward1', type: 'reward', name: 'Totem Cache', x: 40, y: 60, connections: ['fc_event2', 'fc_combat4'], rewards: { gold: 70, items: [{ name: 'Bone Charm', type: 'misc', quantity: 1, rarity: 'uncommon' }] } },
+      { id: 'fc_combat3', type: 'combat', name: 'Hagravens', x: 40, y: 85, connections: ['fc_combat4', 'fc_rest2'], enemies: [simpleEnemy('hag1','Hagraven','humanoid',7,200,28,420,85)] },
+      { id: 'fc_elite1', type: 'elite', name: 'Forsworn Champion', x: 60, y: 20, connections: ['fc_event3', 'fc_boss'], enemies: [simpleEnemy('fe1','Forsworn Champion','humanoid',8,420,44,980,180)] },
+      { id: 'fc_event2', type: 'event', name: 'Blood Ritual', x: 60, y: 45, connections: ['fc_event3', 'fc_combat5'], eventText: 'A sacrifice is underway.', eventChoices: [{ label: 'Interrupt', outcome: 'reward', value: 80 }, { label: 'Watch', outcome: 'damage', value: 30 }] },
+      { id: 'fc_combat4', type: 'combat', name: 'Briarheart', x: 60, y: 65, connections: ['fc_combat5', 'fc_reward2'], enemies: [simpleEnemy('bh1','Forsworn Briarheart','humanoid',7,280,36,580,110)] },
+      { id: 'fc_rest2', type: 'rest', name: 'Prisoner Cage', x: 60, y: 90, connections: ['fc_reward2'], restAmount: { health: 25, stamina: 20 } },
+      { id: 'fc_event3', type: 'event', name: 'Hagraven Nest', x: 75, y: 25, connections: ['fc_boss'], eventText: 'Feathers and bones everywhere.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 100 }] },
+      { id: 'fc_combat5', type: 'combat', name: 'Elite Guards', x: 75, y: 50, connections: ['fc_boss'], enemies: [simpleEnemy('fg1','Forsworn Ravager','humanoid',6,180,22,340,65), simpleEnemy('fg2','Forsworn','humanoid',5,150,18,280,50)] },
+      { id: 'fc_reward2', type: 'reward', name: 'Headhunter Cache', x: 75, y: 75, connections: ['fc_boss'], rewards: { gold: 90, items: [{ name: 'Minor Health Potion', type: 'potion', quantity: 2, rarity: 'common' }] } },
       { id: 'fc_boss', type: 'boss', name: 'Briar Matron', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fboss','Briar Matron','humanoid',10,880,76,2200,420,true)] }
     ]
   }
-
 ];
 
 export const getDungeonById = (id: string) => DUNGEON_DEFINITIONS.find(d => d.id === id);

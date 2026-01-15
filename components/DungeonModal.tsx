@@ -13,9 +13,10 @@ interface DungeonModalProps {
   activeCharacterId: string | null;
   character: Character | null;
   inventory: InventoryItem[];
-  onApplyRewards: (rewards: { gold?: number; xp?: number; items?: any[] }) => void;
+  onApplyRewards: (rewards: { gold?: number; xp?: number; items?: any[]; transactionId?: string }) => void;
   onApplyBuff?: (effect: any) => void;
   onStartCombat?: (combatState: any) => void;
+  showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 // Node type icons and colors
@@ -99,7 +100,7 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition): { nodes: MapNode[]
 
 export const DungeonModal: React.FC<DungeonModalProps> = ({ 
   open, dungeonId, onClose, activeCharacterId, character, inventory, 
-  onApplyRewards, onApplyBuff, onStartCombat 
+  onApplyRewards, onApplyBuff, onStartCombat, showToast
 }) => {
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
   const [state, setState] = useState<DungeonState | null>(null);
@@ -331,7 +332,8 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     
     if (result === 'victory') {
       if (rewards) {
-        onApplyRewards({ gold: rewards.gold || 0, xp: rewards.xp || 0, items: rewards.items || [] });
+        // Pass through the transactionId from finalizeLoot to prevent creating duplicate transactions
+        onApplyRewards({ gold: rewards.gold || 0, xp: rewards.xp || 0, items: rewards.items || [], transactionId: rewards.transactionId });
         setState(prev => prev ? { 
           ...prev, 
           collectedRewards: { 
@@ -615,6 +617,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           inventory={inventory}
           initialCombatState={combatState}
           onCombatEnd={(result, rewards, finalVitals) => handleCombatEnd(result as any, rewards, finalVitals)}
+          showToast={showToast}
         />
       )}
 

@@ -879,8 +879,16 @@ export const executePlayerAction = (
           newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
           attackResolved = second;
         } else {
-          narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+          // Critical failure (nat 1) - deal self damage!
+          if (attackResolved.rollTier === 'fail') {
+            const selfDamage = Math.max(1, Math.floor(playerStats.weaponDamage * 0.25)); // 25% of weapon damage
+            newPlayerStats = { ...newPlayerStats, currentHealth: Math.max(0, newPlayerStats.currentHealth - selfDamage) };
+            narrative = `You roll ${attackResolved.natRoll} - CRITICAL FAILURE! Your ${ability.name} goes horribly wrong, dealing ${selfDamage} damage to yourself!`;
+            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: selfDamage, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+          } else {
+            narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
+            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+          }
           break;
         }
       }
