@@ -109,6 +109,8 @@ class AudioService {
   private musicAudio: HTMLAudioElement | null = null;
   private currentTrack: MusicTrack | null = null;
   private soundEffectCache: Map<string, HTMLAudioElement> = new Map();
+  // Cache availability of sound URLs to avoid repeated NotSupportedError spam
+  private soundAvailabilityCache: Map<string, boolean> = new Map();
   private isInitialized: boolean = false;
   private pendingTrack: MusicTrack | null = null; // Track to play after user interaction
   private lastRequestedTrack: MusicTrack | null = null; // Remember last track for re-enabling music
@@ -120,9 +122,11 @@ class AudioService {
   // Load configuration from localStorage
   private loadConfig(): AudioConfig {
     try {
-      const saved = localStorage.getItem('aetherius:audioConfig');
-      if (saved) {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+      if (typeof localStorage !== 'undefined' && typeof (localStorage as any).getItem === 'function') {
+        const saved = localStorage.getItem('aetherius:audioConfig');
+        if (saved) {
+          return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+        }
       }
     } catch (e) {
       console.warn('Failed to load audio config:', e);
@@ -133,7 +137,9 @@ class AudioService {
   // Save configuration to localStorage
   private saveConfig(): void {
     try {
-      localStorage.setItem('aetherius:audioConfig', JSON.stringify(this.config));
+      if (typeof localStorage !== 'undefined' && typeof (localStorage as any).setItem === 'function') {
+        localStorage.setItem('aetherius:audioConfig', JSON.stringify(this.config));
+      }
     } catch (e) {
       console.warn('Failed to save audio config:', e);
     }
@@ -170,16 +176,33 @@ class AudioService {
     }
 
     try {
+      // If we previously determined the audio URL is unavailable, skip attempts
+      const cachedAvailable = this.soundAvailabilityCache.get(path);
+      if (cachedAvailable === false) {
+        console.debug(`🔇 Skipping unavailable sound (cached): ${path}`);
+        return;
+      }
+
       let audio = this.soundEffectCache.get(path);
       if (!audio) {
         audio = new Audio(path);
         this.soundEffectCache.set(path, audio);
       }
-      
+
       audio.volume = this.config.soundEffectsVolume;
       audio.currentTime = 0;
       audio.play().catch(e => {
-        console.warn(`Failed to play sound effect "${effect}":`, e);
+        // Provide clearer log and avoid repeating the same failing attempts
+        console.warn(`Failed to play sound effect "${effect}" (${path}):`, e);
+        try {
+          const msg = (e && e.message) ? e.message : String(e);
+          if (e && (e.name === 'NotSupportedError' || /no supported source/i.test(msg) || /not supported/i.test(msg))) {
+            this.soundAvailabilityCache.set(path, false);
+            console.debug(`Marked sound as unavailable: ${path}`);
+          }
+        } catch (inner) {
+          // ignore cache errors
+        }
       });
     } catch (e) {
       console.warn(`Error playing sound effect "${effect}":`, e);

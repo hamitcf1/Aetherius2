@@ -99,6 +99,41 @@ export const saveCharacter = async (uid: string, character: Character): Promise<
   }
 };
 
+// Retry/backoff wrapper around saveCharacter for critical operations (e.g., applying combat rewards)
+export const saveCharacterWithRetry = async (
+  uid: string,
+  character: Character,
+  options: { retries?: number; baseDelayMs?: number } = {}
+): Promise<void> => {
+  const retries = typeof options.retries === 'number' ? options.retries : 3;
+  const baseDelay = typeof options.baseDelayMs === 'number' ? options.baseDelayMs : 400;
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  let attempt = 0;
+  let lastErr: any = null;
+  while (attempt <= retries) {
+    try {
+      await saveCharacter(uid, character);
+      return;
+    } catch (e) {
+      lastErr = e;
+      // If offline, throw to allow caller to fallback to offline queue
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('Offline: queued for later');
+      }
+      // Exponential backoff with jitter
+      const delay = Math.round(baseDelay * Math.pow(2, attempt) * (0.6 + Math.random() * 0.8));
+      console.warn(`saveCharacterWithRetry attempt ${attempt + 1} failed, retrying in ${delay}ms`, e);
+      await sleep(delay);
+      attempt++;
+    }
+  }
+
+  console.error('saveCharacterWithRetry exhausted retries:', lastErr);
+  throw lastErr;
+};
+
 export const loadCharacter = async (uid: string, characterId: string): Promise<Character | null> => {
   try {
     const db = getDb();

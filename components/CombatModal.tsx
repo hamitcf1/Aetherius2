@@ -468,7 +468,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setCombatState(newState);
         // Persist updated inventory snapshot
         onInventoryUpdate && onInventoryUpdate(updatedInventory);
-        showToast?.(`Loot collected: ${grantedItems.map(i => i.name).join(', ')}`, 'success');
+        // Show consolidated loot toast: items (if any) and explicit XP/gold gains
+        if ((grantedItems && grantedItems.length) || (grantedGold && grantedGold > 0) || (grantedXp && grantedXp > 0)) {
+          const parts: string[] = [];
+          if (grantedItems && grantedItems.length) parts.push(`Items: ${grantedItems.map(i => i.name).join(', ')}`);
+          if (grantedXp && grantedXp > 0) parts.push(`${grantedXp} XP`);
+          if (grantedGold && grantedGold > 0) parts.push(`${grantedGold} gold`);
+          showToast?.(`Loot collected: ${parts.join(' — ')}`, 'success');
+        } else {
+          showToast?.('Loot collected: nothing found.', 'info');
+        }
 
         // Build a structured combat result and notify parent immediately
         const combatResult = {

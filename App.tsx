@@ -116,7 +116,7 @@ import type { ShopItem } from './components/ShopModal';
 import { getDefaultSlotForItem } from './components/EquipmentHUD';
 import BonfireMenu from './components/BonfireMenu';
 import type { RestOptions } from './components/SurvivalModals';
-import { filterDuplicateTransactions } from './services/transactionLedger';
+import { filterDuplicateTransactions, getTransactionLedger } from './services/transactionLedger';
 import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
@@ -693,6 +693,12 @@ const App: React.FC = () => {
   // Expose a convenience on window for quick access in the console (admin/debug)
   useEffect(() => {
     (window as any).openCompanions = openCompanions;
+    try {
+      // Expose transaction ledger accessor for debugging (temporary)
+      (window as any).getTransactionLedger = () => getTransactionLedger();
+    } catch (e) {
+      // ignore
+    }
     return () => { try { delete (window as any).openCompanions; } catch {} };
   }, [openCompanions]);
 
@@ -741,6 +747,19 @@ const App: React.FC = () => {
       } catch { /* ignore */ }
     }
   }, [currentUser?.uid, currentCharacterId]);
+
+  // Ensure TransactionLedger knows which character is active so it can record transactions
+  useEffect(() => {
+    import('./services/transactionLedger').then(m => {
+      try {
+        m.getTransactionLedger().setCharacter(currentCharacterId);
+      } catch (e) {
+        console.warn('Failed to set transaction ledger character:', e);
+      }
+    }).catch(e => {
+      // Import can fail in test envs; ignore silently
+    });
+  }, [currentCharacterId]);
 
   // Persist activeTab to localStorage
   useEffect(() => {
@@ -1040,12 +1059,32 @@ const App: React.FC = () => {
             setOnboardingOpen(isFeatureEnabled('onboarding') && isNewAccount && !remoteDone);
           }
 
-          // Normalize older saves to include new survival/time fields
+          // Normalize older saves to include new survival/time fields AND fix legacy XP/level mismatch
           const normalizedCharacters = (userCharacters || []).map((c: any) => {
             const time = c?.time && typeof c.time === 'object' ? c.time : INITIAL_CHARACTER_TEMPLATE.time;
             const needs = c?.needs && typeof c.needs === 'object' ? c.needs : INITIAL_CHARACTER_TEMPLATE.needs;
+            
+            // --- XP/Level normalization for legacy characters ---
+            // Old system: level was manually set by player (not tied to XP)
+            // New system: level is derived from total XP
+            // Fix: If character's XP is lower than what's required to BE their current level,
+            //      normalize XP up to match the level (preserving the player's progression)
+            const currentLevel = Math.max(1, c?.level || 1);
+            const currentXP = c?.experience || 0;
+            const xpRequiredForCurrentLevel = getTotalXPForLevel(currentLevel);
+            let normalizedXP = currentXP;
+            let xpWasNormalized = false;
+            
+            if (currentXP < xpRequiredForCurrentLevel) {
+              // Legacy character: XP doesn't match level. Normalize XP to match level baseline.
+              normalizedXP = xpRequiredForCurrentLevel;
+              xpWasNormalized = true;
+              console.log(`[XP Normalization] Character "${c.name}" (level ${currentLevel}) had ${currentXP} XP but needs ${xpRequiredForCurrentLevel} XP to be level ${currentLevel}. Normalized XP to ${normalizedXP}.`);
+            }
+            
             const next: Character = {
               ...c,
+              experience: normalizedXP,
               time: {
                 day: Math.max(1, Number(time?.day || 1)),
                 hour: clamp(Number(time?.hour || 0), 0, 23),
@@ -1057,7 +1096,7 @@ const App: React.FC = () => {
                 fatigue: clamp(Number(needs?.fatigue ?? 0), 0, 100),
               },
             };
-            if (!c?.time || !c?.needs) {
+            if (!c?.time || !c?.needs || xpWasNormalized) {
               setDirtyEntities(prev => new Set([...prev, next.id]));
             }
             return next;
@@ -2664,6 +2703,11 @@ const App: React.FC = () => {
         if (wasFiltered) {
           console.log(`[TransactionLedger] Filtered duplicate update: ${reason}`);
         }
+        // Debug: log before/after so we can see if xpChange was removed
+        try {
+          console.log('[App] Before filtering:', { transactionId: updates.transactionId, xpChange: updates.xpChange, goldChange: updates.goldChange });
+          console.log('[App] After filtering:', { xpChange: (filteredUpdate as any).xpChange, goldChange: (filteredUpdate as any).goldChange });
+        } catch (e) {}
         processedUpdates = filteredUpdate;
       }
 
@@ -3224,11 +3268,16 @@ const App: React.FC = () => {
 
       // 6. Gold
       if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
-         setCharacters(prev => prev.map(c => {
-              if (c.id !== currentCharacterId) return c;
-              setDirtyEntities(prev => new Set([...prev, c.id]));
-              return { ...c, gold: (c.gold || 0) + (updates.goldChange || 0) };
-         }));
+         if (!updates._alreadyAppliedLocally) {
+           setCharacters(prev => prev.map(c => {
+                if (c.id !== currentCharacterId) return c;
+                setDirtyEntities(prev => new Set([...prev, c.id]));
+                return { ...c, gold: (c.gold || 0) + (updates.goldChange || 0) };
+           }));
+         } else {
+           // Already applied locally by caller (defensive apply); still mark dirty for persistence
+           setDirtyEntities(prev => new Set([...prev, currentCharacterId!]));
+         }
       }
 
       // 6b. XP with Level-Up Check (using escalating XP requirements)
@@ -3239,7 +3288,9 @@ const App: React.FC = () => {
             if (c.id !== currentCharacterId) return c;
             setDirtyEntities(prev => new Set([...prev, c.id]));
 
-            const newXP = (c.experience || 0) + (updates.xpChange || 0);
+            // If caller already applied XP locally, avoid double-adding
+            const delta = updates._alreadyAppliedLocally ? 0 : (updates.xpChange || 0);
+            const newXP = (c.experience || 0) + delta;
             const currentLevel = c.level || 1;
             const xpForNextLevel = getXPForNextLevel(currentLevel);
             const xpProgress = getXPProgress(newXP, currentLevel);
@@ -4258,16 +4309,39 @@ const App: React.FC = () => {
             onCombatEnd={(result, rewards, finalVitals, timeAdvanceMinutes, combatResult) => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
+              
+              // Debug log to verify rewards are being received
+              console.log('[App.onCombatEnd] Combat ended:', { result, rewards, xp: rewards?.xp, gold: rewards?.gold });
+              
               if (result === 'victory' && rewards) {
+                // Debug: log current in-memory character before applying defensive local-apply
+                try {
+                  const cid = currentCharacterId;
+                  const before = (window as any).app?.characters?.find((c: any) => c.id === cid);
+                  console.log('[App.onCombatEnd] Character before local-apply:', cid, before && { experience: before.experience, gold: before.gold });
+                } catch (e) {}
                 // NOTE: Loot items are already applied via onInventoryUpdate during finalizeLoot
                 // Do NOT pass newItems here to avoid duplication
-                handleGameUpdate({
+                  // Defensive local apply: update character state immediately so HUD reflects rewards
+                  setCharacters(prev => prev.map(c => {
+                    if (c.id !== currentCharacterId) return c;
+                    return {
+                      ...c,
+                      gold: (c.gold || 0) + ((rewards as any).gold || 0),
+                      experience: (c.experience || 0) + ((rewards as any).xp || 0),
+                      completedCombats: Array.from(new Set([...(c.completedCombats || []), (rewards as any).combatId].filter(Boolean)))
+                    } as Character;
+                  }));
+
+                  // Now call handleGameUpdate to record transaction and persist; mark as already applied locally
+                  handleGameUpdate({
                   narrative: {
                     title: 'Victory!',
                     content: `You have emerged victorious from combat! Gained ${rewards.xp} experience${rewards.gold > 0 ? ` and ${rewards.gold} gold` : ''}. Loot has been collected.`
                   },
-                  xpChange: rewards.xp,
-                  goldChange: rewards.gold,
+                    xpChange: rewards.xp,
+                    goldChange: rewards.gold,
+                    _alreadyAppliedLocally: true,
                   // newItems intentionally omitted - already applied via onInventoryUpdate to prevent duplication
                   transactionId: (rewards as any).transactionId,
                   characterUpdates: {
@@ -4280,6 +4354,21 @@ const App: React.FC = () => {
                   } : undefined,
                   timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
                 });
+
+                // Debug: after a short delay, print the in-memory character snapshot and recent ledger entries
+                setTimeout(() => {
+                  try {
+                    const cid = currentCharacterId;
+                    const after = (window as any).app?.characters?.find((c: any) => c.id === cid);
+                    console.log('[App.onCombatEnd] Character after local-apply+handleGameUpdate:', cid, after && { experience: after.experience, gold: after.gold, pendingLevelUp: (window as any).app?.pendingLevelUp || null });
+                    try {
+                      const ledger = (window as any).getTransactionLedger && (window as any).getTransactionLedger();
+                      if (ledger && typeof ledger.getRecentTransactions === 'function') {
+                        console.log('[App.onCombatEnd] Ledger recent:', ledger.getRecentTransactions(10).map((t: any) => ({ id: t.transactionId || t.id, xp: t.xpAmount, gold: t.goldAmount, timestamp: t.timestamp })));
+                      }
+                    } catch (e) {}
+                  } catch (e) {}
+                }, 120);
 
                 // Apply companion XP if provided
                 if ((rewards as any).companionXp && Array.isArray((rewards as any).companionXp)) {
@@ -4294,6 +4383,50 @@ const App: React.FC = () => {
                   });
                 }
 
+                // Telemetry: record reward application with identifiers
+                try {
+                  const telemetry = {
+                    uid: currentUser?.uid || null,
+                    charId: currentCharacterId || null,
+                    combatId: (rewards as any).combatId || null,
+                    transactionId: (rewards as any).transactionId || null,
+                    gold: (rewards as any).gold || 0,
+                    xp: (rewards as any).xp || 0,
+                    timestamp: Date.now()
+                  };
+                  // Lightweight log for telemetry/debug (use promise-style import to avoid top-level await)
+                  import('./services/logger').then(m => m.log.info('reward_applied', telemetry)).catch(() => {});
+                } catch (e) {
+                  console.warn('Failed to log reward telemetry:', e);
+                }
+
+                // Ensure the character is persisted immediately for critical combat rewards
+                (async () => {
+                  try {
+                    if (!currentUser?.uid || !activeCharacter) return;
+
+                    const uid = currentUser.uid;
+                    // Construct minimal updated character snapshot to persist
+                    const updatedChar = {
+                      ...activeCharacter,
+                      gold: (activeCharacter.gold || 0) + ((rewards as any).gold || 0),
+                      experience: (activeCharacter.experience || 0) + ((rewards as any).xp || 0),
+                      completedCombats: Array.from(new Set([...(activeCharacter.completedCombats || []), (rewards as any).combatId].filter(Boolean)))
+                    } as Character;
+
+                    // Use the retry/backoff helper to persist critical changes
+                    const { saveCharacterWithRetry } = await import('./services/firestore');
+                    await saveCharacterWithRetry(uid, updatedChar, { retries: 3, baseDelayMs: 500 });
+                    (await import('./services/logger')).log.info('reward_persisted', { uid: currentUser.uid, charId: currentCharacterId, transactionId: (rewards as any).transactionId });
+                  } catch (e) {
+                    (await import('./services/logger')).log.error('reward_persist_error', { err: String(e), uid: currentUser?.uid, charId: currentCharacterId, transactionId: (rewards as any).transactionId });
+                    // If save failed due to offline, ensure it's queued for sync
+                    if (!navigator.onLine && currentUser?.uid && activeCharacter) {
+                      queueOfflineChange({ type: 'character', action: 'save', data: { ...activeCharacter } });
+                      (await import('./services/logger')).log.info('reward_queued_offline', { uid: currentUser.uid, charId: currentCharacterId });
+                    }
+                  }
+                })();
               } else if (result === 'defeat') {
                 handleGameUpdate({
                   narrative: {

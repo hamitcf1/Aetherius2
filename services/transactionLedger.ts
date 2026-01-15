@@ -186,6 +186,11 @@ export function filterDuplicateTransactions(
 } {
   const ledger = getTransactionLedger();
 
+  // Debug: log inputs for easier tracing of filtered XP/gold issues
+  try {
+    console.log('[TransactionLedger] filterDuplicateTransactions input:', { transactionId: update.transactionId, goldChange: update.goldChange, xpChange: update.xpChange, isPreview: update.isPreview, newItems: update.newItems?.length });
+  } catch (e) {}
+
   // Check gold
   const goldRes = ledger.shouldApplyGoldChange(update.goldChange, update.transactionId, update.isPreview);
   // Check xp
@@ -231,6 +236,16 @@ export function filterDuplicateTransactions(
       xpAmount: update.xpChange,
       items: recordedItems
     });
+  }
+
+  if (wasFiltered) {
+    try {
+      console.warn('[TransactionLedger] update filtered:', { transactionId: update.transactionId, reason: reasons.join(','), filteredKeys: Object.keys(filtered) });
+      // Also show recent transactions for context
+      console.log('[TransactionLedger] recentTransactions:', ledger.getRecentTransactions(5));
+    } catch (e) {}
+  } else {
+    try { console.log('[TransactionLedger] transaction recorded:', update.transactionId); } catch (e) {}
   }
 
   return {

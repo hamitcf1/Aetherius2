@@ -141,6 +141,9 @@ export const finalizeLoot = (
   const grantedXp = Math.max(0, newState.pendingRewards?.xp || 0);
   const grantedGold = Math.max(0, newState.pendingRewards?.gold || 0);
 
+  // Debug log to verify rewards are being read
+  console.log('[finalizeLoot] Granting rewards:', { grantedXp, grantedGold, pendingRewards: newState.pendingRewards });
+
   // Compute companion XP distribution from defeated enemies' XP, split evenly among participating companions
   const defeated = (state.enemies || []).filter(e => e.currentHealth <= 0);
   const totalEnemyXp = defeated.reduce((s, e) => s + computeEnemyXP(e), 0);

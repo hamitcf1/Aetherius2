@@ -1687,9 +1687,14 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
     // Move into loot phase. Do not grant rewards yet — collect possible drops and wait for player selection.
     newState.active = false;
     newState.lootPending = true;
+    // Mark result as victory so the CombatModal can trigger reward finalization
+    newState.result = 'victory';
 
     const xp = newState.enemies.reduce((sum, e) => sum + (e.xpReward || 0), 0);
     const gold = newState.enemies.reduce((sum, e) => sum + (e.goldReward || 0), 0);
+
+    // Debug log to verify rewards are being calculated
+    console.log('[checkCombatEnd] Victory! Calculated rewards:', { xp, gold, enemyCount: newState.enemies.length });
 
     // Create per-enemy loot snapshots based on drop chances
     const pendingLoot: typeof newState.pendingLoot = [];
