@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy, Character, InventoryItem } from '../types';
 import { getDungeonById } from '../data/dungeonDefinitions';
@@ -109,6 +109,11 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   const [showBossConfirm, setShowBossConfirm] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [eventChoice, setEventChoice] = useState<DungeonNode | null>(null);
+  
+  // Refs for node positions (to draw connections accurately)
+  const nodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const [nodePositions, setNodePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
 
   // Generate the Slay the Spire style map
   const mapData = useMemo(() => dungeon ? generateSlayTheSpireMap(dungeon) : null, [dungeon]);
@@ -145,7 +150,46 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     setSelectedNodeId(null);
     setCombatState(null);
     setEventChoice(null);
+    // Reset node refs
+    nodeRefs.current.clear();
+    setNodePositions(new Map());
   }, [open, dungeon]);
+
+  // Calculate node positions after render for accurate connection lines
+  useEffect(() => {
+    if (!mapData || !mapContainerRef.current) return;
+    
+    const updatePositions = () => {
+      const container = mapContainerRef.current;
+      if (!container) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      const newPositions = new Map<string, { x: number; y: number }>();
+      
+      nodeRefs.current.forEach((el, nodeId) => {
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          // Calculate center of node relative to container
+          newPositions.set(nodeId, {
+            x: rect.left - containerRect.left + rect.width / 2,
+            y: rect.top - containerRect.top + rect.height / 2,
+          });
+        }
+      });
+      
+      setNodePositions(newPositions);
+    };
+    
+    // Wait for layout to complete
+    const timer = setTimeout(updatePositions, 100);
+    // Also update on resize
+    window.addEventListener('resize', updatePositions);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updatePositions);
+    };
+  }, [mapData, state?.currentNodeId, state?.completedNodes]);
 
   const getNodeById = useCallback((id?: string) => dungeon?.nodes.find(n => n.id === id) as DungeonNode | undefined, [dungeon]);
 
@@ -379,59 +423,66 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     const isSelected = selectedNodeId === mapNode.id;
 
     return (
-      <button
+      <div
         key={mapNode.id}
-        onClick={() => isAccessible && handleSelectNode(mapNode.id)}
-        disabled={!isAccessible && !isCurrent}
-        className={`
-          w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
-          ${style.bgColor} ${style.color}
-          ${isCurrent ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-skyrim-dark scale-110' : ''}
-          ${isCompleted ? 'opacity-50' : ''}
-          ${isSelected ? 'ring-2 ring-skyrim-gold' : ''}
-          ${isAccessible && !isCompleted ? 'hover:scale-110 cursor-pointer' : ''}
-          ${!isAccessible && !isCurrent ? 'opacity-30 cursor-not-allowed' : ''}
-        `}
-        title={`${node.name} (${style.label})`}
+        ref={(el) => { nodeRefs.current.set(mapNode.id, el); }}
+        className="relative z-10"
       >
-        {isCompleted ? <CheckCircle size={18} className="text-green-400" /> : style.icon}
-      </button>
+        <button
+          onClick={() => isAccessible && handleSelectNode(mapNode.id)}
+          disabled={!isAccessible && !isCurrent}
+          className={`
+            w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200
+            ${style.bgColor} ${style.color}
+            ${isCurrent ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-skyrim-dark scale-110' : ''}
+            ${isCompleted ? 'opacity-50' : ''}
+            ${isSelected ? 'ring-2 ring-skyrim-gold' : ''}
+            ${isAccessible && !isCompleted ? 'hover:scale-110 cursor-pointer' : ''}
+            ${!isAccessible && !isCurrent ? 'opacity-30 cursor-not-allowed' : ''}
+          `}
+          title={`${node.name} (${style.label})`}
+        >
+          {isCompleted ? <CheckCircle size={18} className="text-green-400" /> : style.icon}
+        </button>
+      </div>
     );
   };
 
-  // Render connections between nodes
+  // Render connections between nodes using actual DOM positions
   const renderConnections = () => {
-    if (!mapData || !state) return null;
+    if (!mapData || !state || nodePositions.size === 0) return null;
     
-    const nodePositions = new Map<string, { row: number; col: number }>();
-    mapData.nodes.forEach(n => nodePositions.set(n.id, { row: n.row, col: n.col }));
-
     const connections: React.ReactNode[] = [];
+    const rendered = new Set<string>(); // Avoid duplicate lines
+    
     mapData.nodes.forEach(node => {
       const fromPos = nodePositions.get(node.id);
       if (!fromPos) return;
       
       node.connections.forEach(toId => {
+        // Create a consistent key to avoid duplicate lines (A->B and B->A)
+        const lineKey = [node.id, toId].sort().join('-');
+        if (rendered.has(lineKey)) return;
+        rendered.add(lineKey);
+        
         const toPos = nodePositions.get(toId);
         if (!toPos) return;
 
-        const fromX = (fromPos.col + 0.5) * (100 / (mapData.cols + 1));
-        const fromY = (fromPos.row + 0.5) * (100 / mapData.rows);
-        const toX = (toPos.col + 0.5) * (100 / (mapData.cols + 1));
-        const toY = (toPos.row + 0.5) * (100 / mapData.rows);
-
-        const isActive = state.currentNodeId === node.id || state.completedNodes.includes(node.id);
+        const isFromActive = state.currentNodeId === node.id || state.completedNodes.includes(node.id);
+        const isToActive = state.currentNodeId === toId || state.completedNodes.includes(toId);
+        const isActive = isFromActive || isToActive;
+        const isFullyActive = isFromActive && isToActive;
         
         connections.push(
           <line
             key={`${node.id}-${toId}`}
-            x1={`${fromX}%`}
-            y1={`${fromY}%`}
-            x2={`${toX}%`}
-            y2={`${toY}%`}
-            stroke={isActive ? '#d4a44a' : '#444'}
+            x1={fromPos.x}
+            y1={fromPos.y}
+            x2={toPos.x}
+            y2={toPos.y}
+            stroke={isFullyActive ? '#d4a44a' : isActive ? '#8b7635' : '#444'}
             strokeWidth={isActive ? 3 : 2}
-            strokeDasharray={isActive ? '0' : '5,5'}
+            strokeDasharray={isFullyActive ? '0' : '8,4'}
             className="transition-all duration-300"
           />
         );
@@ -439,12 +490,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     });
 
     return (
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
-        <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#d4a44a" />
-          </marker>
-        </defs>
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
         {connections}
       </svg>
     );
@@ -478,7 +524,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
         <div className="flex flex-1 overflow-hidden">
           {/* Map Area */}
-          <div className="flex-1 relative p-4 overflow-auto">
+          <div className="flex-1 relative p-4 overflow-auto" ref={mapContainerRef}>
             {/* Connection lines */}
             {renderConnections()}
             

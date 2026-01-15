@@ -648,25 +648,36 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                     {/* XP Progress Bar */}
                     {(() => {
                       const xpData = getXPProgress(character.experience || 0, character.level);
+                      const percentage = Math.max(0, Math.min(100, xpData.percentage || 0));
                       return (
                         <>
-                          <div className="relative w-48 sm:w-64 h-3 bg-black rounded-full overflow-hidden border border-skyrim-border/50">
+                          <div className="relative w-48 sm:w-64 h-3 bg-gray-900 rounded-full overflow-hidden border border-skyrim-border/50">
                             <div 
-                              className="absolute top-0 left-0 h-full bg-gradient-to-r from-skyrim-gold/80 to-skyrim-gold transition-all duration-500 ease-out"
-                              style={{ width: `${xpData.percentage}%` }}
+                              className="absolute top-0 left-0 h-full rounded-full"
+                              style={{ 
+                                width: `${percentage}%`,
+                                background: 'linear-gradient(to right, #b8860b, #ffd700)',
+                                minWidth: percentage > 0 ? '4px' : '0px'
+                              }}
                             />
                             {/* Glow effect */}
-                            <div 
-                              className="absolute top-0 left-0 h-full bg-skyrim-gold/30 blur-sm transition-all duration-500"
-                              style={{ width: `${xpData.percentage}%` }}
-                            />
+                            {percentage > 0 && (
+                              <div 
+                                className="absolute top-0 left-0 h-full rounded-full blur-sm"
+                                style={{ 
+                                  width: `${percentage}%`,
+                                  background: 'rgba(212, 164, 74, 0.4)',
+                                  minWidth: '4px'
+                                }}
+                              />
+                            )}
                           </div>
                           <div className="flex items-center justify-between mt-1">
                             <span className="text-xs text-skyrim-gold font-semibold">
                               {xpData.current.toLocaleString()} / {xpData.required.toLocaleString()} XP
                             </span>
                             <span className="text-[10px] text-gray-500">
-                              {Math.round(xpData.percentage)}%
+                              {Math.round(percentage)}%
                             </span>
                           </div>
                           <div className="text-[10px] text-gray-500 mt-0.5">

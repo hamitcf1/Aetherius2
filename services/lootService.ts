@@ -152,6 +152,9 @@ export const finalizeLoot = (
   }
 
   // Mark rewards applied and persist transaction id so external systems can deduplicate
+  // NOTE: We generate a transaction ID but do NOT record it here.
+  // The caller (App.tsx handleGameUpdate) will record it AFTER successfully applying the rewards.
+  // This prevents the bug where rewards were filtered out as "duplicate" before being applied.
   const txnId = getTransactionLedger().generateTransactionId();
   newState.rewards = { xp: grantedXp, gold: grantedGold, items: grantedItems, transactionId: txnId, combatId: newState.id, companionXp };
   newState.result = 'victory';
@@ -161,12 +164,7 @@ export const finalizeLoot = (
   newState.pendingLoot = [];
   newState.pendingRewards = undefined;
 
-  // Record transaction to ledger so duplicate AI responses won't re-grant the same rewards
-  getTransactionLedger().recordTransaction(txnId, {
-    goldAmount: grantedGold,
-    xpAmount: grantedXp,
-    items: grantedItems.map(i => ({ name: i.name, quantity: i.quantity, added: true }))
-  });
+  // DO NOT record here - let the caller record after applying to prevent duplicate-filtering bug
 
   return { newState, updatedInventory, grantedXp, grantedGold, grantedItems };
 };
