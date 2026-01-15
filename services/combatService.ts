@@ -102,6 +102,19 @@ const shuffleArray = <T>(arr: T[]): T[] => {
   return shuffled;
 };
 
+// Helper: push a combat log entry only if it's not a duplicate of the immediate previous entry
+const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
+  state.combatLog = state.combatLog || [];
+  const last = state.combatLog[state.combatLog.length - 1];
+  // Consider entries duplicates if same turn, actor, narrative, and damage (ignoring timestamp)
+  if (!last || last.turn !== entry.turn || last.actor !== entry.actor || last.narrative !== entry.narrative || (last.damage !== undefined && entry.damage !== undefined && last.damage !== entry.damage)) {
+    state.combatLog.push(entry);
+  } else {
+    // Update timestamp of existing entry to the newest time
+    last.timestamp = entry.timestamp || Date.now();
+  }
+};
+
 // Dice helper: roll `count` d`sides`
 const rollDice = (count: number, sides: number) => {
   const rolls: number[] = [];
@@ -914,7 +927,7 @@ export const executePlayerAction = (
             target = { id: 'player', name: character?.name || 'you' } as any;
             targetIsAlly = false;
             narrative = `${ability.name} cannot heal ${oldTargetName} — applying to self instead.`;
-            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
           }
         }
       } else {
@@ -936,7 +949,7 @@ export const executePlayerAction = (
           target = { id: 'player', name: character?.name || 'you' } as any;
           targetIsAlly = false;
           narrative = `${ability.name} cannot heal ${oldTargetName} — applying to self instead.`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
         }
 
         // Compute heal amount
@@ -969,7 +982,7 @@ export const executePlayerAction = (
         }
 
         narrative = `You use ${ability.name} on ${target.name} and restore ${healAmount} health.`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: -healAmount, narrative, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: -healAmount, narrative, timestamp: Date.now() });
         break;
       }
 
@@ -1038,7 +1051,7 @@ export const executePlayerAction = (
           newState.abilityCooldowns[ability.id] = ability.cooldown;
         }
 
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
         break;
       }
 
@@ -1079,7 +1092,7 @@ export const executePlayerAction = (
         }
 
         narrative = `You use ${ability.name} on ${target.name}.${narrative}`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
         break;
       }
 
@@ -1096,7 +1109,7 @@ export const executePlayerAction = (
           // Reroll once automatically
           const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
           // Log both rolls (first failed/missed, second result)
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
           attackResolved = second;
         } else {
           // Critical failure (nat 1) - deal self damage!
@@ -1104,10 +1117,10 @@ export const executePlayerAction = (
             const selfDamage = Math.max(1, Math.floor(playerStats.weaponDamage * 0.25)); // 25% of weapon damage
             newPlayerStats = { ...newPlayerStats, currentHealth: Math.max(0, newPlayerStats.currentHealth - selfDamage) };
             narrative = `You roll ${attackResolved.natRoll} - CRITICAL FAILURE! Your ${ability.name} goes horribly wrong, dealing ${selfDamage} damage to yourself!`;
-            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: selfDamage, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: selfDamage, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
           } else {
             narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
-            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
           }
           break;
         }
@@ -1255,7 +1268,7 @@ export const executePlayerAction = (
 
       // Record the applied damage in combat log (after modifiers & lifesteal applied)
       try {
-        newState.combatLog.push({
+        pushCombatLogUnique(newState, {
           turn: newState.turn,
           actor: 'player',
           action: ability.name,
@@ -1271,7 +1284,7 @@ export const executePlayerAction = (
       } catch (e) {
         // if combatLog isn't initialized for some reason, create it
         newState.combatLog = newState.combatLog || [];
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: appliedDamage, isCrit: isCrit, nat: attackResolved.natRoll, hitLocation, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: appliedDamage, isCrit: isCrit, nat: attackResolved.natRoll, hitLocation, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
       }
       
       if (enemyIndex >= 0 && newState.enemies[enemyIndex].currentHealth <= 0) {
@@ -1367,7 +1380,7 @@ export const executePlayerAction = (
       }
 
       // Log the action
-      newState.combatLog.push({
+      pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: ability.name,
@@ -1387,7 +1400,7 @@ export const executePlayerAction = (
       narrative = 'You raise your guard, reducing incoming damage by 50% this turn.';
       newState.playerActionCounts = newState.playerActionCounts || {};
       newState.playerActionCounts['defend'] = (newState.playerActionCounts['defend'] || 0) + 1;
-      newState.combatLog.push({
+      pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: 'defend',
@@ -1411,7 +1424,7 @@ export const executePlayerAction = (
       } else {
         narrative = 'You failed to escape! The enemies block your path.';
       }
-      newState.combatLog.push({
+      pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: 'flee',
@@ -1429,7 +1442,7 @@ export const executePlayerAction = (
       newState.result = 'surrendered';
       newState.active = false;
       narrative = 'You lay down your arms and surrender...';
-      newState.combatLog.push({
+      pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: 'surrender',
@@ -1466,7 +1479,7 @@ export const executePlayerAction = (
         const amount = resolved.amount ?? item.damage ?? 0;
         if (!resolved.stat || !amount || amount <= 0) {
           narrative = `The ${item.name} has no clear effect.`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
           break;
         }
 
@@ -1475,12 +1488,12 @@ export const executePlayerAction = (
           newPlayerStats = mod.newPlayerStats;
           usedItem = { ...item, quantity: item.quantity - 1 };
           narrative = `You use ${item.name} and recover ${mod.actual} ${resolved.stat}.`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative, usedItem };
         }
 
         narrative = `The ${item.name} had no effect.`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
         break;
       }
 
@@ -1498,18 +1511,18 @@ export const executePlayerAction = (
           newState.survivalDelta.thirst = (newState.survivalDelta.thirst || 0) - (nutrition.thirstReduction || 0);
 
           narrative = `You consume ${item.name} and recover ${actualHeal} health.`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative, usedItem };
         }
         narrative = `You cannot use ${item.name} right now.`;
-        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
         break;
       }
 
       narrative = `You cannot use ${item.name} in combat.`;
       newState.playerActionCounts = newState.playerActionCounts || {};
       newState.playerActionCounts['use_item'] = (newState.playerActionCounts['use_item'] || 0) + 1;
-      newState.combatLog.push({ turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
       break;
     }
   }
@@ -1549,7 +1562,7 @@ export const executeEnemyTurn = (
         actor.currentHealth = Math.max(0, actor.currentHealth - dotDamage);
       } else if (ae.effect.type === 'stun' && ae.turnsRemaining > 0) {
         // Actor is stunned; record it and log
-        newState.combatLog.push({
+        pushCombatLogUnique(newState, {
           turn: newState.turn,
           actor: actor.name,
           action: 'stunned',
@@ -1676,7 +1689,7 @@ export const executeEnemyTurn = (
       newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
       narrativeLocal += ` ${summonName} joins the fight for ${turns} turns!`;
     }
-    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
     return { newState, newPlayerStats, narrative: narrativeLocal };
   }
 
@@ -1692,7 +1705,7 @@ export const executeEnemyTurn = (
     if (actor.currentHealth < actor.maxHealth) {
       const actualHeal = Math.min(healAmount, actor.maxHealth - actor.currentHealth);
       actor.currentHealth = Math.min(actor.maxHealth, (actor.currentHealth || 0) + actualHeal);
-      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: -actualHeal, narrative: `${actor.name} heals for ${actualHeal} health.`, timestamp: Date.now() });
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: -actualHeal, narrative: `${actor.name} heals for ${actualHeal} health.`, timestamp: Date.now() });
       return { newState, newPlayerStats, narrative: `${actor.name} heals for ${actualHeal} health.` };
     } else {
       // Heal an allied companion if present
@@ -1708,7 +1721,7 @@ export const executeEnemyTurn = (
             newState.enemies = [ ...(newState.enemies || []) ];
             newState.enemies[allyIndex] = { ...targetAlly, currentHealth: Math.min(targetAlly.maxHealth, (targetAlly.currentHealth || 0) + healAmount) } as any;
           }
-          newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: targetAlly.name, damage: -healAmount, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.`, timestamp: Date.now() });
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: targetAlly.name, damage: -healAmount, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.`, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.` };
         }
       }
@@ -1729,7 +1742,7 @@ export const executeEnemyTurn = (
         }
       });
     }
-    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: 0, narrative: narrativeLocal, timestamp: Date.now() });
     return { newState, newPlayerStats, narrative: narrativeLocal };
   }
 
@@ -1790,7 +1803,7 @@ export const executeEnemyTurn = (
     const target = (newState.enemies || []).find(e => e.currentHealth > 0);
     if (!target) {
       const noTargetNarrative = `${actor.name} has no valid targets.`;
-      newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: 'wait', narrative: noTargetNarrative, timestamp: Date.now() });
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: 'wait', narrative: noTargetNarrative, timestamp: Date.now() });
       return { newState, newPlayerStats, narrative: noTargetNarrative };
     }
 
@@ -1806,7 +1819,7 @@ export const executeEnemyTurn = (
       if (target.currentHealth <= 0) narrativeLocal += ` ${target.name} is defeated!`;
     }
 
-    newState.combatLog.push({ turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: target.name, damage: resolved.hit ? appliedDamage : 0, narrative: narrativeLocal, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: target.name, damage: resolved.hit ? appliedDamage : 0, narrative: narrativeLocal, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
 
     // If all enemies defeated, mark victory
     const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);
@@ -1873,7 +1886,7 @@ export const executeEnemyTurn = (
     }
 
     // Log and return
-    newState.combatLog.push({
+    pushCombatLogUnique(newState, {
       turn: newState.turn,
       actor: actor.name,
       action: chosenAbility.name,
@@ -1921,7 +1934,7 @@ export const executeEnemyTurn = (
   }
 
   // Log
-  newState.combatLog.push({
+  pushCombatLogUnique(newState, {
     turn: newState.turn,
     actor: actor.name,
     action: chosenAbility.name,
@@ -1965,7 +1978,7 @@ export const executeCompanionAction = (
   const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: target.armor, critChance: 5, natRoll });
   if (!resolved.hit) {
     const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
-    newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
     return { newState, narrative };
   }
   // Compute damage
@@ -1979,7 +1992,7 @@ export const executeCompanionAction = (
   }
 
   let narrative = `${ally.name} uses ${ability.name} and deals ${applied} damage to ${target.name}.`;
-  newState.combatLog.push({ turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: applied, narrative, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now(), auto: !!isAuto });
+  pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: applied, narrative, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now(), auto: !!isAuto });
 
   // Check victory
   const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);
@@ -2040,7 +2053,7 @@ export const advanceTurn = (state: CombatState): CombatState => {
       if ((ally as any).companionMeta && (ally as any).companionMeta.decayActive) {
         const damage = Math.max(1, Math.floor((ally.currentHealth || 0) * 0.5));
         ally.currentHealth = Math.max(0, (ally.currentHealth || 0) - damage);
-        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_decay', target: ally.name, damage, narrative: `${ally.name} is decaying and loses ${damage} health.`, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_decay', target: ally.name, damage, narrative: `${ally.name} is decaying and loses ${damage} health.`, timestamp: Date.now() });
       }
     });
 
@@ -2063,7 +2076,7 @@ export const advanceTurn = (state: CombatState): CombatState => {
       // Keep only pending summons that still have player turns remaining (preserve remaining player-turn counters)
       newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: (s as any).playerTurnsRemaining } as any));
       if (newlyExpired.length) {
-        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
       }
     }
   }
@@ -2137,7 +2150,7 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
             newState.pendingRewards = newState.pendingRewards || { xp: 0, gold: 0, items: [] };
             newState.pendingRewards.items = newState.pendingRewards.items || [];
             newState.pendingRewards.items.push({ name: item.name, type: item.type, description: item.description, quantity: item.quantity });
-            newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'auto_loot', narrative: `${looter.name} auto-looted ${item.name} from ${pl.enemyName}.`, timestamp: Date.now() });
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'auto_loot', narrative: `${looter.name} auto-looted ${item.name} from ${pl.enemyName}.`, timestamp: Date.now() });
             // Note: we do not remove from pendingLoot here to keep UI transparent, but an item duplicated into pendingRewards is considered already obtained by companion
           });
         });
@@ -2166,7 +2179,7 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
       fatigue: fatigueInc
     };
 
-    newState.combatLog.push({
+    pushCombatLogUnique(newState, {
       turn: newState.turn,
       actor: 'system',
       action: 'loot_phase',
@@ -2179,7 +2192,7 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
   if (playerStats.currentHealth <= 0) {
     newState.result = 'defeat';
     newState.active = false;
-    newState.combatLog.push({
+    pushCombatLogUnique(newState, {
       turn: newState.turn,
       actor: 'system',
       action: 'defeat',
@@ -2244,7 +2257,7 @@ export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStat
         narrative,
         timestamp: Date.now()
       };
-      newState.combatLog = [...(newState.combatLog || []), entry];
+      pushCombatLogUnique(newState, entry);
     }
   } catch (e) {
     // Non-fatal: logging failure should not break regen application
