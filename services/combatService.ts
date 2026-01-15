@@ -280,7 +280,7 @@ export const calculatePlayerCombatStats = (
 
   // Skill bonuses
   const getSkillLevel = (name: string) => 
-    (character.skills || []).find(s => s.name === name)?.level || 15;
+    (character.skills || []).find(s => s.name === name)?.level || 0;
 
   // Light/Heavy armor skill affects armor rating
   const lightArmorSkill = getSkillLevel('Light Armor');
@@ -497,7 +497,7 @@ const generatePlayerAbilities = (
 ): CombatAbility[] => {
   const abilities: CombatAbility[] = [];
   const getSkillLevel = (name: string) => 
-    (character.skills || []).find(s => s.name === name)?.level || 15;
+    (character.skills || []).find(s => s.name === name)?.level || 0;
 
   // Always available: Basic Attack
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
@@ -909,16 +909,12 @@ export const executePlayerAction = (
           target = targetById || null;
           targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
           if (target && (newState.enemies || []).find(e => e.id === target.id)) {
-            // If the provided target is the default enemy (implicit selection by UI), treat it as 'no selection' and apply to self.
-            const defaultTarget = newState.enemies.find(e => e.currentHealth > 0);
-            if (targetId === defaultTarget?.id) {
-              target = { id: 'player', name: character?.name || 'you' } as any;
-              targetIsAlly = false;
-            } else {
-              narrative = `${ability.name} cannot be used on enemies!`;
-              newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
-              break;
-            }
+            // Convert any explicit enemy-targeted heals into self-applies (forgiving behavior).
+            const oldTargetName = target.name;
+            target = { id: 'player', name: character?.name || 'you' } as any;
+            targetIsAlly = false;
+            narrative = `${ability.name} cannot heal ${oldTargetName} — applying to self instead.`;
+            newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
           }
         }
       } else {
@@ -986,6 +982,19 @@ export const executePlayerAction = (
           const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
           const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
           const maxHealth = 30 + (level * 8);
+
+          // If the ability also deals damage (damage + summon), apply basic damage to the selected enemy target.
+          if (ability.damage && target && !targetIsAlly) {
+            const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+            if (enemyIndex >= 0) {
+              newState.enemies = [...newState.enemies];
+              const before = newState.enemies[enemyIndex].currentHealth;
+              const dmg = Math.max(0, ability.damage || 0);
+              newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, before - dmg) } as any;
+              narrative += ` The spell hits ${newState.enemies[enemyIndex].name} for ${dmg} damage.`;
+            }
+          }
+
           const companion: CombatEnemy = {
             id: summonId,
             name: summonName,
@@ -1005,7 +1014,7 @@ export const executePlayerAction = (
           } as any;
 
           // Mark as companion and add to allies (not enemies)
-          companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true };
+          companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true, isSummon: true };
           newState.allies = [...(newState.allies || []), companion];
           // Insert into turn order right after player
           const playerIndex = newState.turnOrder.indexOf('player');
@@ -1115,7 +1124,7 @@ export const executePlayerAction = (
 
       if ((ability as any).unarmed) {
         // Unarmed strike damage scales with the Unarmed skill and ignores stamina penalties
-        const unarmedSkillLevel = (character.skills || []).find(s => s.name === 'Unarmed')?.level || 15;
+        const unarmedSkillLevel = (character.skills || []).find(s => s.name === 'Unarmed')?.level || 0;
         abilityDamage = (ability.damage || 0) + Math.floor(UNARMED_SKILL_MODIFIER * unarmedSkillLevel);
 
         const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
@@ -2038,7 +2047,11 @@ export const advanceTurn = (state: CombatState): CombatState => {
     // Decrement playerTurnsRemaining for pending summons and flag newly expired summons to start decaying
     if (newState.pendingSummons && newState.pendingSummons.length) {
       const updated = newState.pendingSummons.map(s => ({ ...s, playerTurnsRemaining: (s as any).playerTurnsRemaining ? (s as any).playerTurnsRemaining - 1 : ((s as any).turnsRemaining || 0) - 1 }));
+      // debug pending sums
+      try { console.debug('[combat] pendingSummons updated', updated.map(u => ({ companionId: u.companionId, remaining: (u as any).playerTurnsRemaining })) ); } catch (e) {}
       const newlyExpired = updated.filter(s => (s as any).playerTurnsRemaining <= 0).map(s => s.companionId);
+      // debug expired
+      try { console.debug('[combat] newlyExpired', newlyExpired); } catch (e) {}
       // Mark companions as decaying (they will start losing HP on the next player turn start)
       for (const id of newlyExpired) {
         const ally = (newState.allies || []).find(a => a.id === id);
@@ -2047,8 +2060,8 @@ export const advanceTurn = (state: CombatState): CombatState => {
           ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
         }
       }
-      // Keep only pending summons that still have player turns remaining
-      newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining }));
+      // Keep only pending summons that still have player turns remaining (preserve remaining player-turn counters)
+      newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: (s as any).playerTurnsRemaining } as any));
       if (newlyExpired.length) {
         newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
       }

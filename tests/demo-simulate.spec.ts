@@ -14,11 +14,11 @@ describe('demo.simulateCombat fixed enemy', () => {
     // Use require to ensure it's loaded in the test environment
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      require('../../console-demo.js');
+      require('../console-demo.js');
     } catch (e) {
       // Fall back to requiring without extension in some environments
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      require('../../console-demo');
+      require('../console-demo');
     }
   });
 

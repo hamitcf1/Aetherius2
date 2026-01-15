@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CombatModal } from '../components/CombatModal';
 import { vi } from 'vitest';
 import type { Character } from '../types';
@@ -103,6 +103,9 @@ describe('Combat ability targeting UI', () => {
     expect(el).toBeTruthy();
     fireEvent.click(el!);
     await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Toast should be shown when selection changes
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Target selected: Buddy', 'info'));
 
     // After clicking, both elements should still be present (selection visual is validated in e2e UI tests)
     console.log('enemy after', enemyEl!.className);

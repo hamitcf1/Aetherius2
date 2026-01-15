@@ -13,6 +13,11 @@ describe('SpellsModal empowered variant UI', () => {
     learnSpell(lowLevelChar.id, 'spark');
     render(<SpellsModal character={lowLevelChar} onClose={() => {}} />);
 
+    // Open the learned spell details (select Spark)
+    const sparkBtns = await screen.findAllByText(/Spark/i);
+    const sparkBtn = sparkBtns.find(b => (b.textContent || '').trim() === 'Spark');
+    sparkBtn && (sparkBtn as HTMLElement).click();
+
     const locked = await screen.findAllByText(/Empowered variant locked/i);
     expect(locked.length).toBeGreaterThan(0);
   });
@@ -21,6 +26,11 @@ describe('SpellsModal empowered variant UI', () => {
     // Learn base spell first
     learnSpell(highLevelChar.id, 'spark');
     render(<SpellsModal character={highLevelChar} onClose={() => {}} />);
+
+    // Select the learned spell first
+    const sparkBtns = await screen.findAllByText(/Spark/i);
+    const sparkBtn = sparkBtns.find(b => (b.textContent || '').trim() === 'Spark');
+    sparkBtn && (sparkBtn as HTMLElement).click();
 
     const available = await screen.findAllByText(/Empowered variant available/i);
     expect(available.length).toBeGreaterThan(0);

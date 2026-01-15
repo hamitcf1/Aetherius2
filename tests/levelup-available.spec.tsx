@@ -19,18 +19,44 @@ vi.mock('../services/firestore', () => ({
   saveCharacterWithRetry: vi.fn(async (_uid: string, _char: any) => Promise.resolve())
 }));
 
+import LocalizationProvider from '../services/localization';
 import App from '../App';
 
 describe('Level up available button', () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
   it('shows a "Level up available" button after canceling a pending level up', async () => {
-    render(<App />);
+    // Ensure minimal localStorage API is available in this test env to prevent Changelog/Companions errors
+    if (!localStorage || typeof (localStorage as any).getItem !== 'function') {
+      (global as any).localStorage = {
+        store: {} as Record<string,string>,
+        getItem(key: string) { return (this as any).store[key] ?? null; },
+        setItem(key: string, value: string) { (this as any).store[key] = String(value); },
+        removeItem(key: string) { delete (this as any).store[key]; }
+      } as any;
+    }
+
+    // Pre-select last character so the app initializes with an active character without triggering realtime setActiveCharacter
+    localStorage.setItem(`aetherius:lastCharacter:testuid`, 'char1');
+
+    render(<LocalizationProvider><App /></LocalizationProvider>);
     await waitFor(() => expect((window as any).app).toBeDefined(), { timeout: 5000 });
     const app = (window as any).app;
 
+    // Select the character (start game) so handleGameUpdate applies to an active character
+    await waitFor(() => expect(screen.queryAllByText('Hero').length > 0).toBeTruthy(), { timeout: 2000 });
+    const heroElems = screen.queryAllByText('Hero');
+    // Prefer the clickable character card (not the nav or header)
+    let heroElem = heroElems.find(e => e.closest('button') && e.closest('button')!.closest('.grid'));
+    if (!heroElem) heroElem = heroElems[heroElems.length - 1];
+    // Click the character play button to select it
+    heroElem!.closest('button') && (heroElem!.closest('button') as HTMLButtonElement).click();
+
     // Trigger a level up (via XP change)
     app.handleGameUpdate({ xpChange: 1000 });
+
+    // Wait for in-game level up notification to appear before cancelling
+    await waitFor(() => expect(screen.queryAllByText(/LEVEL UP/i).length > 0).toBeTruthy(), { timeout: 3000 });
 
     // Cancel the level up (move to available bucket)
     (window as any).cancelLevelUp();

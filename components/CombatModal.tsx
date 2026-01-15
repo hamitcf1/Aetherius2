@@ -115,7 +115,8 @@ const EnemyCard: React.FC<{
   isTarget: boolean;
   onClick: () => void;
   containerRef?: (el: HTMLDivElement | null) => void;
-}> = ({ enemy, isTarget, onClick, containerRef }) => {
+  isHighlighted?: boolean;
+}> = ({ enemy, isTarget, onClick, containerRef, isHighlighted }) => {
   const healthPercent = (enemy.currentHealth / enemy.maxHealth) * 100;
   const isDead = enemy.currentHealth <= 0;
   
@@ -131,6 +132,7 @@ const EnemyCard: React.FC<{
             ? 'bg-red-900/40 border-red-500 cursor-pointer ring-2 ring-red-400/50' 
             : 'bg-stone-800/60 border-stone-600 cursor-pointer hover:border-amber-500/50'
         }
+        ${isHighlighted ? 'ring-4 ring-amber-300/40 animate-pulse' : ''}
       `}
     >
       {/* Boss indicator */}
@@ -266,9 +268,34 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     calculatePlayerCombatStats(character, inventory)
   );
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  // Quick visual highlight when a target is newly selected (transient)
+  const [recentlyHighlighted, setRecentlyHighlighted] = useState<string | null>(null);
   // Pending targeting for abilities which require explicit target selection (heals/buffs)
   const [pendingTargeting, setPendingTargeting] = useState<null | { abilityId: string; abilityName: string; allow: 'allies' | 'enemies' | 'both' }>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  // Show a toast and a brief visual pulse whenever the selectedTarget changes
+  useEffect(() => {
+    if (!selectedTarget) return;
+    setRecentlyHighlighted(selectedTarget);
+
+    // Resolve human-readable name for toast
+    let name = 'Target';
+    if (selectedTarget === 'player') name = getEasterEggName(character.name);
+    else {
+      const ally = (combatState.allies || []).find(a => a.id === selectedTarget);
+      const enemy = (combatState.enemies || []).find(e => e.id === selectedTarget);
+      if (ally) name = ally.name;
+      else if (enemy) name = enemy.name;
+    }
+
+    if (showToast) {
+      showToast(`Target selected: ${name}`, 'info');
+    }
+
+    const t = setTimeout(() => setRecentlyHighlighted(null), 900);
+    return () => clearTimeout(t);
+  }, [selectedTarget]);
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
@@ -959,7 +986,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
         <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
-          <div ref={playerRef} className="rounded-lg p-4 border border-amber-900/30" style={{ background: 'var(--skyrim-paper, #1a1a1a)' }}>
+          <div ref={playerRef} className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''}`} style={{ background: 'var(--skyrim-paper, #1a1a1a)' }}>
             <h3 className="text-lg font-bold text-amber-100 mb-3">{getEasterEggName(character.name)}</h3>
             <div className="space-y-3">
               <HealthBar 
@@ -1016,6 +1043,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <EnemyCard
                       enemy={ally}
                       isTarget={selectedTarget === ally.id}
+                      isHighlighted={recentlyHighlighted === ally.id}
                       onClick={() => {
                         // If pendingTargeting is active, restrict selection to allies
                         if (pendingTargeting) {
@@ -1045,6 +1073,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   <EnemyCard
                     enemy={enemy}
                     isTarget={selectedTarget === enemy.id}
+                    isHighlighted={recentlyHighlighted === enemy.id}
                     onClick={() => {
                       // If pendingTargeting is active and does NOT allow enemies, reject selection
                       if (pendingTargeting && pendingTargeting.allow === 'allies') {
@@ -1400,6 +1429,24 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Mobile: Pending targeting controls (compact row) */}
+            {pendingTargeting && (
+              <div className="mt-2 p-2 bg-stone-800 rounded flex items-center gap-2">
+                <div className="flex-1 text-xs text-stone-100">Choose target for <span className="text-amber-300">{pendingTargeting.abilityName}</span></div>
+                <button onClick={() => {
+                  // Use on self
+                  setPendingTargeting(null);
+                  handlePlayerAction('attack', pendingTargeting!.abilityId);
+                }} disabled={!isPlayerTurn || isAnimating} className="px-3 py-1 rounded bg-green-700 text-white text-xs">Use Self</button>
+                <button onClick={() => {
+                  // Confirm selected target
+                  setPendingTargeting(null);
+                  handlePlayerAction('attack', pendingTargeting!.abilityId);
+                }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} className="px-3 py-1 rounded bg-blue-700 text-white text-xs">Confirm</button>
+                <button onClick={() => setPendingTargeting(null)} className="px-2 py-1 rounded border border-stone-700 text-stone-300 text-xs">Cancel</button>
               </div>
             )}
           </div>

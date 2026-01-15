@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, screen } from '@testing-library/react';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 
 // Mock Firebase auth to populate window.app
@@ -21,6 +21,7 @@ vi.mock('../services/firestore', () => ({
   saveCharacterWithRetry: vi.fn(async (_uid: string, _char: any) => Promise.resolve())
 }));
 
+import LocalizationProvider from '../services/localization';
 import App from '../App';
 
 describe('LevelUp duplicate guard', () => {
@@ -29,7 +30,18 @@ describe('LevelUp duplicate guard', () => {
   });
 
   it('prevents duplicate level-up notifications when XP updates are applied rapidly', async () => {
-    const { getByText } = render(<App />);
+    // Ensure minimal localStorage API and pre-select character like other tests
+    if (!localStorage || typeof (localStorage as any).getItem !== 'function') {
+      (global as any).localStorage = {
+        store: {} as Record<string,string>,
+        getItem(key: string) { return (this as any).store[key] ?? null; },
+        setItem(key: string, value: string) { (this as any).store[key] = String(value); },
+        removeItem(key: string) { delete (this as any).store[key]; }
+      } as any;
+    }
+    localStorage.setItem(`aetherius:lastCharacter:testuid`, 'char1');
+
+    const { getByText } = render(<LocalizationProvider><App /></LocalizationProvider>);
 
     await waitFor(() => expect((window as any).app).toBeDefined(), { timeout: 5000 });
     const app = (window as any).app;
@@ -38,12 +50,10 @@ describe('LevelUp duplicate guard', () => {
     app.handleGameUpdate({ xpChange: 1000 });
     app.handleGameUpdate({ xpChange: 1000 });
 
-    // Wait for the notification to be queued
-    await waitFor(() => {
-      expect(app.levelUpNotifications && app.levelUpNotifications.length <= 1).toBeTruthy();
-    }, { timeout: 3000 });
+    // Wait for the LevelUp overlay to appear (the Skyrim-style banner)
+    await waitFor(() => expect(screen.queryAllByText('⚔️ LEVEL UP ⚔️').length === 1).toBeTruthy(), { timeout: 3000 });
 
-    // There should be at most one visual level-up notification queued
-    expect(app.levelUpNotifications.length).toBe(1);
+    // Ensure no duplicate overlay banners were rendered
+    expect(screen.queryAllByText('⚔️ LEVEL UP ⚔️').length).toBe(1);
   });
 });
