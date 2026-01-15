@@ -57,7 +57,7 @@ export const FEATURES = {
   characterDeath: { enabled: true, wip: false },
   profileDeletion: { enabled: true, wip: false },
   characterDeletion: { enabled: true, wip: false },
-  maxStatsEditor: { enabled: false, wip: false }, // Hide max stats editor by default
+  maxStatsEditor: { enabled: true, wip: false }, // Hide max stats editor by default
   
   // === UI/UX ===
   onboarding: { enabled: true, wip: false },

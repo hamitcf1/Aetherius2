@@ -593,7 +593,8 @@ export interface CombatState {
   // Survival needs changes (hunger/thirst/fatigue) computed from combat duration
   survivalDelta?: Partial<SurvivalNeeds>;
   // Track summoned companions and their turns remaining during combat
-  pendingSummons?: Array<{ companionId: string; turnsRemaining: number }>;
+  // `playerTurnsRemaining` tracks how many PLAYER turns remain before the summon begins decaying
+  pendingSummons?: Array<{ companionId: string; turnsRemaining: number; playerTurnsRemaining?: number }>;
   // Combat result when finished
   result?: 'victory' | 'defeat' | 'fled' | 'surrendered';
   // Unique combat id (helps deduplication and tracking across systems)

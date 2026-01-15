@@ -266,6 +266,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     calculatePlayerCombatStats(character, inventory)
   );
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  // Pending targeting for abilities which require explicit target selection (heals/buffs)
+  const [pendingTargeting, setPendingTargeting] = useState<null | { abilityId: string; abilityName: string; allow: 'allies' | 'enemies' | 'both' }>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
@@ -695,15 +697,43 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   // Handle player action
   const handlePlayerAction = async (action: CombatActionType, abilityId?: string, itemId?: string) => {
+    // if an ability is being confirmed, ensure selectedTarget is valid; for heal/buff we'll allow undefined (self) or allies.
     if (isAnimating || combatState.currentTurnActor !== 'player') return;
 
     setIsAnimating(true);
+
+    // Determine ability and enforce selection rules before rolling
+    const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
+    const isHealingAbility = !!(ability && (ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal' || ef.type === 'buff'))));
+    let targetToUse = selectedTarget || undefined;
+
+    if (isHealingAbility) {
+      // If a pending targeting flow is active, respect it. Otherwise, default/forgive as before.
+      if (pendingTargeting && pendingTargeting.abilityId === abilityId) {
+        // Use the selectedTarget (or undefined for self)
+        targetToUse = selectedTarget || undefined;
+      } else {
+        // Legacy behavior: ensure heals don't target enemies
+        if (selectedTarget && (combatState.enemies || []).find(e => e.id === selectedTarget)) {
+          if (showToast) showToast('Heals can only target you or allies. Applying to self.', 'info');
+          setSelectedTarget('player');
+          targetToUse = undefined; // executePlayerAction treats undefined as auto-self when healing
+        } else if (!selectedTarget) {
+          // no explicit target: default to self visibly
+          setSelectedTarget('player');
+        }
+      }
+    }
 
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
     setShowRoll(true);
-    // quick flicker of numbers to simulate roll
+
+    // If we were in a pending targeting flow, clear it after confirming
+    if (pendingTargeting && pendingTargeting.abilityId === abilityId) {
+      setPendingTargeting(null);
+    }    // quick flicker of numbers to simulate roll
     for (let i = 0; i < 8; i++) {
       setRollValue(Math.floor(Math.random() * 20) + 1);
       // shorten time as it progresses
@@ -720,7 +750,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       combatState,
       playerStats,
       action,
-      selectedTarget || undefined,
+      targetToUse,
       abilityId,
       itemId,
       inventory,
@@ -857,6 +887,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   const isPlayerTurn = combatState.currentTurnActor === 'player' && combatState.active;
 
+  // When clicking an ability, decide whether to open explicit target selection (for heals/buffs)
+  const handleAbilityClick = (ability: CombatAbility) => {
+    const isPositive = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ['heal', 'buff'].includes(ef.type))));
+    if (isPositive) {
+      // Open a targeting mode limited to allies/self
+      setPendingTargeting({ abilityId: ability.id, abilityName: ability.name, allow: 'allies' });
+      // pre-select self for convenience
+      setSelectedTarget('player');
+      if (showToast) showToast(`Choose an ally or Self to use ${ability.name}`, 'info');
+      return;
+    }
+    // Default immediate execution
+    handlePlayerAction('attack', ability.id);
+  };
+
   // Get usable items for combat (potions and food)
   const getUsableItems = () => {
     return inventory.filter(item => 
@@ -971,7 +1016,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <EnemyCard
                       enemy={ally}
                       isTarget={selectedTarget === ally.id}
-                      onClick={() => setSelectedTarget(ally.id)}
+                      onClick={() => {
+                        // If pendingTargeting is active, restrict selection to allies
+                        if (pendingTargeting) {
+                          if (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both') {
+                            setSelectedTarget(ally.id);
+                          } else {
+                            if (showToast) showToast('This ability cannot target allies.', 'warning');
+                          }
+                        } else {
+                          setSelectedTarget(ally.id);
+                        }
+                      }}
                       containerRef={(el) => { enemyRefs.current[ally.id] = el; }}
                     />
                   </div>
@@ -985,19 +1041,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             <h3 className="text-sm font-bold text-stone-400 mb-3">ENEMIES</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {combatState.enemies.map(enemy => (
-                <EnemyCard
-                  key={enemy.id}
-                  enemy={enemy}
-                  isTarget={selectedTarget === enemy.id}
-                  onClick={() => setSelectedTarget(enemy.id)}
-                  containerRef={(el) => { enemyRefs.current[enemy.id] = el; }}
-                />
+                <div key={enemy.id} className="p-1">
+                  <EnemyCard
+                    enemy={enemy}
+                    isTarget={selectedTarget === enemy.id}
+                    onClick={() => {
+                      // If pendingTargeting is active and does NOT allow enemies, reject selection
+                      if (pendingTargeting && pendingTargeting.allow === 'allies') {
+                        if (showToast) showToast('This ability cannot target enemies.', 'warning');
+                      } else {
+                        setSelectedTarget(enemy.id);
+                      }
+                    }}
+                    containerRef={(el) => { enemyRefs.current[enemy.id] = el; }}
+                  />
+                </div>
               ))}
             </div>
-          </div>
-
-          {/* Combat log */}
-          <div className="flex-1 bg-stone-900/40 rounded-lg border border-stone-700 flex flex-col min-h-[200px]">
+            
+            {/* Combat log */}
             <div className="flex items-center justify-between p-3 border-b border-stone-700">
               <h3 className="text-sm font-bold text-stone-400">COMBAT LOG</h3>
               <div className="flex items-center gap-2">
@@ -1084,20 +1146,40 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   );
                 })()
               ) : (
-                playerStats.abilities.map(ability => (
-                  <ActionButton
-                    key={ability.id}
-                    ability={ability}
-                    disabled={!isPlayerTurn || isAnimating}
-                    cooldown={combatState.abilityCooldowns[ability.id] || 0}
-                    canAfford={
-                      ability.type === 'magic' 
-                        ? playerStats.currentMagicka >= ability.cost
-                        : true
-                    }
-                    onClick={() => handlePlayerAction('attack', ability.id)}
-                  />
-                ))
+                // If pendingTargeting is active, show confirm/cancel for the selected ability
+                pendingTargeting ? (
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold">Choose target for <span className="text-amber-300">{pendingTargeting.abilityName}</span></div>
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        // Apply to self (pass undefined target)
+                        setPendingTargeting(null);
+                        handlePlayerAction('attack', pendingTargeting!.abilityId);
+                      }} disabled={!isPlayerTurn || isAnimating} className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
+                      <button onClick={() => {
+                        // Confirm selected target
+                        setPendingTargeting(null);
+                        handlePlayerAction('attack', pendingTargeting!.abilityId);
+                      }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
+                    </div>
+                    <button onClick={() => setPendingTargeting(null)} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
+                  </div>
+                ) : (
+                  playerStats.abilities.map(ability => (
+                    <ActionButton
+                      key={ability.id}
+                      ability={ability}
+                      disabled={!isPlayerTurn || isAnimating}
+                      cooldown={combatState.abilityCooldowns[ability.id] || 0}
+                      canAfford={
+                        ability.type === 'magic' 
+                          ? playerStats.currentMagicka >= ability.cost
+                          : true
+                      }
+                      onClick={() => handleAbilityClick(ability)}
+                    />
+                  ))
+                )
               )}
             </div>
           </div>

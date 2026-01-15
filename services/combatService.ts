@@ -890,25 +890,57 @@ export const executePlayerAction = (
       // Find target (search enemies first, then allies)
       const targetById = targetId ? (newState.enemies.find(e => e.id === targetId) || (newState.allies || []).find(a => a.id === targetId)) : null;
       const defaultTarget = newState.enemies.find(e => e.currentHealth > 0);
-      const target = targetById || defaultTarget;
-      const targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
-
-      if (!target) {
-        narrative = 'No valid target!';
-        break;
-      }
+      let target: any = null;
+      let targetIsAlly = false;
+      const explicitTargetProvided = !!targetId;
 
       // Detect ability categories to branch logic (healing, summon, buffs, etc.)
       const isHealingAbility = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal')));
       const hasSummonEffect = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
       const isUtilityOrBuff = !!(ability.type === 'utility' || (ability.effects && ability.effects.some((ef: any) => ['buff', 'debuff', 'slow', 'stun', 'drain', 'dot'].includes(ef.type))));
 
+      // Healing: prefer self when no explicit target; explicit enemy target is disallowed
+      if (isHealingAbility) {
+        if (!explicitTargetProvided) {
+          target = { id: 'player', name: character?.name || 'you' } as any;
+          targetIsAlly = false;
+        } else {
+          // honor explicit choice, but reject enemies
+          target = targetById || null;
+          targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
+          if (target && (newState.enemies || []).find(e => e.id === target.id)) {
+            // If the provided target is the default enemy (implicit selection by UI), treat it as 'no selection' and apply to self.
+            const defaultTarget = newState.enemies.find(e => e.currentHealth > 0);
+            if (targetId === defaultTarget?.id) {
+              target = { id: 'player', name: character?.name || 'you' } as any;
+              targetIsAlly = false;
+            } else {
+              narrative = `${ability.name} cannot be used on enemies!`;
+              newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
+              break;
+            }
+          }
+        }
+      } else {
+        // Non-healing: default behavior (target a live enemy if no explicit target)
+        target = targetById || defaultTarget;
+        targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
+      }
+
+      if (!target) {
+        narrative = 'No valid target!';
+        break;
+      }
+
       // Healing abilities: apply directly to self/allies without attack resolution
       if (isHealingAbility) {
         if (!targetIsAlly && target.id !== 'player') {
-          narrative = `${ability.name} cannot be used on enemies!`;
-          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now() });
-          break;
+          // Convert invalid enemy-targeted heals into self-applies to be forgiving and align with UI behavior.
+          const oldTargetName = target.name;
+          target = { id: 'player', name: character?.name || 'you' } as any;
+          targetIsAlly = false;
+          narrative = `${ability.name} cannot heal ${oldTargetName} — applying to self instead.`;
+          newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
         }
 
         // Compute heal amount
@@ -968,6 +1000,7 @@ export const executePlayerAction = (
             xpReward: 0,
             loot: [],
             isCompanion: true,
+            companionMeta: { companionId: summonId, autoLoot: false, autoControl: true, isSummon: true },
             description: `A summoned ally: ${summonName}`
           } as any;
 
@@ -985,8 +1018,10 @@ export const executePlayerAction = (
           }
 
           const turns = Math.max(1, ef.duration || 3);
-          newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns }];
-          narrative += ` ${summonName} joins the fight to aid you for ${turns} turns!`;
+          // Track both generic turnsRemaining (backcompat) and player-turn-specific duration
+          const playerTurns = ef.playerTurns || ef.duration || 3;
+          newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns, playerTurnsRemaining: playerTurns } as any];
+          narrative += ` ${summonName} joins the fight to aid you for ${playerTurns} player turns!`;
         }
 
         // Set cooldown
@@ -1985,16 +2020,37 @@ export const advanceTurn = (state: CombatState): CombatState => {
     // Reset defending
     newState.playerDefending = false;
 
-    // Decrement pending summon durations and remove expired summons
+    // NOTE: pendingSummons are now tracked by player-turns; expiration and decay are handled on player-turn starts (below).
+  }
+
+  // === PLAYER TURN START EFFECTS ===
+  // Apply decays and decrement player-turn counters when the actor to move is the player
+  if (newState.currentTurnActor === 'player') {
+    // Apply decay damage to companions already flagged as decaying
+    (newState.allies || []).forEach(ally => {
+      if ((ally as any).companionMeta && (ally as any).companionMeta.decayActive) {
+        const damage = Math.max(1, Math.floor((ally.currentHealth || 0) * 0.5));
+        ally.currentHealth = Math.max(0, (ally.currentHealth || 0) - damage);
+        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_decay', target: ally.name, damage, narrative: `${ally.name} is decaying and loses ${damage} health.`, timestamp: Date.now() });
+      }
+    });
+
+    // Decrement playerTurnsRemaining for pending summons and flag newly expired summons to start decaying
     if (newState.pendingSummons && newState.pendingSummons.length) {
-      newState.pendingSummons = newState.pendingSummons.map(s => ({ ...s, turnsRemaining: s.turnsRemaining - 1 })).filter(s => s.turnsRemaining > 0);
-      // Remove any companions that expired (turnsRemaining <= 0)
-      const expired = (state.pendingSummons || []).filter(s => s.turnsRemaining <= 1).map(s => s.companionId);
-      if (expired.length) {
-        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_expire', narrative: `Some summoned allies have disappeared.`, timestamp: Date.now() });
-        // Remove expired enemies from list and turnOrder
-        newState.enemies = newState.enemies.filter(e => !expired.includes(e.id));
-        newState.turnOrder = newState.turnOrder.filter(id => !expired.includes(id));
+      const updated = newState.pendingSummons.map(s => ({ ...s, playerTurnsRemaining: (s as any).playerTurnsRemaining ? (s as any).playerTurnsRemaining - 1 : ((s as any).turnsRemaining || 0) - 1 }));
+      const newlyExpired = updated.filter(s => (s as any).playerTurnsRemaining <= 0).map(s => s.companionId);
+      // Mark companions as decaying (they will start losing HP on the next player turn start)
+      for (const id of newlyExpired) {
+        const ally = (newState.allies || []).find(a => a.id === id);
+        if (ally && (ally as any).companionMeta?.isSummon) {
+          (ally as any).companionMeta = { ...(ally as any).companionMeta || {}, decayActive: true };
+          ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+        }
+      }
+      // Keep only pending summons that still have player turns remaining
+      newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining }));
+      if (newlyExpired.length) {
+        newState.combatLog.push({ turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
       }
     }
   }
