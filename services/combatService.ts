@@ -962,6 +962,12 @@ export const executePlayerAction = (
         // Scale heal slightly with Restoration skill if present
         const restorationLevel = (character?.skills || []).find((s: any) => s.name === 'Restoration')?.level || 0;
         if (restorationLevel > 0) healAmount += Math.floor(restorationLevel * 0.2);
+        
+        // Apply healing effectiveness perk bonus (Regeneration perk)
+        const healingEffectivenessBonus = getCombatPerkBonus(character, 'healingEffectiveness');
+        if (healingEffectivenessBonus > 0) {
+          healAmount = Math.floor(healAmount * (1 + healingEffectivenessBonus / 100));
+        }
 
         // Apply heal
         if (targetIsAlly) {
@@ -1161,6 +1167,44 @@ export const executePlayerAction = (
             const ratio = effectiveCost > 0 ? (magSpent / effectiveCost) : 1;
             abilityDamage = Math.max(1, Math.floor((ability.damage || 0) * levelMultiplier * ratio));
           }
+          
+          // Apply elemental damage perks based on spell/ability element
+          const abilityIdLower = (ability.id || '').toLowerCase();
+          const abilityNameLower = (ability.name || '').toLowerCase();
+          const spellIdLower = ((ability as any).spellId || '').toLowerCase();
+          
+          // Detect fire spells (Augmented Flames perk)
+          const isFireSpell = abilityIdLower.includes('fire') || abilityIdLower.includes('flame') || 
+            abilityNameLower.includes('fire') || abilityNameLower.includes('flame') ||
+            spellIdLower.includes('fire') || spellIdLower.includes('flame');
+          if (isFireSpell) {
+            const fireBonus = getCombatPerkBonus(character, 'fireDamage');
+            if (fireBonus > 0) {
+              abilityDamage = Math.floor(abilityDamage * (1 + fireBonus / 100));
+            }
+          }
+          
+          // Detect frost spells (Augmented Frost perk)
+          const isFrostSpell = abilityIdLower.includes('frost') || abilityIdLower.includes('ice') ||
+            abilityNameLower.includes('frost') || abilityNameLower.includes('ice') ||
+            spellIdLower.includes('frost') || spellIdLower.includes('ice');
+          if (isFrostSpell) {
+            const frostBonus = getCombatPerkBonus(character, 'frostDamage');
+            if (frostBonus > 0) {
+              abilityDamage = Math.floor(abilityDamage * (1 + frostBonus / 100));
+            }
+          }
+          
+          // Detect shock spells (Augmented Shock perk)
+          const isShockSpell = abilityIdLower.includes('shock') || abilityIdLower.includes('lightning') || abilityIdLower.includes('spark') ||
+            abilityNameLower.includes('shock') || abilityNameLower.includes('lightning') || abilityNameLower.includes('spark') ||
+            spellIdLower.includes('shock') || spellIdLower.includes('lightning') || spellIdLower.includes('spark');
+          if (isShockSpell) {
+            const shockBonus = getCombatPerkBonus(character, 'shockDamage');
+            if (shockBonus > 0) {
+              abilityDamage = Math.floor(abilityDamage * (1 + shockBonus / 100));
+            }
+          }
         }
         const baseDamage = abilityDamage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
         const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
@@ -1191,15 +1235,27 @@ export const executePlayerAction = (
         perkDamageMultiplier *= (1 + executeBonus / 100);
       }
       
+      // Get equipped weapon name from inventory (use inventory parameter instead of character.equipment)
+      const equippedWeapon = (inventory || []).find((i: any) => i.equipped && i.slot === 'weapon' && i.type === 'weapon');
+      const equippedWeaponName = (equippedWeapon?.name || '').toLowerCase();
+      
+      // Detect weapon types for perk application
+      const isAxe = equippedWeaponName.includes('axe') && !equippedWeaponName.includes('battle');
+      const isBattleaxe = equippedWeaponName.includes('battleaxe');
+      const isSword = equippedWeaponName.includes('sword') && !equippedWeaponName.includes('great');
+      const isGreatsword = equippedWeaponName.includes('greatsword');
+      const isMace = equippedWeaponName.includes('mace');
+      const isWarhammer = equippedWeaponName.includes('warhammer');
+      const isDagger = equippedWeaponName.includes('dagger');
+      
       // Critical damage bonuses (Bladesman, Deep Wounds)
       if (attackResolved.isCrit) {
         const swordCritBonus = getCombatPerkBonus(character, 'swordCritDamage');
         const greatswordCritBonus = getCombatPerkBonus(character, 'greatswordCritDamage');
-        const weaponName = ((character as any)?.equipment?.find((i: any) => i.slot === 'weapon')?.name || '').toLowerCase();
-        if (weaponName.includes('sword') && !weaponName.includes('great')) {
+        if (isSword && swordCritBonus > 0) {
           perkDamageMultiplier *= (1 + swordCritBonus / 100);
         }
-        if (weaponName.includes('greatsword')) {
+        if (isGreatsword && greatswordCritBonus > 0) {
           perkDamageMultiplier *= (1 + greatswordCritBonus / 100);
         }
       }
@@ -1207,12 +1263,45 @@ export const executePlayerAction = (
       // Armor penetration perks (Bone Breaker, Skull Crusher)
       const maceArmorPen = getCombatPerkBonus(character, 'maceArmorPen');
       const warhammerArmorPen = getCombatPerkBonus(character, 'warhammerArmorPen');
-      const equippedWeaponName = ((character as any)?.equipment?.find((i: any) => i.slot === 'weapon')?.name || '').toLowerCase();
-      if (equippedWeaponName.includes('mace')) {
+      if (isMace && maceArmorPen > 0) {
         perkArmorPenetration += maceArmorPen;
       }
-      if (equippedWeaponName.includes('warhammer')) {
+      if (isWarhammer && warhammerArmorPen > 0) {
         perkArmorPenetration += warhammerArmorPen;
+      }
+      
+      // Axe bleed chance (Hack and Slash / Limbsplitter)
+      const axeBleedChance = getCombatPerkBonus(character, 'axeBleed');
+      const battleaxeBleedChance = getCombatPerkBonus(character, 'battleaxeBleed');
+      if (isAxe && axeBleedChance > 0 && Math.random() * 100 < axeBleedChance) {
+        // Apply bleed effect to target (5 damage/turn for 3 turns)
+        const bleedEffect = { type: 'dot', stat: 'health', value: 5, duration: 3 };
+        if (!targetIsAlly) {
+          const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+          if (enemyIndex >= 0) {
+            newState.enemies = [...newState.enemies];
+            newState.enemies[enemyIndex] = {
+              ...newState.enemies[enemyIndex],
+              activeEffects: [...((newState.enemies[enemyIndex]?.activeEffects) || []), { effect: bleedEffect, turnsRemaining: 3 }]
+            } as any;
+          }
+        }
+        narrative += ' The axe causes a bleeding wound!';
+      }
+      if (isBattleaxe && battleaxeBleedChance > 0 && Math.random() * 100 < battleaxeBleedChance) {
+        // Apply stronger bleed effect (7 damage/turn for 3 turns)
+        const bleedEffect = { type: 'dot', stat: 'health', value: 7, duration: 3 };
+        if (!targetIsAlly) {
+          const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
+          if (enemyIndex >= 0) {
+            newState.enemies = [...newState.enemies];
+            newState.enemies[enemyIndex] = {
+              ...newState.enemies[enemyIndex],
+              activeEffects: [...((newState.enemies[enemyIndex]?.activeEffects) || []), { effect: bleedEffect, turnsRemaining: 3 }]
+            } as any;
+          }
+        }
+        narrative += ' The battleaxe causes a deep bleeding wound!';
       }
       
       // Lifesteal (Vampiric Strikes)

@@ -108,6 +108,106 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }],
     prerequisites: { level: 10 }
   },
+  summon_familiar: {
+    id: 'summon_familiar',
+    name: 'Conjure Familiar',
+    description: 'Summons a ghostly wolf familiar to aid you in combat.',
+    cost: 30,
+    perkCost: 2,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Spectral Wolf', duration: 3 }],
+    prerequisites: { level: 5 }
+  },
+  summon_flame_atronach: {
+    id: 'summon_flame_atronach',
+    name: 'Conjure Flame Atronach',
+    description: 'Summons a Flame Atronach that attacks enemies with fire.',
+    cost: 60,
+    perkCost: 4,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Flame Atronach', duration: 4 }],
+    prerequisites: { level: 15 }
+  },
+  summon_frost_atronach: {
+    id: 'summon_frost_atronach',
+    name: 'Conjure Frost Atronach',
+    description: 'Summons a powerful Frost Atronach to tank and deal cold damage.',
+    cost: 75,
+    perkCost: 5,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Frost Atronach', duration: 4 }],
+    prerequisites: { level: 20 }
+  },
+  summon_storm_atronach: {
+    id: 'summon_storm_atronach',
+    name: 'Conjure Storm Atronach',
+    description: 'Summons a devastating Storm Atronach crackling with lightning.',
+    cost: 90,
+    perkCost: 6,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Storm Atronach', duration: 4 }],
+    prerequisites: { level: 25 }
+  },
+  summon_dremora: {
+    id: 'summon_dremora',
+    name: 'Conjure Dremora Lord',
+    description: 'Summons a powerful Dremora warrior from Oblivion to fight for you.',
+    cost: 100,
+    perkCost: 7,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Dremora Lord', duration: 5 }],
+    prerequisites: { level: 30 }
+  },
+  summon_wolf: {
+    id: 'summon_wolf',
+    name: 'Call of the Wild: Wolf',
+    description: 'Calls a wild wolf to aid you in battle.',
+    cost: 35,
+    perkCost: 2,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Wild Wolf', duration: 3 }],
+    prerequisites: { level: 8 }
+  },
+  summon_bear: {
+    id: 'summon_bear',
+    name: 'Call of the Wild: Bear',
+    description: 'Summons a fearsome cave bear to fight alongside you.',
+    cost: 55,
+    perkCost: 4,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Cave Bear', duration: 3 }],
+    prerequisites: { level: 18 }
+  },
+  summon_sabre_cat: {
+    id: 'summon_sabre_cat',
+    name: 'Call of the Wild: Sabre Cat',
+    description: 'Summons a deadly sabre cat to hunt your enemies.',
+    cost: 50,
+    perkCost: 3,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Sabre Cat', duration: 3 }],
+    prerequisites: { level: 14 }
+  },
+  summon_spriggan: {
+    id: 'summon_spriggan',
+    name: 'Conjure Spriggan',
+    description: 'Summons a nature spirit that heals allies and attacks foes.',
+    cost: 65,
+    perkCost: 4,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Spriggan', duration: 4 }],
+    prerequisites: { level: 16 }
+  },
+  summon_wrathman: {
+    id: 'summon_wrathman',
+    name: 'Conjure Wrathman',
+    description: 'Summons an ancient Nord spirit warrior to battle for you.',
+    cost: 85,
+    perkCost: 5,
+    type: 'utility',
+    effects: [{ type: 'summon', name: 'Wrathman', duration: 4 }],
+    prerequisites: { level: 22 }
+  },
   invisibility: {
     id: 'invisibility',
     name: 'Invisibility',

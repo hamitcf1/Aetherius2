@@ -212,10 +212,14 @@ const ActionButton: React.FC<{
   
   const isDisabled = disabled || cooldown > 0 || !canAfford;
   
+  // Build tooltip text: show description (not values since they're already visible)
+  const tooltipText = ability.description || `${ability.name} - ${ability.type} ability`;
+  
   return (
     <button
       onClick={onClick}
       disabled={isDisabled}
+      title={tooltipText}
       className={`
         relative p-3 sm:p-3 lg:p-3 py-3 rounded-lg border-2 text-left transition-all w-full text-base sm:text-sm
         ${isDisabled 
@@ -1398,6 +1402,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       key={ability.id}
                       disabled={!isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)}
                       onClick={() => handlePlayerAction('attack', ability.id)}
+                      title={ability.description || `${ability.name} - ${ability.type} ability`}
                       className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${
                         !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)
                           ? 'bg-stone-700 text-stone-500 opacity-50'
