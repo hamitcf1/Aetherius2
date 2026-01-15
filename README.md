@@ -4,6 +4,8 @@
 
 # Skyrim Aetherius
 
+**Version 0.5.6** | [Changelog](components/Changelog.tsx)
+
 Skyrim Aetherius is a web app for running a Skyrim-flavored roleplay campaign like a game: you create characters, track inventory and quests, write story/journal entries, and use an AI GM to generate narrative + structured game-state updates.
 
 This README is both a player tutorial and a developer/operator guide.
@@ -13,6 +15,8 @@ This README is both a player tutorial and a developer/operator guide.
 - What this app is
 - How to play (player tutorial)
 - Progression system (time + hunger/thirst/fatigue)
+- Combat system
+- Console commands (dev tools)
 - AI models + keys
 - Data + saving model (Firestore + Realtime)
 - Local development
@@ -83,6 +87,49 @@ Important: Eat/Drink use a simple heuristic (keywords + item type). If you want 
 
 Passive needs increase when time passes.
 You can tune the rates in `NEED_RATES` in `App.tsx`.
+
+## Combat system
+
+The game features a Pokemon-style turn-based combat system:
+
+- **Combat triggers**: AI can start combat via `combatStart` in game state updates
+- **Actions**: Attack, Power Attack, Magic, Shout, Defend, Use Item, Flee
+- **Sound effects**: Melee/ranged/magic hits, blocking, enemy death sounds
+- **Loot system**: Enemies drop items, gold, and XP on defeat
+- **Companions**: Can join combat and act autonomously or be player-controlled
+
+## Console commands (dev tools)
+
+Open browser console (F12) and type `demo.help()` for all available commands.
+
+### Quick reference
+
+```js
+// Character
+demo.addPerkPoints(3)        // Add perk points
+demo.addExperience(500)      // Add XP
+demo.levelUp()               // Quick level up
+
+// Inventory
+demo.addRandomItems(5)       // Add random items
+demo.giveItem('Iron Sword', 'weapon', 1)  // Give specific item [ADMIN]
+
+// Combat simulation
+demo.simulateCombat()        // Start basic combat
+demo.simulateCombatHelp()    // Show detailed combat options
+
+// Combat with multiple enemies
+demo.simulateCombat({
+  enemies: [
+    { name: 'Bandit Chief', type: 'humanoid', healthMultiplier: 1.5, armor: 30, isBoss: true },
+    { name: 'Bandit Thug', type: 'humanoid', healthMultiplier: 0.8, armor: 15 }
+  ],
+  location: 'Road to Whiterun'
+})
+
+// Lockpicking
+demo.lockpick('master')      // Test lockpicking minigame
+```
 
 ## AI models + keys
 

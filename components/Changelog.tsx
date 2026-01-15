@@ -18,6 +18,22 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.6',
+    date: '2026-01-14',
+    title: 'UI/UX Polish, Sound Effects & Bug Fixes',
+    changes: [
+      { type: 'feature', text: 'Sound Effects: Added ambient and UI sounds — combat hits, magic, blocking, enemy death, level-up fanfare' },
+      { type: 'feature', text: 'Level-Up Notification: Skyrim-style golden burst animation with skill point reminder' },
+      { type: 'feature', text: 'Blacksmith Sparks: Particle effects when upgrading equipment at the forge' },
+      { type: 'feature', text: 'Weather Mouse Interaction: Snow/rain particles now react to cursor movement' },
+      { type: 'improvement', text: 'Perk Tree Modal: Completely redesigned with collapsible skill categories and two-panel layout' },
+      { type: 'fix', text: 'Critical EXP Bug: Fixed issue where XP was not being awarded correctly after combat' },
+      { type: 'fix', text: 'Combat Modal: Fixed "character is not defined" error in dungeon combat' },
+      { type: 'fix', text: 'TypeScript: Resolved ~50 type errors across components and services' },
+      { type: 'improvement', text: 'Console Demo: Enhanced help system with detailed command documentation' }
+    ]
+  },
+  {
     version: '0.5.5',
     date: '2026-01-13',
     title: 'Perk Tree: Mastery & Cost Fixes',

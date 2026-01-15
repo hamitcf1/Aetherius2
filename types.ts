@@ -9,6 +9,10 @@ export interface Stats {
   health: number;      // Max health
   magicka: number;     // Max magicka
   stamina: number;     // Max stamina
+  // Optional regen rates (primarily used in combat stats, but may be preserved on level up)
+  regenHealthPerSec?: number;
+  regenMagickaPerSec?: number;
+  regenStaminaPerSec?: number;
 }
 
 // Current values for combat/adventure (separate from max stats)
@@ -493,6 +497,7 @@ export interface CombatAbility {
   effects?: CombatEffect[];
   description: string;
   animation?: string; // for UI flavor
+  heal?: number; // for healing abilities
 }
 
 export interface CombatEffect {
@@ -536,6 +541,8 @@ export interface CombatEnemy {
   behavior: 'aggressive' | 'defensive' | 'tactical' | 'support' | 'berserker';
   // Status effects currently on this enemy
   activeEffects?: Array<{ effect: CombatEffect; turnsRemaining: number }>;
+  // Companion metadata for ally summons
+  companionMeta?: { name?: string; xpContribution?: number; companionId?: string; autoLoot?: boolean; autoControl?: boolean };
 }
 
 export interface CombatState {
@@ -594,6 +601,7 @@ export interface CombatState {
     items: Array<{ name: string; type: string; description: string; quantity: number }>;
     transactionId?: string;
     combatId?: string;
+    companionXp?: Array<{ companionId: string; xp: number }>;
   };
   // Structured combat result (helps story engine consume a single object)
   combatResult?: {
@@ -622,6 +630,8 @@ export interface CombatLogEntry {
   rollTier?: string;
   narrative: string;
   timestamp: number;
+  // Mark auto-generated entries (e.g., from regen abilities)
+  auto?: boolean;
 }
 
 export interface PlayerCombatStats {

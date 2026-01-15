@@ -211,7 +211,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
   const handleCycleWeather = () => {
     if (onWeatherChange) {
       const weatherCycle: WeatherEffect[] = ['snow', 'rain', 'none'];
-      const currentIndex = weatherCycle.indexOf(weatherEffect);
+      const currentIndex = weatherCycle.indexOf(weatherEffect as WeatherEffect);
       const nextIndex = (currentIndex + 1) % weatherCycle.length;
       onWeatherChange(weatherCycle[nextIndex]);
     }

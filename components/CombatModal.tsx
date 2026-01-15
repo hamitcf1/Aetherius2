@@ -724,12 +724,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     const usedItem = execRes.usedItem;
 
     // Play combat sound based on action/ability type
-    if (action === 'attack' || action === 'ability') {
+    if (action === 'attack' || action === 'power_attack' || action === 'magic' || action === 'shout') {
       const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
       const actionType = ability?.type || 'melee';
       if (ability?.name?.toLowerCase().includes('bash')) {
         playCombatSound('shield_bash');
-      } else if (ability?.name?.toLowerCase().includes('block') || action === 'defend') {
+      } else if (ability?.name?.toLowerCase().includes('block')) {
         playCombatSound('block');
       } else {
         playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout');

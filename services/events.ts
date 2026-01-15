@@ -6,6 +6,7 @@ export interface CombatResolvedPayload {
   finalVitals?: any;
   timeAdvanceMinutes?: number | null;
   combatResult?: any;
+  location?: string | null;
 }
 
 const combatSubscribers = new Set<Callback<CombatResolvedPayload>>();

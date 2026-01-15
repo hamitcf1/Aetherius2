@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import ModalWrapper from './ModalWrapper';
-import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy } from '../types';
+import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy, Character, InventoryItem } from '../types';
 import { getDungeonById } from '../data/dungeonDefinitions';
 import { CombatModal } from './CombatModal';
 import { initializeCombat } from '../services/combatService';
@@ -10,13 +10,15 @@ interface DungeonModalProps {
   dungeonId: string | null;
   onClose: (result?: { cleared?: boolean; rewards?: any }) => void;
   activeCharacterId: string | null;
+  character: Character | null;
+  inventory: InventoryItem[];
   // Callbacks to mutate global state (inventory/character changes)
   onApplyRewards: (rewards: { gold?: number; xp?: number; items?: any[] }) => void;
   onApplyBuff?: (effect: any) => void;
   onStartCombat?: (combatState: any) => void;
 }
 
-export const DungeonModal: React.FC<DungeonModalProps> = ({ open, dungeonId, onClose, activeCharacterId, onApplyRewards, onApplyBuff, onStartCombat }) => {
+export const DungeonModal: React.FC<DungeonModalProps> = ({ open, dungeonId, onClose, activeCharacterId, character, inventory, onApplyRewards, onApplyBuff, onStartCombat }) => {
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
   const [state, setState] = useState<DungeonState | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -337,10 +339,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({ open, dungeonId, onC
       </div>
 
       {/* Combat Modal when active inside dungeon */}
-      {combatState && (
+      {combatState && character && (
         <CombatModal
-          character={{} as any}
-          inventory={[]}
+          character={character}
+          inventory={inventory}
           initialCombatState={combatState}
           onCombatEnd={(result, rewards, finalVitals) => handleCombatEnd(result as any, rewards, finalVitals)}
         />

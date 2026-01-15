@@ -1009,7 +1009,7 @@ export const SortSelector: React.FC<{
     return { key: parts[0] || options[0].id, dir: parts[1] === 'desc' ? 'desc' : 'asc' };
   };
 
-  const currentParsed = allowDirection ? parseSort(currentSort) : { key: currentSort };
+  const currentParsed = allowDirection ? parseSort(currentSort) : { key: currentSort, dir: 'asc' as const };
   const current = options.find(o => o.id === currentParsed.key) || options[0];
 
   return (

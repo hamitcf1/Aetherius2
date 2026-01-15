@@ -4165,6 +4165,8 @@ const App: React.FC = () => {
           open={dungeonOpen}
           dungeonId={dungeonId}
           activeCharacterId={currentCharacterId}
+          character={activeCharacter}
+          inventory={items}
           onClose={(result) => {
             setDungeonOpen(false);
             setDungeonId(null);
