@@ -30,6 +30,7 @@ export type SoundEffect =
   | 'spell_impact'    // Spell hitting target
   | 'hit_received'    // Taking damage
   | 'enemy_death'     // Enemy defeated
+  | 'dice_tick'       // Small tick for D20 roll animation
   // Blacksmith sounds
   | 'forge_upgrade'   // Blacksmith upgrade success
   | 'anvil_hit';      // Metal impact for forging
@@ -89,6 +90,7 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   spell_impact: `${BASE_PATH}/audio/sfx/spell_impact.mp3`,
   hit_received: `${BASE_PATH}/audio/sfx/hit_received.mp3`,
   enemy_death: `${BASE_PATH}/audio/sfx/enemy_death.mp3`,
+  dice_tick: `${BASE_PATH}/audio/sfx/dice_tick.mp3`,
   // Blacksmith sounds
   forge_upgrade: `${BASE_PATH}/audio/sfx/forge_upgrade.mp3`,
   anvil_hit: `${BASE_PATH}/audio/sfx/anvil_hit.mp3`,
