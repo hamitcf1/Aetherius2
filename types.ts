@@ -709,6 +709,9 @@ export interface Companion {
   recruitedAt: number;
   loyalty: number;
   mood: 'happy' | 'neutral' | 'unhappy' | 'angry';
+  // Animal companion support
+  isAnimal?: boolean; // If true, companion is an animal (no talk, pet instead)
+  species?: 'dog' | 'wolf' | 'horse' | 'husky' | 'cat' | 'fox' | 'bear' | 'sabrecat';
   // Optional recruitment or upkeep cost (gold per day, etc.)
   cost?: number;
   // Behavior in overworld/combat

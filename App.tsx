@@ -3939,6 +3939,7 @@ const App: React.FC = () => {
         onUpdate={updateCompanion}
         onRemove={removeCompanion}
         onTalk={(c) => { setCompanionDialogue(c); setCompanionsModalOpen(false); }}
+        onPet={(c) => { setCompanionDialogue(c); setCompanionsModalOpen(false); }}
         inventory={getCharacterItems()}
         onAssignItemToCompanion={(companionId: string, itemId: string, slot?: any) => {
           const items = getCharacterItems();
@@ -4021,6 +4022,11 @@ const App: React.FC = () => {
           if (lower.includes('good') || lower.includes('thanks')) updateCompanion({ ...(companionDialogue as any), mood: 'happy' });
           if (lower.includes('tired') || lower.includes('leave')) updateCompanion({ ...(companionDialogue as any), mood: 'unhappy' });
         }}
+        onPet={(c) => {
+          // Optional: play sound or trigger toast
+          showToast(`You pet ${c.name}!`, 'success');
+        }}
+        onUpdateCompanion={updateCompanion}
       />
 
       {/* Bonfire / Rest Menu */}

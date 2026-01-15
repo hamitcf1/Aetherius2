@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { Companion, InventoryItem, EquipmentSlot } from '../types';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Dog, Heart } from 'lucide-react';
 import { SortSelector, DropdownSelector } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 
@@ -37,6 +37,18 @@ const RACE_OPTIONS = [
   { id: 'Argonian', label: 'Argonian' }
 ];
 
+// Animal companion options
+const ANIMAL_SPECIES = [
+  { id: 'dog', label: 'Dog', baseHealth: 40, baseDamage: 8, baseArmor: 2 },
+  { id: 'husky', label: 'Husky', baseHealth: 50, baseDamage: 10, baseArmor: 3 },
+  { id: 'wolf', label: 'Wolf', baseHealth: 45, baseDamage: 12, baseArmor: 2 },
+  { id: 'cat', label: 'Cat', baseHealth: 20, baseDamage: 4, baseArmor: 0 },
+  { id: 'fox', label: 'Fox', baseHealth: 30, baseDamage: 6, baseArmor: 1 },
+  { id: 'horse', label: 'Horse', baseHealth: 80, baseDamage: 15, baseArmor: 5 },
+  { id: 'bear', label: 'Bear', baseHealth: 100, baseDamage: 20, baseArmor: 8 },
+  { id: 'sabrecat', label: 'Sabre Cat', baseHealth: 70, baseDamage: 18, baseArmor: 4 }
+] as const;
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -45,13 +57,14 @@ interface Props {
   onUpdate: (c: Companion) => void;
   onRemove: (id: string) => void;
   onTalk?: (c: Companion) => void;
+  onPet?: (c: Companion) => void; // For animal companions
   // Inventory & equipment handlers
   inventory?: InventoryItem[];
   onAssignItemToCompanion?: (companionId: string, itemId: string, slot?: EquipmentSlot) => void;
   onUnassignItemFromCompanion?: (itemId: string) => void;
 }
 
-export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, onAdd, onUpdate, onRemove, onTalk, inventory = [], onAssignItemToCompanion, onUnassignItemFromCompanion }) => {
+export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, onAdd, onUpdate, onRemove, onTalk, onPet, inventory = [], onAssignItemToCompanion, onUnassignItemFromCompanion }) => {
   const [name, setName] = useState('');
   const [race, setRace] = useState('Nord');
   const [level, setLevel] = useState(1);
@@ -59,6 +72,9 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
   const [behavior, setBehavior] = useState<'idle'|'follow'|'guard'>('idle');
   const [autoLoot, setAutoLoot] = useState(false);
   const [sort, setSort] = useState<string>('name:asc');
+  // Animal companion state
+  const [isAnimal, setIsAnimal] = useState(false);
+  const [species, setSpecies] = useState<string>('dog');
 
   const [selectedEquipCompanion, setSelectedEquipCompanion] = useState<Companion | null>(null);
   const [equipSlotPicker, setEquipSlotPicker] = useState<EquipmentSlot | null>(null);
@@ -66,31 +82,45 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
   const handleAdd = () => {
     if (!name.trim()) return;
     const lvl = Math.max(1, Number(level) || 1);
+    
+    // Get animal stats if applicable
+    const animalData = isAnimal ? ANIMAL_SPECIES.find(a => a.id === species) : null;
+    
     const c: Companion = {
       id: Math.random().toString(36).substr(2,9),
       characterId: '', // Will be set by App.tsx addCompanion handler
       name: name.trim(),
-      race,
-      class: 'Follower',
+      race: isAnimal ? (animalData?.label || 'Animal') : race,
+      class: isAnimal ? 'Animal Companion' : 'Follower',
       level: lvl,
-      health: 50 + (lvl-1)*10,
-      maxHealth: 50 + (lvl-1)*10,
-      damage: 6 + Math.floor(lvl/2),
-      armor: 5 + Math.floor(lvl/4),
-      personality: 'Loyal',
+      health: isAnimal 
+        ? (animalData?.baseHealth || 40) + (lvl-1)*8 
+        : 50 + (lvl-1)*10,
+      maxHealth: isAnimal 
+        ? (animalData?.baseHealth || 40) + (lvl-1)*8 
+        : 50 + (lvl-1)*10,
+      damage: isAnimal 
+        ? (animalData?.baseDamage || 8) + Math.floor(lvl/2) 
+        : 6 + Math.floor(lvl/2),
+      armor: isAnimal 
+        ? (animalData?.baseArmor || 2) + Math.floor(lvl/4) 
+        : 5 + Math.floor(lvl/4),
+      personality: isAnimal ? 'Loyal Beast' : 'Loyal',
       recruitedAt: Date.now(),
-      loyalty: 50,
-      mood: 'neutral',
+      loyalty: isAnimal ? 75 : 50, // Animals tend to be more loyal
+      mood: 'happy',
       cost: typeof cost === 'number' && cost > 0 ? cost : undefined,
-      behavior: behavior || 'idle',
-      autoLoot: !!autoLoot,
+      behavior: behavior || 'follow',
+      autoLoot: isAnimal ? false : !!autoLoot, // Animals can't loot
       autoControl: true,
       xp: 0,
-      subclass: 'warrior'
+      subclass: isAnimal ? 'beast' : 'warrior',
+      isAnimal,
+      species: isAnimal ? (species as any) : undefined
     };
 
     onAdd(c);
-    setName(''); setLevel(1); setCost('');
+    setName(''); setLevel(1); setCost(''); setIsAnimal(false); setSpecies('dog');
   };
 
   return (
@@ -125,18 +155,29 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
             return asc ? cmp : -cmp;
           }).map(c => (
             <div key={c.id} className="p-2 rounded border border-skyrim-border bg-skyrim-paper/20 flex items-center justify-between gap-2">
-              <div>
-                <div className="font-bold text-skyrim-gold">{c.name} <span className="text-xs text-skyrim-text ml-2">Lv {c.level}</span></div>
-                <div className="text-xs text-skyrim-text">{c.race} • {c.class} • Loyalty: {c.loyalty}</div>
-                <div className="text-xs text-skyrim-text mt-1">Damage: {c.damage} • Armor: {c.armor} • Cost: {c.cost ?? '—'}g</div>
+              <div className="flex items-center gap-2">
+                {c.isAnimal && <Dog size={16} className="text-amber-400" />}
+                <div>
+                  <div className="font-bold text-skyrim-gold">{c.name} <span className="text-xs text-skyrim-text ml-2">Lv {c.level}</span></div>
+                  <div className="text-xs text-skyrim-text">{c.race} • {c.class} • Loyalty: {c.loyalty}</div>
+                  <div className="text-xs text-skyrim-text mt-1">Damage: {c.damage} • Armor: {c.armor} • Cost: {c.cost ?? '—'}g</div>
+                </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => onRemove(c.id)} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
                 <button onClick={() => onUpdate({ ...c, behavior: c.behavior === 'follow' ? 'guard' : 'follow' })} className="px-2 py-1 rounded bg-skyrim-paper/30 text-skyrim-text text-xs" title="Toggle Follow/Guard">{c.behavior === 'follow' ? 'Following' : c.behavior === 'guard' ? 'Guarding' : 'Idle'}</button>
-                <button onClick={() => onUpdate({ ...c, autoLoot: !c.autoLoot })} className={`px-2 py-1 rounded text-xs ${c.autoLoot ? 'bg-yellow-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-loot">{c.autoLoot ? 'Auto-loot: On' : 'Auto-loot: Off'}</button>
+                {!c.isAnimal && (
+                  <button onClick={() => onUpdate({ ...c, autoLoot: !c.autoLoot })} className={`px-2 py-1 rounded text-xs ${c.autoLoot ? 'bg-yellow-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-loot">{c.autoLoot ? 'Auto-loot: On' : 'Auto-loot: Off'}</button>
+                )}
                 <button onClick={() => onUpdate({ ...c, autoControl: !c.autoControl })} className={`px-2 py-1 rounded text-xs ${c.autoControl ? 'bg-sky-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-control">{c.autoControl ? 'Auto: On' : 'Auto: Off'}</button>
-                <button onClick={() => onTalk && onTalk(c)} className="px-2 py-1 rounded bg-blue-700 text-white text-xs">Talk</button>
-                <button onClick={() => setSelectedEquipCompanion(c)} className="px-2 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs">Manage Equipment</button>
+                {c.isAnimal ? (
+                  <button onClick={() => onPet && onPet(c)} className="px-2 py-1 rounded bg-pink-600 text-white text-xs flex items-center gap-1"><Heart size={12} /> Pet</button>
+                ) : (
+                  <button onClick={() => onTalk && onTalk(c)} className="px-2 py-1 rounded bg-blue-700 text-white text-xs">Talk</button>
+                )}
+                {!c.isAnimal && (
+                  <button onClick={() => setSelectedEquipCompanion(c)} className="px-2 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs">Manage Equipment</button>
+                )}
               </div>
             </div>
           ))}
@@ -144,15 +185,39 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
 
         <div className="mt-4 border-t border-skyrim-border pt-3">
           <h4 className="text-sm font-bold text-skyrim-gold mb-2">Recruit New Companion</h4>
+          
+          {/* Animal toggle */}
+          <div className="mb-3">
+            <label className="flex items-center gap-2 text-sm text-skyrim-text cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 accent-skyrim-gold" 
+                checked={isAnimal} 
+                onChange={(e) => setIsAnimal(e.target.checked)} 
+              />
+              <Dog size={16} className={isAnimal ? 'text-amber-400' : 'text-gray-500'} />
+              <span>Recruit Animal Companion</span>
+            </label>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
             <FieldInput
               aria-label="Companion name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Name"
+              placeholder={isAnimal ? "Pet Name (e.g., Meeko)" : "Name"}
             />
 
-            <DropdownSelector currentValue={race} onSelect={(value) => setRace(value)} options={RACE_OPTIONS} placeholder="Race" />
+            {isAnimal ? (
+              <DropdownSelector 
+                currentValue={species} 
+                onSelect={(value) => setSpecies(value)} 
+                options={ANIMAL_SPECIES.map(a => ({ id: a.id, label: a.label }))} 
+                placeholder="Species" 
+              />
+            ) : (
+              <DropdownSelector currentValue={race} onSelect={(value) => setRace(value)} options={RACE_OPTIONS} placeholder="Race" />
+            )}
 
             <NumberInput
               aria-label="Companion level"
@@ -173,13 +238,37 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
               <label className="text-xs text-skyrim-text">Behavior</label>
               <DropdownSelector currentValue={behavior} onSelect={(v) => setBehavior(v as any)} options={[{ id: 'idle', label: 'Idle' }, { id: 'follow', label: 'Follow' }, { id: 'guard', label: 'Guard' }]} placeholder="Behavior" />
             </div>
-            <div>
-              <label className="flex items-center gap-2 text-xs text-skyrim-text mt-1"><input type="checkbox" className="w-4 h-4 accent-skyrim-gold" checked={autoLoot} onChange={(e) => setAutoLoot(e.target.checked)} /> Auto-loot</label>
-            </div>
+            {!isAnimal && (
+              <div>
+                <label className="flex items-center gap-2 text-xs text-skyrim-text mt-1"><input type="checkbox" className="w-4 h-4 accent-skyrim-gold" checked={autoLoot} onChange={(e) => setAutoLoot(e.target.checked)} /> Auto-loot</label>
+              </div>
+            )}
           </div>
+          
+          {/* Show animal stats preview */}
+          {isAnimal && species && (
+            <div className="mb-2 p-2 bg-skyrim-paper/30 rounded border border-skyrim-border">
+              <div className="text-xs text-skyrim-text">
+                {(() => {
+                  const animalData = ANIMAL_SPECIES.find(a => a.id === species);
+                  if (!animalData) return null;
+                  const lvl = Math.max(1, Number(level) || 1);
+                  return (
+                    <span>
+                      <strong>{animalData.label}</strong> — 
+                      HP: {animalData.baseHealth + (lvl-1)*8} | 
+                      Damage: {animalData.baseDamage + Math.floor(lvl/2)} | 
+                      Armor: {animalData.baseArmor + Math.floor(lvl/4)}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button onClick={handleAdd} className="px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded flex items-center gap-2"><Plus size={14}/> Recruit</button>
-            <button onClick={() => { setName(''); setLevel(1); setRace('Nord'); setCost(''); setAutoLoot(false); setBehavior('idle'); }} className="px-3 py-2 rounded border border-skyrim-border">Reset</button>
+            <button onClick={() => { setName(''); setLevel(1); setRace('Nord'); setCost(''); setAutoLoot(false); setBehavior('idle'); setIsAnimal(false); setSpecies('dog'); }} className="px-3 py-2 rounded border border-skyrim-border">Reset</button>
           </div>
         </div>
 
