@@ -1524,9 +1524,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         />
       )}
 
-      {/* D20 roll visual */}
-      <div className="absolute left-1/2 top-16 sm:top-20 transform -translate-x-1/2 z-50 pointer-events-none">
-        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-xl sm:text-2xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : rollActor === 'ally' ? 'border-sky-500 text-sky-300' : 'border-amber-500 text-amber-200'}`}>
+      {/* D20 roll visual (moved upward to header area) */}
+      <div className="absolute left-1/2 top-6 sm:top-8 transform -translate-x-1/2 z-60 pointer-events-none" aria-hidden>
+        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-lg sm:text-xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : rollActor === 'ally' ? 'border-sky-500 text-sky-300' : 'border-amber-500 text-amber-200'}`}>
           {showRoll && rollValue ? (
             <span className={`animate-bounce`}>{rollValue}</span>
           ) : (
