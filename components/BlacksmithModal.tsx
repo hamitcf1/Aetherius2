@@ -20,8 +20,9 @@ const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTM
     const centerY = rect.top + rect.height / 2;
     
     // Generate initial sparks
+    const seed = Date.now();
     const initialSparks = Array.from({ length: 25 }, (_, i) => ({
-      id: i,
+      id: seed + i,
       x: centerX,
       y: centerY,
       vx: (Math.random() - 0.5) * 12,
@@ -60,11 +61,26 @@ const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTM
     animationRef.current = requestAnimationFrame(animate);
     
     return () => {
+      // Ensure animation stops and any remaining sparks are cleared when the effect is torn down
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
+      // Clear sparks so they don't remain frozen on screen if active toggles off mid-animation
+      setSparks([]);
     };
   }, [active, buttonRef]);
+
+  // Clean up any lingering timeout when the modal is unmounted
+  useEffect(() => {
+    return () => {
+      if (sparkTimeoutRef.current) {
+        clearTimeout(sparkTimeoutRef.current as any);
+        sparkTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   
   if (sparks.length === 0) return null;
   
@@ -105,6 +121,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSparks, setShowSparks] = useState(false);
   const upgradeButtonRef = useRef<HTMLButtonElement>(null);
+  const sparkTimeoutRef = useRef<number | null>(null);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
@@ -131,9 +148,17 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
     audioService.playSoundEffect('anvil_hit');
     setTimeout(() => audioService.playSoundEffect('forge_upgrade'), 100);
     
-    // Trigger spark effect
+    // Trigger spark effect. Allow the particle system to fully animate (≈800ms) before hiding.
+    // Clear any existing timeout so repeated upgrades reset the timer cleanly.
+    if (sparkTimeoutRef.current) {
+      clearTimeout(sparkTimeoutRef.current as any);
+      sparkTimeoutRef.current = null;
+    }
     setShowSparks(true);
-    setTimeout(() => setShowSparks(false), 50);
+    sparkTimeoutRef.current = window.setTimeout(() => {
+      setShowSparks(false);
+      sparkTimeoutRef.current = null;
+    }, 800);
 
     // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
     // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.

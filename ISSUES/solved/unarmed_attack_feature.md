@@ -20,6 +20,10 @@ Final_Damage = Base_Damage + (Skill_Modifier * Skill_Level)
 
 Attribute Integration: Linking the attack to the "Unarmed/Brawling" skill tree.
 
+Unlocks:
+- Skill unlock: Unarmed skill level >= 5 grants the ability.
+- Perk unlock: `unarmed_mastery` perk will unlock the ability regardless of skill level.
+
 Input Mapping: Assigning a dedicated button or a contextual trigger for unarmed combat.
 
 UI/UX: Visual feedback ensuring the player knows they can still attack when the stamina bar is empty.

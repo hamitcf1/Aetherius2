@@ -70,6 +70,9 @@ export const FEATURES = {
   debugPanel: { enabled: true, wip: false, adminOnly: true },
   testFeatures: { enabled: true, wip: false, adminOnly: true },
   adminTools: { enabled: true, wip: false, adminOnly: true },
+
+  // Combat Features
+  enableUnarmedCombat: { enabled: true, wip: false, label: 'Unarmed Strike' },
 } as const satisfies Record<string, FeatureFlag>;
 
 // Helper to check if a feature is enabled (respects adminOnly)

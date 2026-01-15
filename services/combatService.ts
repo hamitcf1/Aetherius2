@@ -186,7 +186,8 @@ const computeDamageFromNat = (
 
 // Adjust ability costs based on character level and relevant skills
 const adjustAbilityCost = (character: Character | undefined, ability: CombatAbility): number => {
-  const base = Math.max(1, Math.floor(ability.cost || 0));
+  // Special-case zero cost abilities (e.g., unarmed strike) - keep them free
+  const base = (ability.cost === 0) ? 0 : Math.max(1, Math.floor(ability.cost || 0));
   if (!character) return base;
   const lvlFactor = 1 + (character.level || 1) * 0.01; // slightly increase cost with level (scale)
   // Skill reductions
@@ -194,6 +195,7 @@ const adjustAbilityCost = (character: Character | undefined, ability: CombatAbil
   let skillReduction = 0;
   if (ability.type === 'magic') skillReduction = (getSkill('Destruction') || 0) * 0.005; // each 1 skill -> 0.5% cost reduction
   if (ability.type === 'melee') skillReduction = (getSkill('One-Handed') || getSkill('Two-Handed')) * 0.003; // minor reduction
+  if (base === 0) return 0;
   const adjusted = Math.max(1, Math.floor(base * lvlFactor * Math.max(0.6, 1 - skillReduction)));
   return adjusted;
 };
@@ -458,6 +460,10 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
 // PLAYER ABILITIES GENERATION
 // ============================================================================
 
+import { isFeatureEnabled } from '../featureFlags';
+
+const UNARMED_SKILL_MODIFIER = 0.5; // tuning constant for unarmed damage scaling
+
 const generatePlayerAbilities = (
   character: Character,
   equipment: InventoryItem[]
@@ -476,6 +482,25 @@ const generatePlayerAbilities = (
     cost: 10, // stamina
     description: 'A basic attack with your equipped weapon.'
   });
+
+  // Unarmed Strike (feature-flagged): zero stamina, scales with Unarmed skill
+  if (isFeatureEnabled('enableUnarmedCombat')) {
+    const unarmedSkill = getSkillLevel('Unarmed');
+    const UNARMED_UNLOCK_SKILL_LEVEL = 5; // Skill level required to unlock unarmed ability
+    const hasUnarmedPerk = hasPerk(character, 'unarmed_mastery');
+
+    if (unarmedSkill >= UNARMED_UNLOCK_SKILL_LEVEL || hasUnarmedPerk) {
+      abilities.push({
+        id: 'unarmed_strike',
+        name: 'Unarmed Strike',
+        type: 'melee',
+        damage: Math.max(4, Math.floor((weapon?.damage || 10) * 0.7)), // base unarmed damage (slightly below weapon)
+        cost: 0, // zero stamina
+        unarmed: true,
+        description: 'A fallback strike that requires no stamina and scales with the Unarmed skill.'
+      });
+    }
+  }
 
   // Off-hand attack if dual-wielding a small weapon
   const offhandWeapon = equipment.find(i => i.equipped && i.slot === 'offhand' && i.type === 'weapon');
@@ -801,6 +826,7 @@ export const executePlayerAction = (
 
       // Check cost and handle stamina-shortage by scaling damage instead of blocking
       const costType = ability.type === 'magic' ? 'currentMagicka' : 'currentStamina';
+      const isUnarmed = !!(ability as any).unarmed || ability.id === 'unarmed_strike';
       let staminaMultiplier = 1;
       // Adjust cost by level/skills
       const effectiveCost = adjustAbilityCost(character, ability);
@@ -813,6 +839,11 @@ export const executePlayerAction = (
         }
         // Attach magickaSpent to ability so damage scaling can use it later
         (ability as any).__magickaSpent = magickaSpent;
+      } else if (isUnarmed) {
+        // Unarmed Strike: zero stamina, not affected by low-stamina penalties and does not consume stamina
+        staminaMultiplier = 1; // explicit for clarity
+        // Telemetry: log if used while low on stamina
+        try { require('../services/logger').log.info('[telemetry] unarmed_used', { charId: character.id, lowStamina: (newPlayerStats.currentStamina || 0) <= 0, turn: newState.turn }); } catch (e) {}
       } else {
         const available = newPlayerStats.currentStamina || 0;
         if (available <= 0) {
@@ -895,25 +926,49 @@ export const executePlayerAction = (
 
       // Determine damage tier multipliers based on rollTier
       const tierMultipliers: Record<string, number> = { low: 0.6, mid: 1.0, high: 1.25, crit: 1.75 };
-      // For magic abilities, allow damage to scale with magicka spent and player level.
+
       let abilityDamage = ability.damage || 0;
-      if (ability.type === 'magic') {
-        const magSpent = (ability as any).__magickaSpent || 0;
-        const playerLevel = character?.level || 1;
-        // Per-level multiplier (small incremental growth)
-        const levelMultiplier = 1 + Math.max(0, (playerLevel - 1)) * 0.03; // 3% per level
-        if (magSpent <= 0) {
-          // No magicka: apply base damage only (do not apply level multiplier)
-          abilityDamage = ability.damage || 0;
-        } else {
-          const ratio = effectiveCost > 0 ? (magSpent / effectiveCost) : 1;
-          abilityDamage = Math.max(1, Math.floor((ability.damage || 0) * levelMultiplier * ratio));
+
+      // Prepare damage / hit location variables in function scope so they are available for post-roll modifiers
+      let damage = 0;
+      let hitLocation: string | undefined = undefined;
+
+      if ((ability as any).unarmed) {
+        // Unarmed strike damage scales with the Unarmed skill and ignores stamina penalties
+        const unarmedSkillLevel = (character.skills || []).find(s => s.name === 'Unarmed')?.level || 15;
+        abilityDamage = (ability.damage || 0) + Math.floor(UNARMED_SKILL_MODIFIER * unarmedSkillLevel);
+
+        const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
+        const scaledBase = Math.max(1, Math.floor(abilityDamage * tierMult));
+        const res = computeDamageFromNat(scaledBase, character?.level || 1, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);
+        damage = res.damage;
+        hitLocation = res.hitLocation;
+
+        // Defer applying damage until after perk and armor/resist calculations
+      } else {
+        // For magic abilities, allow damage to scale with magicka spent and player level.
+        if (ability.type === 'magic') {
+          const magSpent = (ability as any).__magickaSpent || 0;
+          const playerLevel = character?.level || 1;
+          // Per-level multiplier (small incremental growth)
+          const levelMultiplier = 1 + Math.max(0, (playerLevel - 1)) * 0.03; // 3% per level
+          if (magSpent <= 0) {
+            // No magicka: apply base damage only (do not apply level multiplier)
+            abilityDamage = ability.damage || 0;
+          } else {
+            const ratio = effectiveCost > 0 ? (magSpent / effectiveCost) : 1;
+            abilityDamage = Math.max(1, Math.floor((ability.damage || 0) * levelMultiplier * ratio));
+          }
         }
+        const baseDamage = abilityDamage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
+        const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
+        const scaledBase = Math.max(1, Math.floor(baseDamage * staminaMultiplier * tierMult));
+        const res = computeDamageFromNat(scaledBase, character?.level || 1, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);
+        damage = res.damage;
+        hitLocation = res.hitLocation;
+
+        // Defer applying damage until after perk and armor/resist calculations
       }
-      const baseDamage = abilityDamage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
-      const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
-      const scaledBase = Math.max(1, Math.floor(baseDamage * staminaMultiplier * tierMult));
-      const { damage, hitLocation } = computeDamageFromNat(scaledBase, 12, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);
 
       // === COMBAT PERK EFFECTS ===
       let perkDamageMultiplier = 1.0;
@@ -1007,6 +1062,27 @@ export const executePlayerAction = (
           newPlayerStats.currentHealth + lifestealAmount
         );
         narrative += ` You drain ${lifestealAmount} health.`;
+      }
+
+      // Record the applied damage in combat log (after modifiers & lifesteal applied)
+      try {
+        newState.combatLog.push({
+          turn: newState.turn,
+          actor: 'player',
+          action: ability.name,
+          target: target.name,
+          damage: appliedDamage,
+          isCrit: isCrit,
+          nat: attackResolved.natRoll,
+          hitLocation,
+          rollTier: attackResolved.rollTier,
+          narrative,
+          timestamp: Date.now()
+        });
+      } catch (e) {
+        // if combatLog isn't initialized for some reason, create it
+        newState.combatLog = newState.combatLog || [];
+        newState.combatLog.push({ turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: appliedDamage, isCrit: isCrit, nat: attackResolved.natRoll, hitLocation, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
       }
       
       if (enemyIndex >= 0 && newState.enemies[enemyIndex].currentHealth <= 0) {

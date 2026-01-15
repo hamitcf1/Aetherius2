@@ -254,6 +254,8 @@ export const SKYRIM_SKILLS: Skill[] = [
   { name: 'Restoration', level: 15 },
   { name: 'Alteration', level: 15 },
   { name: 'Enchanting', level: 15 },
+  // Combat: Unarmed/Brawling skill (used for unarmed strike scaling)
+  { name: 'Unarmed', level: 15 },
 ];
 
 export const INITIAL_CHARACTER_TEMPLATE: Omit<Character, 'id' | 'profileId' | 'name' | 'race' | 'gender' | 'archetype' | 'lastPlayed'> = {
@@ -500,6 +502,8 @@ export interface CombatAbility {
   description: string;
   animation?: string; // for UI flavor
   heal?: number; // for healing abilities
+  // Optional flags
+  unarmed?: boolean; // true for the Unarmed Strike special ability
 }
 
 export interface CombatEffect {

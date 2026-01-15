@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-    INITIAL_CHARACTER_TEMPLATE, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
+    INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
     DifficultyLevel, WeatherState, StatusEffect, Companion
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -1082,9 +1082,21 @@ const App: React.FC = () => {
               console.log(`[XP Normalization] Character "${c.name}" (level ${currentLevel}) had ${currentXP} XP but needs ${xpRequiredForCurrentLevel} XP to be level ${currentLevel}. Normalized XP to ${normalizedXP}.`);
             }
             
+            // Ensure character has all default skills (adds missing skills introduced in new releases)
+            const defaultSkills = (SKYRIM_SKILLS || []).map(s => s.name);
+            const mergedSkills = Array.isArray(c.skills) ? [ ...c.skills ] : [];
+            for (const sk of defaultSkills) {
+              if (!mergedSkills.some(ms => ms.name === sk)) {
+                // Default level for missing skills is taken from SKYRIM_SKILLS
+                const def = SKYRIM_SKILLS.find(s => s.name === sk);
+                mergedSkills.push({ name: sk, level: def?.level ?? 15 });
+              }
+            }
+
             const next: Character = {
               ...c,
               experience: normalizedXP,
+              skills: mergedSkills,
               time: {
                 day: Math.max(1, Number(time?.day || 1)),
                 hour: clamp(Number(time?.hour || 0), 0, 23),
@@ -1096,7 +1108,7 @@ const App: React.FC = () => {
                 fatigue: clamp(Number(needs?.fatigue ?? 0), 0, 100),
               },
             };
-            if (!c?.time || !c?.needs || xpWasNormalized) {
+            if (!c?.time || !c?.needs || xpWasNormalized || mergedSkills.length !== (c.skills || []).length) {
               setDirtyEntities(prev => new Set([...prev, next.id]));
             }
             return next;

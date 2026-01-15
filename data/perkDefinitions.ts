@@ -38,6 +38,9 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'bladesman', name: 'Bladesman', skill: 'One-Handed', description: 'Critical hits with swords deal 15% more damage per rank.', requires: ['armsman:3'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'swordCritDamage', amount: 15 } },
   { id: 'bone_breaker', name: 'Bone Breaker', skill: 'One-Handed', description: 'Maces ignore 15% of armor per rank.', requires: ['armsman:3'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'maceArmorPen', amount: 15 } },
   { id: 'hack_and_slash', name: 'Hack and Slash', skill: 'One-Handed', description: 'Axes have 10% chance per rank to cause bleeding (5 damage/turn for 3 turns).', requires: ['armsman:3'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'axeBleed', amount: 10 } },
+
+  // === UNARMED (new) ===
+  { id: 'unarmed_mastery', name: 'Unarmed Mastery', skill: 'Unarmed', description: 'Unlocks the Unarmed Strike ability and increases unarmed damage by 8% per rank.', requires: [], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'unarmedDamage', amount: 8 } },
   
   // === COMBAT PERKS - TWO-HANDED ===
   { id: 'barbarian', name: 'Barbarian', skill: 'Two-Handed', description: 'Increases two-handed weapon damage by 12% per rank.', maxRank: 5, masteryCost: 2, effect: { type: 'combat', key: 'twoHandedDamage', amount: 12 } },

@@ -16,7 +16,7 @@ interface Props {
 
 const SKILL_CATEGORIES: Record<string, { label: string; skills: string[] }> = {
   attributes: { label: 'Attributes', skills: ['Health', 'Magicka', 'Stamina', 'Luck'] },
-  combat: { label: 'Combat', skills: ['One-Handed', 'Two-Handed', 'Block', 'Archery', 'Combat'] },
+  combat: { label: 'Combat', skills: ['One-Handed', 'Two-Handed', 'Block', 'Archery', 'Combat', 'Unarmed'] },
   armor: { label: 'Armor', skills: ['Light Armor', 'Heavy Armor'] },
   magic: { label: 'Magic', skills: ['Destruction', 'Restoration', 'Conjuration'] },
   stealth: { label: 'Stealth', skills: ['Sneak'] },

@@ -633,7 +633,8 @@ window.demo.simulateCombat = function(options = {}) {
     const health = Math.floor(playerHealth * seed.healthMultiplier);
     const stamina = Math.floor(playerStamina * 0.9);
     const magicka = Math.floor(playerStamina * 0.6);
-    const damage = Math.max(6, Math.floor(playerWeaponGuess * seed.damageMultiplier));
+    // Allow zero-damage seeds (e.g., Training Dummy) to have damage 0
+    const damage = seed.damageMultiplier === 0 ? 0 : Math.max(6, Math.floor(playerWeaponGuess * seed.damageMultiplier));
 
     return {
       id: uniqueId(),
@@ -723,13 +724,39 @@ window.demo.simulateCombat = function(options = {}) {
     }
   ];
 
-  const enemySeeds = Array.isArray(options.enemies) && options.enemies.length
-    ? options.enemies
-    : [choose(defaultSeeds)];
+  // Support deterministic testing: allow a fixed dummy enemy via options.fixedEnemy or options.enemyPreset === 'dummy'
+  const fixedSeed = {
+    name: 'Training Dummy',
+    type: 'humanoid',
+    baseHealth: 100,
+    baseDamage: 0,
+    healthMultiplier: 1.0,
+    damageMultiplier: 0.0,
+    armor: 0,
+    weaknesses: [],
+    resistances: [],
+    behavior: 'defensive',
+    description: 'A non-lethal combat dummy used for consistent testing.',
+    loot: []
+  };
+
+  const enemySeeds = (typeof options.fixedEnemy === 'boolean' && options.fixedEnemy)
+    ? [fixedSeed]
+    : (options.enemyPreset === 'dummy')
+      ? [fixedSeed]
+      : (Array.isArray(options.enemies) && options.enemies.length)
+        ? options.enemies
+        : [choose(defaultSeeds)];
 
   const enemies = enemySeeds.map(seed => buildEnemy(seed));
   const ambush = typeof options.ambush === 'boolean' ? options.ambush : Math.random() < 0.2;
   const location = options.location || 'Demo: Abandoned Watchtower';
+
+  // Dry-run mode: return constructed enemies without starting combat (useful for tests)
+  if (options.dryRun === true) {
+    console.log('Dry-run simulateCombat: returning constructed enemy objects without starting combat');
+    return enemies;
+  }
 
   app.handleGameUpdate({
     combatStart: {
