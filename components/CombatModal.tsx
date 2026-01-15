@@ -968,7 +968,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--skyrim-dark, #0f0f0f)' }}>
       {/* Combat header - more compact on mobile */}
-      <div className="bg-gradient-to-b from-stone-900 to-transparent p-2 sm:p-4 border-b border-amber-900/30">
+      <div className="bg-gradient-to-b from-stone-900 to-transparent p-2 sm:p-4 border-b border-amber-900/30 relative">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
             <h2 className="text-lg sm:text-2xl font-bold text-amber-100 tracking-wider">⚔️ COMBAT</h2>
@@ -977,6 +977,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
             {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
           </div>
+
+        {/* D20 roll visual centered in header */}
+        <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 z-60 pointer-events-none" aria-hidden>
+          <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-lg sm:text-xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : rollActor === 'ally' ? 'border-sky-500 text-sky-300' : 'border-amber-500 text-amber-200'}`}>
+            {showRoll && rollValue ? (
+              <span className={`animate-bounce`}>{rollValue}</span>
+            ) : (
+              <span className="text-stone-500">&nbsp;</span>
+            )}
+          </div>
+        </div>
         </div>
       </div>
 
@@ -1524,16 +1535,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         />
       )}
 
-      {/* D20 roll visual (moved upward to header area) */}
-      <div className="absolute left-1/2 top-6 sm:top-8 transform -translate-x-1/2 z-60 pointer-events-none" aria-hidden>
-        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-skyrim-paper/60 border-2 flex items-center justify-center text-lg sm:text-xl ${rollActor === 'enemy' ? 'border-red-500 text-red-300' : rollActor === 'ally' ? 'border-sky-500 text-sky-300' : 'border-amber-500 text-amber-200'}`}>
-          {showRoll && rollValue ? (
-            <span className={`animate-bounce`}>{rollValue}</span>
-          ) : (
-            <span className="text-stone-500">&nbsp;</span>
-          )}
-        </div>
-      </div>
+
 
       {/* Floating damage / hit indicators */}
       {floatingHits.map((hit) => {
