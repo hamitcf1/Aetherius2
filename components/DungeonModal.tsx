@@ -17,6 +17,7 @@ interface DungeonModalProps {
   onApplyBuff?: (effect: any) => void;
   onStartCombat?: (combatState: any) => void;
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  onInventoryUpdate?: (items: InventoryItem[] | Array<{ name: string; quantity: number }>) => void;
 }
 
 // Node type icons and colors
@@ -100,7 +101,7 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition): { nodes: MapNode[]
 
 export const DungeonModal: React.FC<DungeonModalProps> = ({ 
   open, dungeonId, onClose, activeCharacterId, character, inventory, 
-  onApplyRewards, onApplyBuff, onStartCombat, showToast
+  onApplyRewards, onApplyBuff, onStartCombat, showToast, onInventoryUpdate
 }) => {
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
   const [state, setState] = useState<DungeonState | null>(null);
@@ -664,6 +665,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           initialCombatState={combatState}
           onCombatEnd={(result, rewards, finalVitals) => handleCombatEnd(result as any, rewards, finalVitals)}
           showToast={showToast}
+          onInventoryUpdate={onInventoryUpdate}
         />
       )}
 

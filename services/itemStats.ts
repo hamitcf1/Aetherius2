@@ -7,6 +7,67 @@ export interface ItemStats {
   value?: number;
 }
 
+// === FUZZY NAME MATCHING FOR AI-GENERATED ITEMS ===
+// Maps possessive/descriptive prefixes to core item types
+const WEAPON_KEYWORDS = [
+  'dagger', 'sword', 'war axe', 'waraxe', 'axe', 'mace', 'hammer', 'warhammer', 
+  'greatsword', 'battleaxe', 'bow', 'crossbow', 'staff', 'arrows', 'bolts'
+];
+
+const ARMOR_KEYWORDS = [
+  'armor', 'cuirass', 'boots', 'helmet', 'helm', 'gauntlets', 'gloves', 'bracers',
+  'shield', 'robes', 'hood', 'cloak', 'clothes'
+];
+
+const MATERIAL_PREFIXES = [
+  'iron', 'steel', 'orcish', 'dwarven', 'elven', 'glass', 'ebony', 'daedric', 
+  'dragonbone', 'leather', 'hide', 'scaled', 'fur', 'silver'
+];
+
+/**
+ * Extract the core item name from an AI-generated descriptive name.
+ * E.g., "Bandit's Iron Axe" -> "iron war axe", "Worn Leather Armor" -> "leather armor"
+ */
+const extractCoreItemName = (name: string): string | null => {
+  const lower = name.toLowerCase();
+  
+  // Try to find a material prefix
+  let foundMaterial: string | null = null;
+  for (const mat of MATERIAL_PREFIXES) {
+    if (lower.includes(mat)) {
+      foundMaterial = mat;
+      break;
+    }
+  }
+  
+  // Try to find a weapon type
+  for (const wep of WEAPON_KEYWORDS) {
+    if (lower.includes(wep)) {
+      // Special case: "axe" alone (not "war axe" or "battleaxe") maps to "war axe"
+      if (wep === 'axe' && !lower.includes('war axe') && !lower.includes('waraxe') && !lower.includes('battleaxe')) {
+        return foundMaterial ? `${foundMaterial} war axe` : 'iron war axe';
+      }
+      // "waraxe" -> "war axe"
+      const normalizedWep = wep === 'waraxe' ? 'war axe' : wep;
+      return foundMaterial ? `${foundMaterial} ${normalizedWep}` : `iron ${normalizedWep}`;
+    }
+  }
+  
+  // Try to find an armor type
+  for (const arm of ARMOR_KEYWORDS) {
+    if (lower.includes(arm)) {
+      // "bracers" -> "gauntlets", "helm" -> "helmet"
+      let normalizedArm = arm;
+      if (arm === 'bracers') normalizedArm = 'gauntlets';
+      if (arm === 'helm' && !lower.includes('helmet')) normalizedArm = 'helmet';
+      if (arm === 'cuirass') normalizedArm = 'armor';
+      return foundMaterial ? `${foundMaterial} ${normalizedArm}` : `leather ${normalizedArm}`;
+    }
+  }
+  
+  return null;
+};
+
 // Weapon damage values by name (case-insensitive match)
 const WEAPON_STATS: Record<string, ItemStats> = {
   // === IRON WEAPONS (Tier 1) ===
@@ -262,26 +323,46 @@ ARMOR_STATS['epic legion armor (epic)'] = { armor: 320, value: 75000 };
 /**
  * Get stats for an item by name
  * Returns armor and/or damage stats if the item is a weapon or armor
+ * Uses fuzzy matching for AI-generated item names (e.g., "Bandit's Axe" -> "iron war axe")
  */
 export function getItemStats(itemName: string, itemType?: string): ItemStats {
   const nameLower = itemName.toLowerCase();
   
-  // Check weapons first
+  // Check weapons first (exact match)
   if (itemType === 'weapon' || !itemType) {
     const weaponStats = WEAPON_STATS[nameLower];
     if (weaponStats) return weaponStats;
   }
   
-  // Check armor
+  // Check armor (exact match)
   if (itemType === 'apparel' || !itemType) {
     const armorStats = ARMOR_STATS[nameLower];
     if (armorStats) return armorStats;
   }
   
+  // === FUZZY MATCHING FOR AI-GENERATED ITEMS ===
+  // Try to extract a core item name and look it up
+  const coreItemName = extractCoreItemName(itemName);
+  if (coreItemName) {
+    // Check weapons with core name
+    if (itemType === 'weapon' || !itemType) {
+      const weaponStats = WEAPON_STATS[coreItemName];
+      if (weaponStats) return weaponStats;
+    }
+    // Check armor with core name
+    if (itemType === 'apparel' || !itemType) {
+      const armorStats = ARMOR_STATS[coreItemName];
+      if (armorStats) return armorStats;
+    }
+  }
+  
   // Fallback - try to estimate based on keywords and type
   if (itemType === 'weapon') {
-    // Estimate weapon damage
+    // Estimate weapon damage based on keywords
     if (nameLower.includes('dagger')) return { damage: 5, value: 20 };
+    if (nameLower.includes('greatsword')) return { damage: 15, value: 80 };
+    if (nameLower.includes('battleaxe')) return { damage: 16, value: 85 };
+    if (nameLower.includes('warhammer')) return { damage: 18, value: 90 };
     if (nameLower.includes('sword')) return { damage: 8, value: 50 };
     if (nameLower.includes('axe')) return { damage: 9, value: 55 };
     if (nameLower.includes('mace')) return { damage: 10, value: 60 };
@@ -292,11 +373,11 @@ export function getItemStats(itemName: string, itemType?: string): ItemStats {
   }
   
   if (itemType === 'apparel') {
-    // Estimate armor rating
-    if (nameLower.includes('helmet') || nameLower.includes('hood')) return { armor: 10, value: 30 };
+    // Estimate armor rating based on keywords
+    if (nameLower.includes('helmet') || nameLower.includes('hood') || nameLower.includes('helm')) return { armor: 10, value: 30 };
     if (nameLower.includes('armor') || nameLower.includes('cuirass')) return { armor: 25, value: 100 };
     if (nameLower.includes('boot') || nameLower.includes('shoe')) return { armor: 8, value: 25 };
-    if (nameLower.includes('gauntlet') || nameLower.includes('glove')) return { armor: 8, value: 25 };
+    if (nameLower.includes('gauntlet') || nameLower.includes('glove') || nameLower.includes('bracer')) return { armor: 8, value: 25 };
     if (nameLower.includes('shield')) return { armor: 20, value: 50 };
     if (nameLower.includes('ring') || nameLower.includes('necklace') || nameLower.includes('amulet')) return { armor: 0, value: 50 };
     if (nameLower.includes('robe') || nameLower.includes('clothes')) return { armor: 0, value: 30 };

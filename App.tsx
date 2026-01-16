@@ -3057,6 +3057,15 @@ const App: React.FC = () => {
                const name = (rawItem.name || '').trim();
                if (!name) continue;
 
+               // Enrich item with stats from itemStats.ts if damage/armor not provided
+               // This ensures AI-generated items like "Bandit's Axe" get proper stats
+               const itemType = rawItem.type || 'misc';
+               if (shouldHaveStats(itemType) && rawItem.damage === undefined && rawItem.armor === undefined) {
+                 const stats = getItemStats(name, itemType);
+                 if (stats.damage !== undefined) rawItem.damage = stats.damage;
+                 if (stats.armor !== undefined) rawItem.armor = stats.armor;
+               }
+
                const forceCreate = (i as any).__forceCreate === true;
 
                if (forceCreate) {
@@ -3325,8 +3334,25 @@ const App: React.FC = () => {
         const combatData = updates.combatStart;
         // Filter companions to only include those belonging to the current character
         const activeCompanions = companions.filter(c => c.characterId === currentCharacterId);
+        // Scale AI-generated enemies to player level for balanced encounters
+        const playerLevel = activeCharacter?.level || 1;
+        const scaledEnemies = (combatData.enemies as CombatEnemy[]).map((enemy: CombatEnemy) => {
+          // Target level: player level ± 2, minimum 1
+          const targetLevel = Math.max(1, playerLevel + Math.floor(Math.random() * 5) - 2);
+          const levelScale = targetLevel / Math.max(1, enemy.level || 1);
+          return {
+            ...enemy,
+            level: targetLevel,
+            maxHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
+            currentHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
+            damage: Math.max(5, Math.floor((enemy.damage || 10) * levelScale)),
+            armor: Math.max(0, Math.floor((enemy.armor || 5) * levelScale)),
+            xpReward: Math.max(10, Math.floor((enemy.xpReward || 20) * levelScale)),
+            goldReward: enemy.goldReward ? Math.max(5, Math.floor(enemy.goldReward * levelScale)) : undefined,
+          };
+        });
         const initializedCombat = initializeCombat(
-          combatData.enemies as CombatEnemy[],
+          scaledEnemies,
           combatData.location,
           combatData.ambush ?? false,
           combatData.fleeAllowed ?? true,
@@ -4415,6 +4441,18 @@ const App: React.FC = () => {
           onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
           showToast={showToast}
+          onInventoryUpdate={(itemsOrRemoved) => {
+            // Handle item consumption during dungeon combat (decrement inventory)
+            if (Array.isArray(itemsOrRemoved)) {
+              const toRemove = itemsOrRemoved as Array<{ name: string; quantity: number }>;
+              toRemove.forEach(({ name, quantity }) => {
+                setItems(prev => prev.map(it => 
+                  it.name === name ? { ...it, quantity: Math.max(0, (it.quantity || 1) - quantity) } : it
+                ).filter(it => (it.quantity || 1) > 0));
+              });
+              setDirtyEntities(d => new Set([...d, currentCharacterId!]));
+            }
+          }}
         />
 
         {/* Combat Modal - Full screen overlay when combat is active */}

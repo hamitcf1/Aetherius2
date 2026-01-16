@@ -242,6 +242,97 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
       { id: 'fc_reward2', type: 'reward', name: 'Headhunter Cache', x: 75, y: 75, connections: ['fc_boss'], rewards: { gold: 90, items: [{ name: 'Minor Health Potion', type: 'potion', quantity: 2, rarity: 'common' }] } },
       { id: 'fc_boss', type: 'boss', name: 'Briar Matron', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fboss','Briar Matron','humanoid',10,880,76,2200,420,true)] }
     ]
+  },
+
+  {
+    id: 'troll_cave_dg',
+    name: 'Troll Cave',
+    description: 'A shallow cave dominated by a territorial troll near Rorikstead.',
+    location: 'Troll Cave',
+    difficulty: 'easy',
+    recommendedLevel: 3,
+    theme: 'ice_cave',
+    ambientDescription: 'The smell of damp stone and rotting meat. Bones litter the floor.',
+    startNodeId: 'tc_start',
+    bossNodeId: 'tc_boss',
+    completionRewards: { gold: 80, xp: 180, items: [{ name: 'Troll Fat', type: 'misc', quantity: 2, rarity: 'uncommon' as LootRarity }] },
+    nodes: [
+      { id: 'tc_start', type: 'start', name: 'Cave Entrance', x: 5, y: 50, connections: ['tc_combat1', 'tc_event1', 'tc_empty1'] },
+      { id: 'tc_combat1', type: 'combat', name: 'Young Troll', x: 20, y: 25, connections: ['tc_rest1', 'tc_reward1'], enemies: [simpleEnemy('yt1','Young Troll','beast',2,60,10,80,15)] },
+      { id: 'tc_event1', type: 'event', name: 'Adventurer Remains', x: 20, y: 50, connections: ['tc_reward1', 'tc_combat2'], eventText: 'A half-eaten corpse clutches a pack.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 40 }] },
+      { id: 'tc_empty1', type: 'empty', name: 'Narrow Passage', x: 20, y: 75, connections: ['tc_combat2', 'tc_rest1'] },
+      { id: 'tc_rest1', type: 'rest', name: 'Safe Alcove', x: 40, y: 20, connections: ['tc_elite1', 'tc_event2'], restAmount: { health: 20, stamina: 15 } },
+      { id: 'tc_reward1', type: 'reward', name: 'Bone Pile', x: 40, y: 45, connections: ['tc_elite1', 'tc_event2'], rewards: { gold: 30, items: [{ name: 'Bone Meal', type: 'misc', quantity: 2, rarity: 'common' }] } },
+      { id: 'tc_combat2', type: 'combat', name: 'Cave Bear', x: 40, y: 70, connections: ['tc_event2', 'tc_reward2'], enemies: [simpleEnemy('cb1','Cave Bear','beast',3,80,14,100,20)] },
+      { id: 'tc_elite1', type: 'elite', name: 'Frost Troll', x: 60, y: 30, connections: ['tc_boss'], enemies: [simpleEnemy('ft1','Frost Troll','beast',4,140,20,180,40)] },
+      { id: 'tc_event2', type: 'event', name: 'Glowing Mushrooms', x: 60, y: 55, connections: ['tc_boss', 'tc_reward2'], eventText: 'Strange luminescent fungi grow here.', eventChoices: [{ label: 'Harvest', outcome: 'reward', value: 30 }] },
+      { id: 'tc_reward2', type: 'reward', name: 'Hidden Cache', x: 60, y: 80, connections: ['tc_boss'], rewards: { gold: 45, items: [{ name: 'Minor Health Potion', type: 'potion', quantity: 1, rarity: 'common' }] } },
+      { id: 'tc_boss', type: 'boss', name: 'Troll Patriarch', x: 95, y: 50, connections: [], enemies: [simpleEnemy('tcboss','Troll Patriarch','beast',5,240,28,320,60,true)] }
+    ]
+  },
+
+  {
+    id: 'ice_cavern_dg',
+    name: 'Shattered Ice Cavern',
+    description: 'A winding cave of ice and whirling winds in The Pale.',
+    location: 'Shattered Ice Cavern',
+    difficulty: 'medium',
+    recommendedLevel: 4,
+    theme: 'ice_cave',
+    ambientDescription: 'Breath clouds in the freezing air. Ice crackles underfoot.',
+    startNodeId: 'ic_start',
+    bossNodeId: 'ic_boss',
+    completionRewards: { gold: 160, xp: 380, items: [{ name: 'Ice Wolf Pelt', type: 'misc', quantity: 2, rarity: 'uncommon' as LootRarity }] },
+    nodes: [
+      { id: 'ic_start', type: 'start', name: 'Frozen Entry', x: 5, y: 50, connections: ['ic_combat1', 'ic_event1', 'ic_empty1'] },
+      { id: 'ic_combat1', type: 'combat', name: 'Ice Wolves', x: 20, y: 20, connections: ['ic_rest1', 'ic_combat2'], enemies: [simpleEnemy('iw1','Ice Wolf','beast',3,50,10,70,15), simpleEnemy('iw2','Ice Wolf','beast',3,50,10,70,15)] },
+      { id: 'ic_event1', type: 'event', name: 'Frozen Statue', x: 20, y: 50, connections: ['ic_combat2', 'ic_reward1'], eventText: 'An adventurer frozen solid clutches something shiny.', eventChoices: [{ label: 'Thaw', outcome: 'reward', value: 50 }, { label: 'Smash', outcome: 'damage', value: 15 }] },
+      { id: 'ic_empty1', type: 'empty', name: 'Icy Corridor', x: 20, y: 80, connections: ['ic_reward1', 'ic_combat3'] },
+      { id: 'ic_rest1', type: 'rest', name: 'Warm Pocket', x: 40, y: 15, connections: ['ic_elite1', 'ic_event2'], restAmount: { health: 25, magicka: 15, stamina: 20 } },
+      { id: 'ic_combat2', type: 'combat', name: 'Ice Wraith', x: 40, y: 35, connections: ['ic_elite1', 'ic_event2'], enemies: [simpleEnemy('wr1','Ice Wraith','beast',4,70,14,120,25)] },
+      { id: 'ic_reward1', type: 'reward', name: 'Frozen Chest', x: 40, y: 60, connections: ['ic_event2', 'ic_combat4'], rewards: { gold: 55, items: [{ name: 'Frost Salts', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
+      { id: 'ic_combat3', type: 'combat', name: 'Snowy Sabre Cat', x: 40, y: 85, connections: ['ic_combat4', 'ic_rest2'], enemies: [simpleEnemy('sc1','Snowy Sabre Cat','beast',4,90,16,140,30)] },
+      { id: 'ic_elite1', type: 'elite', name: 'Frost Atronach', x: 60, y: 20, connections: ['ic_event3', 'ic_boss'], enemies: [simpleEnemy('fa1','Frost Atronach','daedra',5,180,22,260,50)] },
+      { id: 'ic_event2', type: 'event', name: 'Ice Bridge', x: 60, y: 45, connections: ['ic_event3', 'ic_combat5'], eventText: 'A treacherous bridge of ice spans a chasm.', eventChoices: [{ label: 'Careful', outcome: 'nothing' }, { label: 'Sprint', outcome: 'damage', value: 25 }] },
+      { id: 'ic_combat4', type: 'combat', name: 'Wolf Pack', x: 60, y: 65, connections: ['ic_combat5', 'ic_reward2'], enemies: [simpleEnemy('wp1','Ice Wolf','beast',3,50,10,70,15), simpleEnemy('wp2','Ice Wolf','beast',3,50,10,70,15), simpleEnemy('wp3','Ice Wolf Alpha','beast',4,80,14,100,25)] },
+      { id: 'ic_rest2', type: 'rest', name: 'Sheltered Cave', x: 60, y: 90, connections: ['ic_reward2'], restAmount: { health: 30, stamina: 25 } },
+      { id: 'ic_event3', type: 'event', name: 'Word Wall Fragment', x: 75, y: 25, connections: ['ic_boss'], eventText: 'Faint dragon script glows on cracked ice.', eventChoices: [{ label: 'Study', outcome: 'reward', value: 80 }] },
+      { id: 'ic_combat5', type: 'combat', name: 'Frost Troll', x: 75, y: 50, connections: ['ic_boss'], enemies: [simpleEnemy('ft1','Frost Troll','beast',5,160,24,220,45)] },
+      { id: 'ic_reward2', type: 'reward', name: 'Hunter\'s Cache', x: 75, y: 75, connections: ['ic_boss'], rewards: { gold: 70, items: [{ name: 'Ice Wolf Pelt', type: 'misc', quantity: 1, rarity: 'uncommon' }] } },
+      { id: 'ic_boss', type: 'boss', name: 'Frost Giant', x: 95, y: 50, connections: [], enemies: [simpleEnemy('icboss','Frost Giant','beast',7,380,36,540,100,true)] }
+    ]
+  },
+
+  {
+    id: 'mineshaft_dg',
+    name: 'Abandoned Mineshaft',
+    description: 'Collapsed galleries and bandit squatters near Riften.',
+    location: 'Abandoned Mineshaft',
+    difficulty: 'medium',
+    recommendedLevel: 5,
+    theme: 'bandit_hideout',
+    ambientDescription: 'Echoes of pickaxes and falling rock. Ore fragments litter the floor.',
+    startNodeId: 'ms_start',
+    bossNodeId: 'ms_boss',
+    completionRewards: { gold: 200, xp: 450, items: [{ name: 'Corundum Ore', type: 'misc', quantity: 3, rarity: 'uncommon' as LootRarity }] },
+    nodes: [
+      { id: 'ms_start', type: 'start', name: 'Mine Entrance', x: 5, y: 50, connections: ['ms_combat1', 'ms_event1', 'ms_empty1'] },
+      { id: 'ms_combat1', type: 'combat', name: 'Bandit Lookouts', x: 20, y: 20, connections: ['ms_rest1', 'ms_combat2'], enemies: [simpleEnemy('bl1','Bandit','humanoid',4,100,14,160,30), simpleEnemy('bl2','Bandit','humanoid',4,100,14,160,30)] },
+      { id: 'ms_event1', type: 'event', name: 'Unstable Tunnel', x: 20, y: 50, connections: ['ms_combat2', 'ms_reward1'], eventText: 'The ceiling groans ominously.', eventChoices: [{ label: 'Sneak', outcome: 'nothing' }, { label: 'Run', outcome: 'damage', value: 20 }] },
+      { id: 'ms_empty1', type: 'empty', name: 'Collapsed Shaft', x: 20, y: 80, connections: ['ms_reward1', 'ms_combat3'] },
+      { id: 'ms_rest1', type: 'rest', name: 'Supply Room', x: 40, y: 15, connections: ['ms_elite1', 'ms_event2'], restAmount: { health: 25, stamina: 20 } },
+      { id: 'ms_combat2', type: 'combat', name: 'Mine Guards', x: 40, y: 35, connections: ['ms_elite1', 'ms_event2'], enemies: [simpleEnemy('mg1','Bandit Thug','humanoid',5,130,18,200,40)] },
+      { id: 'ms_reward1', type: 'reward', name: 'Ore Vein', x: 40, y: 60, connections: ['ms_event2', 'ms_combat4'], rewards: { gold: 60, items: [{ name: 'Iron Ore', type: 'misc', quantity: 4, rarity: 'common' }] } },
+      { id: 'ms_combat3', type: 'combat', name: 'Skeevers', x: 40, y: 85, connections: ['ms_combat4', 'ms_rest2'], enemies: [simpleEnemy('sk1','Skeever','beast',2,35,8,40,8), simpleEnemy('sk2','Skeever','beast',2,35,8,40,8), simpleEnemy('sk3','Skeever','beast',2,35,8,40,8)] },
+      { id: 'ms_elite1', type: 'elite', name: 'Bandit Marauder', x: 60, y: 20, connections: ['ms_event3', 'ms_boss'], enemies: [simpleEnemy('bm1','Bandit Marauder','humanoid',6,180,24,320,60)] },
+      { id: 'ms_event2', type: 'event', name: 'Trapped Miner', x: 60, y: 45, connections: ['ms_event3', 'ms_combat5'], eventText: 'A miner cries for help under rubble.', eventChoices: [{ label: 'Rescue', outcome: 'reward', value: 60 }, { label: 'Ignore', outcome: 'nothing' }] },
+      { id: 'ms_combat4', type: 'combat', name: 'Frostbite Spiders', x: 60, y: 65, connections: ['ms_combat5', 'ms_reward2'], enemies: [simpleEnemy('fs1','Frostbite Spider','beast',4,70,12,100,20), simpleEnemy('fs2','Frostbite Spider','beast',4,70,12,100,20)] },
+      { id: 'ms_rest2', type: 'rest', name: 'Hidden Nook', x: 60, y: 90, connections: ['ms_reward2'], restAmount: { health: 30, magicka: 20, stamina: 25 } },
+      { id: 'ms_event3', type: 'event', name: 'Forge Room', x: 75, y: 25, connections: ['ms_boss'], eventText: 'An active forge with tools nearby.', eventChoices: [{ label: 'Use', outcome: 'reward', value: 50 }] },
+      { id: 'ms_combat5', type: 'combat', name: 'Bandit Archers', x: 75, y: 50, connections: ['ms_boss'], enemies: [simpleEnemy('ba1','Bandit Archer','humanoid',5,90,16,180,35), simpleEnemy('ba2','Bandit Archer','humanoid',5,90,16,180,35)] },
+      { id: 'ms_reward2', type: 'reward', name: 'Mining Cache', x: 75, y: 75, connections: ['ms_boss'], rewards: { gold: 85, items: [{ name: 'Corundum Ore', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
+      { id: 'ms_boss', type: 'boss', name: 'Bandit Chief', x: 95, y: 50, connections: [], enemies: [simpleEnemy('msboss','Bandit Chief','humanoid',8,340,38,600,120,true)] }
+    ]
   }
 ];
 
