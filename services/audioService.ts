@@ -98,6 +98,16 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
 
 };
 
+// Per-effect fallback cooldowns (milliseconds) to avoid spam from repeated triggers
+const SOUND_COOLDOWNS_MS: Partial<Record<SoundEffect, number>> = {
+  button_click: 120,
+  menu_open: 500,
+  menu_close: 500,
+  dice_tick: 30,
+  hit_received: 80,
+  attack_melee: 100,
+};
+
 // Music track paths (to be populated with actual music files)
 const MUSIC_TRACKS: Record<MusicTrack, string | null> = {
   main_menu: `${BASE_PATH}/audio/music/main_menu.mp3`,
@@ -115,6 +125,8 @@ class AudioService {
   private soundEffectCache: Map<string, HTMLAudioElement> = new Map();
   // Cache availability of sound URLs to avoid repeated NotSupportedError spam
   private soundAvailabilityCache: Map<string, boolean> = new Map();
+  // Track last-played timestamps per effect to rate-limit noisy effects
+  private lastPlayedTimestamps: Map<SoundEffect, number> = new Map();
   private isInitialized: boolean = false;
   private pendingTrack: MusicTrack | null = null; // Track to play after user interaction
   private lastRequestedTrack: MusicTrack | null = null; // Remember last track for re-enabling music
@@ -196,6 +208,22 @@ class AudioService {
       audio.volume = this.config.soundEffectsVolume;
       audio.currentTime = 0;
       const playResult: any = audio.play();
+
+      // Rate-limit duplicate trigger spam for the same sound effect
+      try {
+        const now = Date.now();
+        const cooldown = SOUND_COOLDOWNS_MS[effect] ?? 0;
+        const last = this.lastPlayedTimestamps.get(effect) || 0;
+        if (cooldown > 0 && now - last < cooldown) {
+          // Skip playing to prevent spam
+          // console.debug(`Skipping ${effect} due to cooldown (${now - last}ms < ${cooldown}ms)`);
+          return;
+        }
+        this.lastPlayedTimestamps.set(effect, now);
+      } catch (e) {
+        // ignore timing guard failures
+      }
+
       // Some environments (JSDOM) don't implement play() as a Promise — guard access to .catch
       if (playResult && typeof playResult.catch === 'function') {
         playResult.catch((e: any) => {
