@@ -195,19 +195,27 @@ class AudioService {
 
       audio.volume = this.config.soundEffectsVolume;
       audio.currentTime = 0;
-      audio.play().catch(e => {
-        // Provide clearer log and avoid repeating the same failing attempts
-        console.warn(`Failed to play sound effect "${effect}" (${path}):`, e);
-        try {
-          const msg = (e && e.message) ? e.message : String(e);
-          if (e && (e.name === 'NotSupportedError' || /no supported source/i.test(msg) || /not supported/i.test(msg))) {
-            this.soundAvailabilityCache.set(path, false);
-            console.debug(`Marked sound as unavailable: ${path}`);
+      const playResult: any = audio.play();
+      // Some environments (JSDOM) don't implement play() as a Promise — guard access to .catch
+      if (playResult && typeof playResult.catch === 'function') {
+        playResult.catch((e: any) => {
+          // Provide clearer log and avoid repeating the same failing attempts
+          console.warn(`Failed to play sound effect "${effect}" (${path}):`, e);
+          try {
+            const msg = (e && e.message) ? e.message : String(e);
+            if (e && (e.name === 'NotSupportedError' || /no supported source/i.test(msg) || /not supported/i.test(msg))) {
+              this.soundAvailabilityCache.set(path, false);
+              console.debug(`Marked sound as unavailable: ${path}`);
+            }
+          } catch (inner) {
+            // ignore cache errors
           }
-        } catch (inner) {
-          // ignore cache errors
-        }
-      });
+        });
+      } else if (typeof playResult === 'undefined') {
+        // Non-throwing fallback: play() is not implemented; mark as unavailable to silence repeated attempts
+        this.soundAvailabilityCache.set(path, false);
+        console.debug(`Marked sound as unavailable (no play support): ${path}`);
+      }
     } catch (e) {
       console.warn(`Error playing sound effect "${effect}":`, e);
     }
