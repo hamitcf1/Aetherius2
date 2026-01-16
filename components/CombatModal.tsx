@@ -560,10 +560,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     if (combatState.result === 'victory') {
       const populatedState = populatePendingLoot(combatState);
 
-      // Show the loot modal for the player to review and confirm loot collection.
-      // This prevents the combat UI from closing abruptly and ensures players can see loot.
-      setCombatState(populatedState);
-      setLootPhase(true);
+      // Populate pending loot on the combat state so the existing LootModal (rendered when
+      // `combatState.lootPending` is true) will display. Avoid setting `lootPhase` which
+      // duplicates the modal UI.
+      setCombatState(prev => ({ ...populatedState, lootPending: true } as any));
       // Informational toast
       showToast?.('Victory! Review your loot and confirm to finish combat.', 'success');
     }
@@ -1631,43 +1631,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </div>
       </ModalWrapper>
 
-      {/* Loot phase UI - shown when lootPhase state is true */}
-      {lootPhase && (
-        <div className="absolute inset-0 bg-skyrim-dark/60 flex items-center justify-center z-60 p-4">
-          <div className="bg-gradient-to-b from-amber-900/90 to-stone-900/95 rounded-xl p-6 max-w-lg w-full text-center border-2 border-amber-500 shadow-2xl">
-            <h2 className="text-2xl font-bold text-amber-100 mb-4">Loot Phase</h2>
-            <p className="text-stone-300 mb-4">Select items to collect from the fallen enemies:</p>
-            
-            <div className="space-y-3 max-h-[400px] overflow-y-auto mb-4">
-              {combatState.pendingLoot?.map(loot => (
-                <div key={loot.enemyId} className="bg-stone-900/60 rounded-lg p-4 border border-stone-700">
-                  <h3 className="text-sm font-bold text-stone-400 mb-2">{loot.enemyName}</h3>
-                  <div className="space-y-1">
-                    {loot.loot.map(item => (
-                      <div key={item.name} className="flex justify-between items-center text-left">
-                        <span className="text-amber-200">{item.name} x{item.quantity}</span>
-                        <button
-                          onClick={() => setLootItems(prev => [...prev, { name: item.name, quantity: item.quantity }])}
-                          className="px-3 py-1 text-xs rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60"
-                        >
-                          Collect
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <button
-              onClick={() => handleFinalizeLoot(lootItems)}
-              className="w-full px-4 py-2 text-lg rounded bg-amber-600 hover:bg-amber-500 text-white font-bold transition-colors"
-            >
-              Finalize Loot
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
