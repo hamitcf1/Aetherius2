@@ -36,20 +36,24 @@ import { audioService } from '../services/audioService';
 // Play combat sound based on action type and actor info (enemy/ally/player)
 const playCombatSound = (
   actionType: 'melee' | 'ranged' | 'magic' | 'shout' | 'block' | 'shield_bash' | 'hit' | 'enemy_death',
-  actor?: any
+  actor?: any,
+  ability?: CombatAbility
 ) => {
   // Helper to inspect actor name/description for elemental or creature hints
-  const name = (actor?.name || '').toLowerCase() + ' ' + (actor?.description || '').toLowerCase();
+  const actorText = (actor?.name || '') + ' ' + (actor?.description || '');
+  const abilityText = (ability?.name || '') + ' ' + (ability?.description || '') + ' ' + JSON.stringify(ability?.effects || []);
+  const combined = (actorText + ' ' + abilityText).toLowerCase();
   const isSummon = !!actor?.companionMeta?.isSummon || !!actor?.companionMeta?.isSummon;
 
-  const looksLikeFire = /fire|flame|ember|pyro|ignis/i.test(name);
-  const looksLikeIce = /frost|ice|cold|chill|glacier/i.test(name);
-  const looksLikeShock = /shock|storm|lightning|thunder|electr/i.test(name);
-  const looksLikeWolf = /wolf|hound|dog|warg/i.test(name);
-  const looksLikeBear = /bear|paw|claw|talon|sabre|saber/i.test(name);
+  const looksLikeFire = /fire|flame|ember|pyro|ignis|lava|burn/i.test(combined);
+  const looksLikeIce = /frost|ice|cold|chill|glacier|freeze/i.test(combined);
+  const looksLikeShock = /shock|storm|lightning|thunder|electr|bolt/i.test(combined);
+  const looksLikeWolf = /wolf|hound|dog|warg/i.test(combined);
+  const looksLikeBear = /bear|paw|claw|talon|sabre|saber/i.test(combined);
 
   try {
     if (actionType === 'magic' || actionType === 'shout') {
+      // If the ability explicitly looks elemental, prefer the elemental impact sounds
       if (looksLikeFire) return audioService.playSoundEffect('spell_impact_fire');
       if (looksLikeIce) return audioService.playSoundEffect('spell_impact_ice');
       if (looksLikeShock) return audioService.playSoundEffect('spell_impact_shock');
@@ -674,7 +678,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           currentState = res.newState;
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
           // Play companion attack sound for their ability
-          try { playCombatSound(allyActor.abilities[0].type as any, allyActor); } catch (e) {}
+          try { playCombatSound(allyActor.abilities[0].type as any, allyActor, allyActor.abilities[0]); } catch (e) {}
           // Update UI and play companion animation
           setCombatState(currentState);
           await waitMs(Math.floor(600 * timeScale));
@@ -865,7 +869,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       } else if (ability?.name?.toLowerCase().includes('block')) {
         playCombatSound('block', undefined);
       } else {
-        playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout', targetEnemy);
+        playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout', targetEnemy, ability);
       }
     } else if (action === 'defend') {
       playCombatSound('block', undefined);
@@ -942,17 +946,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setFloatingHits(h => [{ id, actor: 'player', damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
       setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
 
-      // Play hit or crit sound if available (actor-aware based on target enemy)
-      try {
-        // Use centralized audio service for impact/crit feedback to respect user settings
-        const targetEnemy = combatState.enemies.find(e => e.id === selectedTarget);
-        if (last.isCrit) {
-          playCombatSound('melee', targetEnemy);
-        } else {
-          // For non-crit, prefer spell_impact variants if target looks elemental
-          playCombatSound('magic', targetEnemy);
-        }
-      } catch (e) { console.warn('Failed to play impact sound', e); }
+      // Play hit or crit sound only for non-player actors (avoid duplicating player's ability sound)
+      // Player attacks already play an ability-specific SFX at the time of action; playing
+      // another impact sound here causes duplicates for elemental spells.
+      if (last.actor !== 'player') {
+        try {
+          // Use centralized audio service for impact/crit feedback for enemy actions
+          const targetEnemy = combatState.enemies.find(e => e.id === selectedTarget);
+          if (last.isCrit) {
+            playCombatSound('melee', targetEnemy);
+          } else {
+            // Enemy hit the player — prefer the generic hit received sound
+            playCombatSound('hit', undefined);
+          }
+        } catch (e) { console.warn('Failed to play impact sound (enemy)', e); }
+      }
     }
     
     // In tests this will resolve instantly, but in production we keep the short delay for UX
@@ -1251,7 +1259,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             setCombatState(res.newState);
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                             // Play companion-specific attack sound
-                            try { playCombatSound(ab.type as any, allyActor); } catch (e) {}
+                            try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
                             // End companion turn and advance
                             setAwaitingCompanionAction(false);
                             setIsAnimating(false);

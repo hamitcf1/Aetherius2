@@ -64,4 +64,52 @@ describe('Combat sound selection for conjurations and allies', () => {
 
     unmount();
   });
+
+  test('Player cast fire spell triggers fire impact sound when casting', async () => {
+    const charWithDestruction: any = {
+      id: 'char_fire',
+      name: 'Pyromancer',
+      level: 20,
+      stats: { health: 100, magicka: 200, stamina: 100 },
+      skills: [{ name: 'Destruction', level: 30 }]
+    };
+
+    const enemy = { id: 'e1', name: 'Bandit', level: 1, maxHealth: 20, currentHealth: 20, armor: 0, damage: 4 } as any;
+
+    const initialState: any = {
+      active: true,
+      turn: 1,
+      turnOrder: ['player', enemy.id],
+      currentTurnActor: 'player',
+      enemies: [enemy],
+      allies: [],
+      combatLog: [],
+      abilityCooldowns: {},
+      lastActorActions: {}
+    };
+
+    const { findAllByText, unmount } = render(
+      <CombatModal
+        character={charWithDestruction}
+        inventory={[]}
+        initialCombatState={initialState}
+        onCombatEnd={() => {}}
+      />
+    );
+
+    // Wait for abilities to render and find Flames
+    const flameButtons = await findAllByText(/Flames/i, {}, { timeout: 2000 });
+    expect(flameButtons.length).toBeGreaterThan(0);
+
+    // Click the Flames ability to cast
+    flameButtons[0].click();
+
+    await shortDelay(800);
+
+    const events = audioService.getRecentSfxEvents();
+    const found = events.find(e => e.effect === 'spell_impact_fire' || e.effect === 'attack_fire');
+    expect(!!found).toBe(true);
+
+    unmount();
+  });
 });
