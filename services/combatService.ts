@@ -102,6 +102,9 @@ const shuffleArray = <T>(arr: T[]): T[] => {
   return shuffled;
 };
 
+// Helper: guess whether a name suggests an animal summon (module scope for reuse)
+const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|horse|fox|warg|sabrecat|cat/i.test((name || '').toLowerCase());
+
 // Helper: push a combat log entry only if it's not a duplicate of the immediate previous entry
 const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
   state.combatLog = state.combatLog || [];
@@ -196,8 +199,7 @@ const computeDamageFromNat = (
 // Normalize misclassified summoned companions: move any enemies that have `isCompanion` set into `allies`.
 // Be generic: treat any enemy flagged `isCompanion` as a companion (covers future conjuration spells).
 const normalizeSummonedCompanions = (state: CombatState): CombatState => {
-  // Helper: guess whether an actor name suggests an animal summon
-  const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|horse|fox|warg|sabrecat|cat/i.test((name || '').toLowerCase());
+  // Helper: guess whether an actor name suggests an animal summon (uses module-level helper)
   const newState = { ...state } as CombatState;
   if (!newState.enemies || newState.enemies.length === 0) return newState;
   // Move any enemies that are companions (don't rely on id prefix)
@@ -947,7 +949,7 @@ export const executePlayerAction = (
         targetIsAlly = target ? ((newState.allies || []).find(a => a.id === target.id) !== undefined) : false;
       }
 
-      if (!target) {
+      if (!target && !hasSummonEffect) {
         narrative = 'No valid target!';
         break;
       }
@@ -1031,6 +1033,8 @@ export const executePlayerAction = (
             type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
             armor: 5,
             damage: 8 + level,
+            maxHealth,
+            currentHealth: maxHealth,
             abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
             behavior: 'support',
             xpReward: 0,
@@ -1549,6 +1553,12 @@ export const executePlayerAction = (
       break;
     }
 
+    case 'skip': {
+      narrative = 'You skip your turn.';
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'skip', narrative, timestamp: Date.now() });
+      break;
+    }
+
     case 'item': {
       // Item usage in combat - healing potions and food
       if (!itemId || !inventory) {
@@ -1753,6 +1763,8 @@ export const executeEnemyTurn = (
         type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
         armor: 5,
         damage: 8 + level,
+        maxHealth,
+        currentHealth: maxHealth,
         abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
         behavior: actor.isCompanion ? 'support' : 'aggressive',
         xpReward: 0,
@@ -2045,6 +2057,24 @@ export const executeEnemyTurn = (
   newState.lastActorActions[actor.id] = [chosenAbility.id, ...(newState.lastActorActions[actor.id] || [])].slice(0, 4);
 
   return { newState, newPlayerStats, narrative };
+};
+
+// Helper: register an actor skipping their turn and push a combat log entry
+export const skipActorTurn = (state: CombatState, actorId: string): CombatState => {
+  const newState = { ...state } as CombatState;
+  const isPlayer = actorId === 'player';
+  let actorLabel = actorId;
+  if (!isPlayer) {
+    const ally = (newState.allies || []).find(a => a.id === actorId);
+    if (ally) actorLabel = ally.name;
+    else {
+      const enemy = (newState.enemies || []).find(e => e.id === actorId);
+      if (enemy) actorLabel = enemy.name;
+    }
+  }
+  const narrative = isPlayer ? 'You skip your turn.' : `${actorLabel} skips their turn.`;
+  pushCombatLogUnique(newState, { turn: newState.turn, actor: isPlayer ? 'player' : actorLabel, action: 'skip', target: '', damage: 0, narrative, timestamp: Date.now() });
+  return newState;
 };
 
 // Execute a companion/ally action chosen by player (manual control)

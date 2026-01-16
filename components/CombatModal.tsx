@@ -20,6 +20,7 @@ import {
   executePlayerAction,
   executeEnemyTurn,
   executeCompanionAction,
+  skipActorTurn,
   advanceTurn,
   applyTurnRegen,
   checkCombatEnd
@@ -941,6 +942,45 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       }
     }
 
+    // Special-case SKIP: do not roll dice or play the roll animation — just execute and advance
+    if (action === 'skip') {
+      const execRes = executePlayerAction(
+        combatState,
+        playerStats,
+        action,
+        undefined,
+        undefined,
+        undefined,
+        inventory,
+        undefined,
+        character
+      );
+      let newState = execRes.newState;
+      let newPlayerStats = execRes.newPlayerStats;
+      const narrative = execRes.narrative;
+
+      if (onNarrativeUpdate && narrative) onNarrativeUpdate(narrative);
+
+      // Check combat end
+      let finalState = checkCombatEnd(newState, newPlayerStats);
+      if (finalState.active && (action !== 'flee' || !narrative.includes('failed'))) {
+        finalState = advanceTurn(finalState);
+        // Only apply regen when the turn advanced to the player
+        if (finalState.currentTurnActor === 'player') {
+          const regenRes = applyTurnRegen(finalState, newPlayerStats);
+          finalState = regenRes.newState;
+          newPlayerStats = regenRes.newPlayerStats;
+        }
+      }
+
+      setCombatState(finalState);
+      setPlayerStats(newPlayerStats);
+
+      // In tests this will resolve instantly, but in production we keep the short delay for UX
+      waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
+      return;
+    }
+
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
@@ -1243,7 +1283,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </div>
 
         {/* Center - Enemies and combat log */}
-        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+        <div className="w-full lg:w-1/2 flex flex-col gap-4 min-h-0">
           {/* Allies (companions) */}
           {combatState.allies && combatState.allies.length > 0 && (
             <div className="bg-stone-900/40 rounded-lg p-3 border border-stone-700 mb-3">
@@ -1278,7 +1318,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           )}
 
           {/* Enemies */}
-          <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700">
+          <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700 flex flex-col min-h-0">
             <h3 className="text-sm font-bold text-stone-400 mb-3">ENEMIES</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {combatState.enemies.map(enemy => (
@@ -1407,9 +1447,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           );
                         })}
                         <button onClick={() => {
-                          // Skip companion's turn
+                          // Skip companion's turn (log it) then advance
                           setAwaitingCompanionAction(false);
-                          setCombatState(prev => advanceTurn(prev));
+                          setCombatState(prev => {
+                            const skipped = skipActorTurn(prev, allyActor.id);
+                            return advanceTurn(skipped);
+                          });
                           setTimeout(() => processEnemyTurns(), 200);
                         }} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Skip Companion Turn</button>
                       </div>
@@ -1576,6 +1619,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   🏳️ Surrender
                 </button>
               )}
+
+              <button
+                onClick={() => handlePlayerAction('skip')}
+                disabled={!isPlayerTurn || isAnimating}
+                className="w-full p-2 rounded border border-skyrim-border text-skyrim-text hover:bg-stone-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⏭️ Skip Turn
+              </button>
             </div>
           </div>
         </div>

@@ -492,7 +492,7 @@ export interface GameStateUpdate {
 // COMBAT SYSTEM TYPES
 // ============================================================================
 
-export type CombatActionType = 'attack' | 'power_attack' | 'magic' | 'shout' | 'item' | 'defend' | 'flee' | 'surrender';
+export type CombatActionType = 'attack' | 'power_attack' | 'magic' | 'shout' | 'item' | 'defend' | 'flee' | 'surrender' | 'skip';
 
 export interface CombatAbility {
   id: string;

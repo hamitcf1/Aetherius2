@@ -1,0 +1,88 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { SHOP_INVENTORY } from '../components/ShopModal';
+import { ShopModal } from '../components/ShopModal';
+import { AppContext } from '../AppContext';
+
+describe('Shop inventory sanity', () => {
+  it('has unique ids and correct required levels for epic/legendary items', () => {
+    const ids = new Set<string>();
+    for (const it of SHOP_INVENTORY) {
+      // Unique ids
+      expect(ids.has(it.id)).toBeFalsy();
+      ids.add(it.id);
+
+      // If rarity is legendary -> requiredLevel should be >= 100
+      if ((it as any).rarity === 'legendary') {
+        expect(it.requiredLevel).toBeGreaterThanOrEqual(100);
+      }
+
+      // If rarity is epic -> requiredLevel should be >= 50
+      if ((it as any).rarity === 'epic') {
+        expect(it.requiredLevel).toBeGreaterThanOrEqual(50);
+      }
+
+      // Category should be present for shop items
+      expect(typeof it.category).toBe('string');
+      expect(it.category.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('category filter limits displayed items to the selected category', async () => {
+    // Render the modal in buy mode and click the Armor category, wrapped in AppContext
+    const ctx = ({
+      handleManualSave: () => {},
+      isSaving: false,
+      handleLogout: () => {},
+      setCurrentCharacterId: () => {},
+      aiModel: 'default',
+      setAiModel: () => {},
+      handleExportPDF: () => {},
+      isExporting: false,
+      handleGenerateProfileImage: () => {},
+      isGeneratingProfileImage: false,
+      handleCreateImagePrompt: () => {},
+      handleUploadPhoto: () => {},
+      showToast: () => {},
+      isAnonymous: false,
+      handleRestWithOptions: () => {},
+      openBonfireMenu: () => {},
+      handleEatItem: () => {},
+      handleDrinkItem: () => {},
+      handleShopPurchase: () => {},
+      handleShopSell: () => {},
+      gold: 1000000,
+      inventory: [],
+      hasCampingGear: false,
+      hasBedroll: false,
+      characterLevel: 100,
+      handleExportJSON: () => {},
+      handleImportJSON: () => {},
+      difficulty: 'normal',
+      setDifficulty: () => {},
+      weather: 'clear',
+      statusEffects: [],
+      companions: [],
+      colorTheme: 'light',
+      setColorTheme: () => {},
+      showQuantityControls: false,
+      setShowQuantityControls: () => {},
+      weatherEffect: 'none',
+      setWeatherEffect: () => {},
+      weatherIntensity: 0,
+      setWeatherIntensity: () => {},
+      openCompanions: () => {},
+      userSettings: null,
+      updateUserSettings: () => {}
+    } as any);
+
+    render(<AppContext.Provider value={ctx}><ShopModal open={true} onClose={() => {}} gold={1000000} onPurchase={() => {}} inventory={[]} characterLevel={100} /></AppContext.Provider>);
+
+    // Click the 'Armor' category button
+    const armorBtn = screen.getByText('Armor');
+    fireEvent.click(armorBtn);
+
+    // Wait for items to render and assert we see at least one Armor item and none from Weapons
+    await waitFor(() => expect(screen.queryAllByText(/\(Armor\)/i).length).toBeGreaterThan(0));
+    expect(screen.queryAllByText(/\(Weapons\)/i).length).toBe(0);
+  });
+});

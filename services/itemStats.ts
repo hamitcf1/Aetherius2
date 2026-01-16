@@ -125,10 +125,16 @@ const WEAPON_STATS: Record<string, ItemStats> = {
   'crossbow': { damage: 19, value: 400 },
   'steel bolts (20)': { damage: 0, value: 30 },
   // === LEGENDARY ITEMS ===
+  // Legendary items (max-power promo)
   'sword of ages (legendary)': { damage: 9999, value: 99999 },
   'aeon greatsword (legendary)': { damage: 9999, value: 99999 },
   'bow of the apocalypse (legendary)': { damage: 9999, value: 99999 },
   'void dagger (legendary)': { damage: 9999, value: 99999 },
+  // Epic variants - meaningful but lower than legendary
+  'sword of ages (epic)': { damage: 320, value: 75000 },
+  'aeon greatsword (epic)': { damage: 340, value: 75000 },
+  'bow of the apocalypse (epic)': { damage: 300, value: 75000 },
+  'void dagger (epic)': { damage: 260, value: 75000 },
 };
 
 // Armor rating values by name (case-insensitive match)
@@ -246,6 +252,12 @@ ARMOR_STATS['plate of titans (legendary)'] = { armor: 9999, value: 99999 };
 ARMOR_STATS['helm of eternity (legendary)'] = { armor: 9999, value: 99999 };
 ARMOR_STATS['shield of sol (legendary)'] = { armor: 9999, value: 99999 };
 ARMOR_STATS['epic legion armor (legendary)'] = { armor: 9999, value: 99999 };
+
+// Epic armor variants (realistic high-tier stats)
+ARMOR_STATS['plate of titans (epic)'] = { armor: 300, value: 75000 };
+ARMOR_STATS['helm of eternity (epic)'] = { armor: 160, value: 40000 };
+ARMOR_STATS['shield of sol (epic)'] = { armor: 200, value: 50000 };
+ARMOR_STATS['epic legion armor (epic)'] = { armor: 320, value: 75000 };
 
 /**
  * Get stats for an item by name

@@ -309,23 +309,26 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'gold_necklace', name: 'Gold Necklace', type: 'apparel', description: 'A necklace made of pure gold.', price: 120, category: 'Jewelry' },
   { id: 'silver_necklace', name: 'Silver Necklace', type: 'apparel', description: 'A necklace crafted from fine silver.', price: 60, category: 'Jewelry' },
   { id: 'gold_circlet', name: 'Gold Circlet', type: 'apparel', description: 'A circlet of gold, fit for nobility.', price: 150, category: 'Jewelry' },
-  // === LEGENDARY PROMO ITEMS ===
-  { id: 'legendary_sword_of_ages', name: 'Sword of Ages (Legendary)', type: 'weapon', description: 'A legendary blade of impossible sharpness.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_greatsword_aeon', name: 'Aeon Greatsword (Legendary)', type: 'weapon', description: 'A greatsword that burns with timeless power.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_bow_apocalypse', name: 'Bow of the Apocalypse (Legendary)', type: 'weapon', description: 'A bow whose arrows pierce even destiny.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_dagger_void', name: 'Void Dagger (Legendary)', type: 'weapon', description: 'A dagger that steals the very essence of foes.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_plate_of_titans', name: 'Plate of Titans (Legendary)', type: 'apparel', description: 'Armor forged for giants, impenetrable.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_helm_of_eternity', name: 'Helm of Eternity (Legendary)', type: 'apparel', description: 'A helm that anchors a warrior across eras.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_shield_of_sol', name: 'Shield of Sol (Legendary)', type: 'apparel', description: 'A radiant shield that bends fate.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_armor_epic', name: 'Epic Legion Armor (Legendary)', type: 'apparel', description: 'An ensemble of armor that proclaims dominion.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'legendary' },
-  { id: 'legendary_sword_of_ages', name: 'Sword of Ages (Epic)', type: 'weapon', description: 'A legendary blade of impossible sharpness.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_greatsword_aeon', name: 'Aeon Greatsword (Epic)', type: 'weapon', description: 'A greatsword that burns with timeless power.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_bow_apocalypse', name: 'Bow of the Apocalypse (Epic)', type: 'weapon', description: 'A bow whose arrows pierce even destiny.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_dagger_void', name: 'Void Dagger (Epic)', type: 'weapon', description: 'A dagger that steals the very essence of foes.', price: 99999, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_plate_of_titans', name: 'Plate of Titans (Epic)', type: 'apparel', description: 'Armor forged for giants, impenetrable.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_helm_of_eternity', name: 'Helm of Eternity (Epic)', type: 'apparel', description: 'A helm that anchors a warrior across eras.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_shield_of_sol', name: 'Shield of Sol (Epic)', type: 'apparel', description: 'A radiant shield that bends fate.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
-  { id: 'legendary_armor_epic', name: 'Epic Legion Armor (Epic)', type: 'apparel', description: 'An ensemble of armor that proclaims dominion.', price: 99999, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
+  // === PROMO ITEMS (fixed ids, rarities and levels) ===
+  // Legendary (show at level 100 only)
+  { id: 'legendary_sword_of_ages', name: 'Sword of Ages (Legendary)', type: 'weapon', description: 'A legendary blade of impossible sharpness.', price: 99999, category: 'Weapons', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_aeon_greatsword', name: 'Aeon Greatsword (Legendary)', type: 'weapon', description: 'A greatsword that burns with timeless power.', price: 99999, category: 'Weapons', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_bow_of_apocalypse', name: 'Bow of the Apocalypse (Legendary)', type: 'weapon', description: 'A bow whose arrows pierce even destiny.', price: 99999, category: 'Weapons', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_void_dagger', name: 'Void Dagger (Legendary)', type: 'weapon', description: 'A dagger that steals the very essence of foes.', price: 99999, category: 'Weapons', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_plate_of_titans', name: 'Plate of Titans (Legendary)', type: 'apparel', description: 'Armor forged for giants, impenetrable.', price: 99999, category: 'Armor', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_helm_of_eternity', name: 'Helm of Eternity (Legendary)', type: 'apparel', description: 'A helm that anchors a warrior across eras.', price: 99999, category: 'Armor', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_shield_of_sol', name: 'Shield of Sol (Legendary)', type: 'apparel', description: 'A radiant shield that bends fate.', price: 99999, category: 'Armor', requiredLevel: 100, rarity: 'legendary' },
+  { id: 'legendary_epic_legion_armor', name: 'Epic Legion Armor (Legendary)', type: 'apparel', description: 'An ensemble of armor that proclaims dominion.', price: 99999, category: 'Armor', requiredLevel: 100, rarity: 'legendary' },
+
+  // Epic (show at level 50)
+  { id: 'epic_sword_of_ages', name: 'Sword of Ages (Epic)', type: 'weapon', description: 'An epic blade of exceptional sharpness.', price: 75000, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_aeon_greatsword', name: 'Aeon Greatsword (Epic)', type: 'weapon', description: 'A greatsword of refined, timeless power.', price: 75000, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_bow_of_apocalypse', name: 'Bow of the Apocalypse (Epic)', type: 'weapon', description: 'A bow whose arrows strike true against fate.', price: 75000, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_void_dagger', name: 'Void Dagger (Epic)', type: 'weapon', description: 'A dagger with draining properties, favored by assassins.', price: 75000, category: 'Weapons', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_plate_of_titans', name: 'Plate of Titans (Epic)', type: 'apparel', description: 'Heavy armor tempered for champions.', price: 75000, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_helm_of_eternity', name: 'Helm of Eternity (Epic)', type: 'apparel', description: 'A helm that steadies the mind and spirit.', price: 75000, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_shield_of_sol', name: 'Shield of Sol (Epic)', type: 'apparel', description: 'A bright shield that deflects doom.', price: 75000, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
+  { id: 'epic_legion_armor', name: 'Epic Legion Armor (Epic)', type: 'apparel', description: 'A high-tier set favored by elite legions.', price: 75000, category: 'Armor', requiredLevel: 50, rarity: 'epic' },
 ];
 
 const CATEGORIES = ['All', 'Food', 'Drinks', 'Potions', 'Camping', 'Weapons', 'Armor', 'Misc', 'Ingredients', 'Jewelry'];

@@ -1992,7 +1992,22 @@ const App: React.FC = () => {
   };
 
   const updateCharacter = (field: keyof Character, value: any) => {
-      setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
+      // If someone directly sets `level`, treat it as a level-up when increasing the level
+      if (field === 'level') {
+        setCharacters(prev => prev.map(c => {
+          if (c.id !== currentCharacterId) return c;
+          const oldLevel = c.level || 0;
+          const newLevel = Number(value) || 0;
+          if (newLevel > oldLevel) {
+            // Default choice on manual level bump: increase health and restore all vitals
+            return applyLevelUpToCharacter(c, newLevel, c.experience || 0, 'health');
+          }
+          return { ...c, level: newLevel };
+        }));
+      } else {
+        setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
+      }
+
       if (currentCharacterId) {
         setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
       }
@@ -3557,7 +3572,9 @@ const App: React.FC = () => {
       setJournalEntries,
       setStoryChapters,
       setActiveTab,
-      setCurrentCharacterId
+      setCurrentCharacterId,
+      // Expose updateCharacter for console/tests: calling `updateCharacter('level', n)` now performs a proper level-up
+      updateCharacter
     };
   }
 

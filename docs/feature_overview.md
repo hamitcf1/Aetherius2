@@ -17,6 +17,7 @@ This single-page map points to canonical files and extension points for the majo
 ## Combat & Enemies
 - Files: `services/combatService.ts` (templates & combat engine), `components/CombatModal.tsx` (UI), `services/lootService.ts` (loot generation & finalize).
 - Tips: Update `BASE_ENEMY_TEMPLATES` or move it to `data/enemies.ts` for easier editing; add tests for expected damage/loot behaviors.
+- Note: Players and companions can now choose to **Skip Turn**; this records a `skip` action in the combat log and advances the turn (see `skipActorTurn` in `services/combatService.ts`).
 
 ## Items, Loot & Economy
 - Files: `services/itemStats.ts`, `data/lootTables.ts`, `services/lootService.ts`, `components/LootModal.tsx`.

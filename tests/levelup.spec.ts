@@ -45,4 +45,22 @@ describe('applyLevelUpToCharacter', () => {
     // At level 10+, regen is 0 unless regen perks are unlocked
     expect(combat.regenMagickaPerSec).toBeCloseTo(0);
   });
+
+  it('restores all current vitals to max when leveling up', () => {
+    const char = {
+      id: 'c3',
+      name: 'Wounded Hero',
+      level: 9,
+      experience: 0,
+      stats: { health: 100, magicka: 100, stamina: 100 },
+      currentVitals: { currentHealth: 10, currentMagicka: 5, currentStamina: 20 },
+      perkPoints: 0,
+    } as any;
+
+    const out = applyLevelUpToCharacter(char, 10, 0, 'health');
+
+    expect(out.currentVitals?.currentHealth).toBe(110);
+    expect(out.currentVitals?.currentMagicka).toBe(100);
+    expect(out.currentVitals?.currentStamina).toBe(100);
+  });
 });

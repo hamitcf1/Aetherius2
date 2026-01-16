@@ -18,11 +18,20 @@ export function applyLevelUpToCharacter(
     stamina: (baseStats.stamina || 100) + addedStats.stamina,
   } as any;
 
+  // When a character levels up, restore current vitals to their new maximums as a reward.
+  const fullVitals = {
+    currentHealth: nextStats.health,
+    currentMagicka: nextStats.magicka,
+    currentStamina: nextStats.stamina,
+  };
+
   return {
     ...char,
     level: newLevel,
     experience: remainingXP,
     stats: nextStats,
+    // Refill current vitals to the new maxima
+    currentVitals: fullVitals,
     perkPoints: (char.perkPoints || 0) + 1,
   } as Character;
 }
