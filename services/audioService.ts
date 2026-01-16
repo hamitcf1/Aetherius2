@@ -375,6 +375,33 @@ class AudioService {
   private preDuckVolume: number | null = null;
   private isDucked: boolean = false;
 
+  // Track how many modals are open. This prevents repeatedly playing menu_open/menu_close when
+  // nested modal components mount/unmount while the overall modal stack stays open.
+  private modalOpenCount: number = 0;
+
+  public notifyModalOpen(): void {
+    try {
+      this.modalOpenCount = (this.modalOpenCount || 0) + 1;
+      if (this.modalOpenCount === 1) {
+        this.playSoundEffect('menu_open');
+      }
+    } catch (e) {
+      console.warn('Failed to notify modal open', e);
+    }
+  }
+
+  public notifyModalClose(): void {
+    try {
+      if (!this.modalOpenCount) return;
+      this.modalOpenCount = Math.max(0, this.modalOpenCount - 1);
+      if (this.modalOpenCount === 0) {
+        this.playSoundEffect('menu_close');
+      }
+    } catch (e) {
+      console.warn('Failed to notify modal close', e);
+    }
+  }
+
   public duckMusic(targetVolume: number = 0.1): void {
     if (!this.musicAudio || this.isDucked) return;
     this.preDuckVolume = this.musicAudio.volume;
