@@ -639,6 +639,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           // For victory we enter loot phase and wait until loot is finalized before showing victory
           // Fled or surrendered - end immediately
           if (combatState.result !== 'victory') {
+            // Calculate elapsed combat time in minutes for world clock sync
+            const combatMinutes = Math.max(1, Math.ceil((combatState.combatElapsedSec || 0) / 60));
+            
             const builtCombatResult = combatState.combatResult || {
               id: combatState.id || `combat_${Date.now()}`,
               result: combatState.result || 'unresolved',
@@ -653,7 +656,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               health: playerStats.currentHealth,
               magicka: playerStats.currentMagicka,
               stamina: playerStats.currentStamina
-            }, undefined, builtCombatResult);
+            }, combatMinutes, builtCombatResult);
           }
         }
         setIsAnimating(false);
@@ -664,6 +667,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // For defeat, call onCombatEnd; for victory we wait until loot is finalized and the player closes the victory screen
   useEffect(() => {
     if (showDefeat) {
+      // Calculate elapsed combat time in minutes for world clock sync
+      const combatMinutes = Math.max(1, Math.ceil((combatState.combatElapsedSec || 0) / 60));
+      
       onCombatEnd(
         'defeat',
         combatState.rewards,
@@ -671,7 +677,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           health: playerStats.currentHealth,
           magicka: playerStats.currentMagicka,
           stamina: playerStats.currentStamina
-        }
+        },
+        combatMinutes
       );
     }
   }, [showDefeat]);

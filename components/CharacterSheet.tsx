@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Character, Milestone, Perk, InventoryItem, CustomQuest, JournalEntry, StoryChapter } from '../types';
-import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp, FlaskConical } from 'lucide-react';
 import { generateCharacterProfileImage } from '../services/geminiService';
 import { RestModal, EatModal, DrinkModal, type RestOptions } from './SurvivalModals';
 import { formatSkyrimDateShort } from '../utils/skyrimCalendar';
@@ -14,6 +14,7 @@ import { isFeatureEnabled } from '../featureFlags';
 import { useLocalization } from '../services/localization';
 import LevelBadge from './LevelBadge';
 import XPProgressBar from './XPProgressBar';
+import { resolvePotionEffect, PotionStat } from '../services/potionResolver';
 
 interface CharacterSheetProps {
   character: Character;
@@ -175,6 +176,73 @@ const StatBar: React.FC<{
     );
 }
 
+// Helper to find best potion for a given stat type from inventory
+const findPotionsForStat = (inventory: InventoryItem[], statType: PotionStat): InventoryItem[] => {
+  return inventory.filter(item => {
+    if (item.type !== 'potion') return false;
+    const effect = resolvePotionEffect(item);
+    return effect.stat === statType;
+  }).sort((a, b) => {
+    // Sort by amount ascending (use smaller potions first)
+    const effectA = resolvePotionEffect(a);
+    const effectB = resolvePotionEffect(b);
+    return (effectA.amount || 0) - (effectB.amount || 0);
+  });
+};
+
+// Quick potion button component for vitals
+const QuickPotionButton: React.FC<{
+  statType: PotionStat;
+  potions: InventoryItem[];
+  currentValue: number;
+  maxValue: number;
+  onUsePotion: (item: InventoryItem) => void;
+  colorClass: string;
+}> = ({ statType, potions, currentValue, maxValue, onUsePotion, colorClass }) => {
+  // Don't show if at full health
+  if (currentValue >= maxValue) return null;
+  
+  const hasPotion = potions.length > 0;
+  const bestPotion = hasPotion ? potions[0] : null;
+  const potionEffect = bestPotion ? resolvePotionEffect(bestPotion) : null;
+  const potionCount = potions.length;
+  
+  const colorMap: Record<PotionStat, { bg: string; hover: string; border: string; text: string; silhouette: string }> = {
+    health: { bg: 'bg-red-900/60', hover: 'hover:bg-red-800/80', border: 'border-red-700/50', text: 'text-red-400', silhouette: 'text-red-900/40' },
+    magicka: { bg: 'bg-blue-900/60', hover: 'hover:bg-blue-800/80', border: 'border-blue-700/50', text: 'text-blue-400', silhouette: 'text-blue-900/40' },
+    stamina: { bg: 'bg-green-900/60', hover: 'hover:bg-green-800/80', border: 'border-green-700/50', text: 'text-green-400', silhouette: 'text-green-900/40' },
+  };
+  
+  const colors = colorMap[statType];
+  
+  if (!hasPotion) {
+    // Show silhouette placeholder when no potions available
+    return (
+      <div 
+        className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} bg-skyrim-dark/30 opacity-50 cursor-not-allowed`}
+        title={`No ${statType} potions available`}
+      >
+        <FlaskConical size={14} className={colors.silhouette} />
+        <span className={`text-xs ${colors.silhouette}`}>—</span>
+      </div>
+    );
+  }
+  
+  return (
+    <button
+      onClick={() => bestPotion && onUsePotion(bestPotion)}
+      className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} ${colors.bg} ${colors.hover} transition-all active:scale-95`}
+      title={`Use ${bestPotion?.name} (+${potionEffect?.amount || '?'} ${statType})`}
+    >
+      <FlaskConical size={14} className={colors.text} />
+      <span className={`text-xs font-bold ${colors.text}`}>+{potionEffect?.amount || '?'}</span>
+      {potionCount > 1 && (
+        <span className="text-[10px] text-gray-400">({potionCount})</span>
+      )}
+    </button>
+  );
+};
+
 export const CharacterSheet: React.FC<CharacterSheetProps> = ({ 
   character, 
   updateCharacter,
@@ -238,6 +306,11 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
     
     return { armor, damage, equippedItems };
   }, [inventory]);
+
+  // Memoize potions for each stat type for quick potion buttons
+  const healthPotions = useMemo(() => findPotionsForStat(inventory, 'health'), [inventory]);
+  const magickaPotions = useMemo(() => findPotionsForStat(inventory, 'magicka'), [inventory]);
+  const staminaPotions = useMemo(() => findPotionsForStat(inventory, 'stamina'), [inventory]);
 
     const time = (character as any).time || { day: 1, hour: 8, minute: 0 };
     const needs = (character as any).needs || { hunger: 0, thirst: 0, fatigue: 0 };
@@ -681,6 +754,19 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Current Health */}
               <div className="space-y-2">
+                {/* Quick Potion Button for Health */}
+                {onDrink && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
+                  <div className="flex justify-end mb-1">
+                    <QuickPotionButton
+                      statType="health"
+                      potions={healthPotions}
+                      currentValue={character.currentVitals?.currentHealth ?? character.stats.health}
+                      maxValue={character.stats.health}
+                      onUsePotion={onDrink}
+                      colorClass="red"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <Heart size={12} className="text-red-500" /> {t('character.health')}
@@ -700,6 +786,19 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               
               {/* Current Magicka */}
               <div className="space-y-2">
+                {/* Quick Potion Button for Magicka */}
+                {onDrink && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
+                  <div className="flex justify-end mb-1">
+                    <QuickPotionButton
+                      statType="magicka"
+                      potions={magickaPotions}
+                      currentValue={character.currentVitals?.currentMagicka ?? character.stats.magicka}
+                      maxValue={character.stats.magicka}
+                      onUsePotion={onDrink}
+                      colorClass="blue"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <Droplets size={12} className="text-blue-500" /> {t('character.magicka')}
@@ -719,6 +818,19 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               
               {/* Current Stamina */}
               <div className="space-y-2">
+                {/* Quick Potion Button for Stamina */}
+                {onDrink && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
+                  <div className="flex justify-end mb-1">
+                    <QuickPotionButton
+                      statType="stamina"
+                      potions={staminaPotions}
+                      currentValue={character.currentVitals?.currentStamina ?? character.stats.stamina}
+                      maxValue={character.stats.stamina}
+                      onUsePotion={onDrink}
+                      colorClass="green"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <BicepsFlexed size={12} className="text-green-500" /> {t('character.stamina')}

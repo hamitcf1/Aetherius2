@@ -107,7 +107,7 @@ import {
 import { getFoodNutrition, getDrinkNutrition } from './services/nutritionData';
 import { applyStatToVitals } from './services/vitals';
 import { resolvePotionEffect } from './services/potionResolver';
-import { getItemStats, shouldHaveStats, isValidCoreItem } from './services/itemStats';
+import { getItemStats, shouldHaveStats, isValidCoreItem, estimateItemValue } from './services/itemStats';
 import { updateMusicForContext, AmbientContext, audioService, playMusic } from './services/audioService';
 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
 import { getRateLimitStats, generateAdventureResponse } from './services/geminiService';
@@ -676,11 +676,8 @@ const App: React.FC = () => {
       return;
     }
     const toAdd = { ...c, characterId: currentCharacterId } as Companion;
-    setCompanions(prev => {
-      const next = [...prev, toAdd];
-      showToast(`Recruited ${toAdd.name}`, 'success');
-      return next;
-    });
+    setCompanions(prev => [...prev, toAdd]);
+    showToast(`Recruited ${toAdd.name}`, 'success');
   };
 
   const updateCompanion = (c: Companion) => {
@@ -3064,6 +3061,12 @@ const App: React.FC = () => {
                  const stats = getItemStats(name, itemType);
                  if (stats.damage !== undefined) rawItem.damage = stats.damage;
                  if (stats.armor !== undefined) rawItem.armor = stats.armor;
+                 if (stats.value !== undefined && rawItem.value === undefined) rawItem.value = stats.value;
+               }
+               
+               // Ensure all items have a value (gold) for selling/displaying
+               if (rawItem.value === undefined || rawItem.value === null || rawItem.value <= 0) {
+                 rawItem.value = estimateItemValue(name, itemType, rawItem.rarity as string);
                }
 
                const forceCreate = (i as any).__forceCreate === true;
@@ -3838,72 +3841,83 @@ const App: React.FC = () => {
   // Force-unlock a locked perk by spending 3 perk points (limited uses per character)
   const forceUnlockPerk = (perkId: string) => {
     if (!currentCharacterId) return;
+    
+    // Validate before state update to avoid toast duplication in React strict mode
+    const currentChar = characters.find(c => c.id === currentCharacterId);
+    if (!currentChar) return;
+    
+    const pts = currentChar.perkPoints || 0;
+    const forced = currentChar.forcedPerkUnlocks || 0;
+    if (pts < 3) {
+      showToast && showToast('Not enough perk points to force-unlock this perk.', 'warning');
+      return;
+    }
+    if (forced >= 3) {
+      showToast && showToast('You have reached the maximum number of forced unlocks (3).', 'warning');
+      return;
+    }
+    const def = PERK_DEFINITIONS.find(d => d.id === perkId);
+    if (!def) return;
+    const max = def.maxRank || 1;
+    const existing = (currentChar.perks || []).find(p => p.id === perkId);
+    const currRank = existing?.rank || 0;
+    if (currRank >= max) {
+      showToast && showToast('Perk is already at maximum rank.', 'info');
+      return;
+    }
+    
     setCharacters(prev => prev.map(c => {
       if (c.id !== currentCharacterId) return c;
-      let pts = c.perkPoints || 0;
-      let forced = c.forcedPerkUnlocks || 0;
-      if (pts < 3) {
-        showToast && showToast('Not enough perk points to force-unlock this perk.', 'warning');
-        return c; // not enough points
-      }
-      if (forced >= 3) {
-        showToast && showToast('You have reached the maximum number of forced unlocks (3).', 'warning');
-        return c; // reached forced-unlock limit
-      }
-      const def = PERK_DEFINITIONS.find(d => d.id === perkId);
-      if (!def) return c;
-      const max = def.maxRank || 1;
-      const existing = (c.perks || []).find(p => p.id === perkId);
-      const currRank = existing?.rank || 0;
-      if (currRank >= max) {
-        showToast && showToast('Perk is already at maximum rank.', 'info');
-        return c; // already maxed
-      }
 
       // Apply one rank regardless of prerequisites
       let updatedStats = { ...c.stats };
       if (def.effect && def.effect.type === 'stat') {
         const key = def.effect.key as keyof typeof updatedStats;
-        const prev = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
-        updatedStats = { ...updatedStats, [key]: prev + def.effect.amount };
+        const prevVal = typeof (updatedStats as any)[key] === 'number' ? (updatedStats as any)[key] : 0;
+        updatedStats = { ...updatedStats, [key]: prevVal + def.effect.amount };
       }
       let newPerks = (c.perks || []).slice();
-      if (existing) {
+      const existingPerk = newPerks.find(p => p.id === perkId);
+      if (existingPerk) {
         newPerks = newPerks.map(p => p.id === perkId ? { ...p, rank: (p.rank || 0) + 1 } : p);
       } else {
         newPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: 1, mastery: 0, description: def.description });
       }
 
-      pts = Math.max(0, pts - 3);
-      forced = forced + 1;
+      const newPts = Math.max(0, (c.perkPoints || 0) - 3);
+      const newForced = (c.forcedPerkUnlocks || 0) + 1;
       setDirtyEntities(d => new Set([...d, c.id]));
-      return { ...c, stats: updatedStats, perks: newPerks, perkPoints: pts, forcedPerkUnlocks: forced } as Character;
+      return { ...c, stats: updatedStats, perks: newPerks, perkPoints: newPts, forcedPerkUnlocks: newForced } as Character;
     }));
   };
 
   // Refund all perks - clears all perks and restores spent perk points
   const refundAllPerks = () => {
     if (!currentCharacterId) return;
+    
+    // Calculate total refund before state update to avoid toast duplication
+    const currentChar = characters.find(c => c.id === currentCharacterId);
+    if (!currentChar) return;
+    
+    const perks = currentChar.perks || [];
+    let totalRefund = 0;
+    for (const p of perks) {
+      const def = PERK_DEFINITIONS.find(d => d.id === p.id);
+      totalRefund += p.rank || 0;
+      totalRefund += (p.mastery || 0) * (def?.masteryCost || 3);
+    }
+
+    if (totalRefund === 0) {
+      showToast && showToast('No perks to refund.', 'info');
+      return;
+    }
+    
     setCharacters(prev => prev.map(c => {
       if (c.id !== currentCharacterId) return c;
-      
-      // Calculate total points spent on perks
-      let totalRefund = 0;
-      const perks = c.perks || [];
-      for (const p of perks) {
-        const def = PERK_DEFINITIONS.find(d => d.id === p.id);
-        totalRefund += p.rank || 0;
-        totalRefund += (p.mastery || 0) * (def?.masteryCost || 3);
-      }
-
-      if (totalRefund === 0) {
-        showToast && showToast('No perks to refund.', 'info');
-        return c;
-      }
 
       // Reset stats from perk effects
       let updatedStats = { ...c.stats };
-      for (const p of perks) {
+      for (const p of c.perks || []) {
         const def = PERK_DEFINITIONS.find(d => d.id === p.id);
         if (def?.effect?.type === 'stat') {
           const key = def.effect.key as keyof typeof updatedStats;
@@ -3913,7 +3927,6 @@ const App: React.FC = () => {
         }
       }
 
-      showToast && showToast(`Refunded ${totalRefund} perk point${totalRefund !== 1 ? 's' : ''}!`, 'success');
       setDirtyEntities(d => new Set([...d, c.id]));
       return { 
         ...c, 
@@ -3923,6 +3936,8 @@ const App: React.FC = () => {
         forcedPerkUnlocks: 0  // Reset force unlocks on refund
       } as Character;
     }));
+    
+    showToast && showToast(`Refunded ${totalRefund} perk point${totalRefund !== 1 ? 's' : ''}!`, 'success');
   };
 
   // Allow UI to request a manual level-up (e.g., '+' on hero page)

@@ -408,3 +408,77 @@ export function isValidCoreItem(itemName: string, itemType?: string): boolean {
   }
   return false;
 }
+
+/**
+ * Estimate item value (gold) based on item type, name, and rarity
+ * This ensures all items have a value for selling/displaying
+ */
+export function estimateItemValue(itemName: string, itemType?: string, rarity?: string): number {
+  const nameLower = itemName.toLowerCase();
+  
+  // Check if we have explicit value in stats
+  const stats = getItemStats(itemName, itemType);
+  if (stats.value !== undefined && stats.value > 0) {
+    return stats.value;
+  }
+  
+  // Rarity multipliers
+  const rarityMultiplier: Record<string, number> = {
+    common: 1,
+    uncommon: 1.5,
+    rare: 2.5,
+    epic: 5,
+    legendary: 15
+  };
+  const rarityMul = rarityMultiplier[(rarity || '').toLowerCase()] || 1;
+  
+  // Base values by type
+  const typeBaseValues: Record<string, number> = {
+    weapon: 50,
+    apparel: 40,
+    potion: 25,
+    food: 5,
+    book: 15,
+    scroll: 30,
+    misc: 10,
+    ingredient: 8,
+    key: 0, // Keys typically cannot be sold
+    ammo: 1,
+    soul_gem: 25,
+    ore: 10,
+    ingot: 30,
+    jewelry: 75,
+    spell_tome: 100
+  };
+  
+  let baseValue = typeBaseValues[(itemType || '').toLowerCase()] || 10;
+  
+  // Adjust based on item name keywords
+  if (nameLower.includes('gold') || nameLower.includes('golden')) baseValue *= 2;
+  if (nameLower.includes('silver')) baseValue *= 1.5;
+  if (nameLower.includes('ebony') || nameLower.includes('daedric')) baseValue *= 4;
+  if (nameLower.includes('glass') || nameLower.includes('elven')) baseValue *= 2.5;
+  if (nameLower.includes('dragon')) baseValue *= 5;
+  if (nameLower.includes('dwemer') || nameLower.includes('dwarven')) baseValue *= 2;
+  if (nameLower.includes('orcish')) baseValue *= 1.8;
+  if (nameLower.includes('steel')) baseValue *= 1.3;
+  if (nameLower.includes('iron')) baseValue *= 1;
+  if (nameLower.includes('leather') || nameLower.includes('hide')) baseValue *= 0.8;
+  
+  // Special item adjustments
+  if (nameLower.includes('grand') || nameLower.includes('greater')) baseValue *= 2;
+  if (nameLower.includes('minor') || nameLower.includes('lesser')) baseValue *= 0.5;
+  if (nameLower.includes('petty')) baseValue *= 0.3;
+  
+  // Potion type bonuses
+  if (itemType === 'potion') {
+    if (nameLower.includes('health')) baseValue = 25;
+    if (nameLower.includes('magicka')) baseValue = 30;
+    if (nameLower.includes('stamina')) baseValue = 25;
+    if (nameLower.includes('invisibility')) baseValue = 100;
+    if (nameLower.includes('resist')) baseValue = 40;
+    if (nameLower.includes('fortify')) baseValue = 50;
+  }
+  
+  return Math.max(1, Math.round(baseValue * rarityMul));
+}
