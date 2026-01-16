@@ -774,7 +774,7 @@ export const CharacterTemplateSelector: React.FC<{
                 Use This Template
               </button>
               <button
-                onClick={onClose}
+                onClick={onClose} data-sfx="button_click"
                 className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
               >
                 Cancel

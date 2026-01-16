@@ -244,7 +244,7 @@ const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, companion, onS
                 <div className="text-xs text-skyrim-text">{companion.race} • Level {companion.level}</div>
               </div>
             </div>
-            <button onClick={onClose} className="px-2 py-1 rounded border border-skyrim-border">Close</button>
+            <button onClick={onClose} data-sfx="button_click" className="px-2 py-1 rounded border border-skyrim-border">Close</button>
           </div>
 
           {/* Stats display */}
@@ -329,7 +329,7 @@ const CompanionDialogueModal: React.FC<Props> = ({ open, onClose, companion, onS
               )}
             </div>
           </div>
-          <button onClick={onClose} className="px-2 py-1 rounded border border-skyrim-border">Close</button>
+          <button onClick={onClose} data-sfx="button_click" className="px-2 py-1 rounded border border-skyrim-border">Close</button>
         </div>
 
         <div className="bg-black/80 text-xs text-green-300 font-mono p-4 rounded h-72 md:h-96 overflow-auto mb-4">

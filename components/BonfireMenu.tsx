@@ -295,7 +295,7 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
           </div>
           <div className="flex items-center gap-2">
             <div className="text-xs text-skyrim-text">Gold: {gold}g</div>
-            <button onClick={onClose} className="p-2 hover:bg-skyrim-paper/40 rounded">
+            <button onClick={onClose} data-sfx="button_click" className="p-2 hover:bg-skyrim-paper/40 rounded">
               <X size={18} className="text-skyrim-text hover:text-white" />
             </button>
           </div>

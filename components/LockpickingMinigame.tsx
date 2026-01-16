@@ -245,7 +245,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={onClose} data-sfx="button_click"
             className="text-skyrim-text hover:text-white transition-colors"
           >
             <X size={24} />

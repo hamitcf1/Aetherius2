@@ -28,7 +28,7 @@ export const MinimalQuestModal: React.FC<MinimalQuestModalProps> = ({ quests, op
     >
       <div className="bg-skyrim-paper border border-skyrim-gold/40 rounded-lg shadow-2xl w-full max-w-md p-4 relative animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={onClose}
+          onClick={onClose} data-sfx="button_click"
           className="absolute top-2 right-2 text-skyrim-text hover:text-red-400 transition-colors"
           aria-label="Close quest modal"
         >

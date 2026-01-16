@@ -73,7 +73,7 @@ export default function LevelUpModal({ open, onClose, onConfirm, characterName, 
         <div className="mb-4 text-sm text-skyrim-text">Selected: <span className="text-skyrim-gold font-bold">{choice.charAt(0).toUpperCase() + choice.slice(1)}</span></div>
 
         <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 rounded bg-transparent border border-skyrim-border text-sm">Later</button>
+          <button onClick={onClose} data-sfx="button_click" className="px-4 py-2 rounded bg-transparent border border-skyrim-border text-sm">Later</button>
           <button onClick={() => onConfirm(choice)} className="px-4 py-2 rounded bg-skyrim-gold text-black text-sm">Confirm</button>
         </div>
       </div>

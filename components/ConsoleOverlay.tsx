@@ -188,7 +188,7 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
+              onClick={onClose} data-sfx="button_click"
               className="text-skyrim-text hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
