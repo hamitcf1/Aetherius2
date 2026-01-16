@@ -127,6 +127,12 @@ class AudioService {
   private soundAvailabilityCache: Map<string, boolean> = new Map();
   // Track last-played timestamps per effect to rate-limit noisy effects
   private lastPlayedTimestamps: Map<SoundEffect, number> = new Map();
+  // Debug flag to enable verbose SFX logs for troubleshooting repeated triggers
+  private debugSfx: boolean = false;
+
+  public setDebugSfx(enabled: boolean): void {
+    this.debugSfx = !!enabled;
+  }
   private isInitialized: boolean = false;
   private pendingTrack: MusicTrack | null = null; // Track to play after user interaction
   private lastRequestedTrack: MusicTrack | null = null; // Remember last track for re-enabling music
@@ -216,9 +222,10 @@ class AudioService {
         const last = this.lastPlayedTimestamps.get(effect) || 0;
         if (cooldown > 0 && now - last < cooldown) {
           // Skip playing to prevent spam
-          // console.debug(`Skipping ${effect} due to cooldown (${now - last}ms < ${cooldown}ms)`);
+          if (this.debugSfx) console.debug(`🔇 SFX cooldown: Skipping "${effect}" (${now - last}ms < ${cooldown}ms)`, new Error().stack);
           return;
         }
+        if (this.debugSfx) console.debug(`▶️ Playing SFX "${effect}"`, new Error().stack);
         this.lastPlayedTimestamps.set(effect, now);
       } catch (e) {
         // ignore timing guard failures

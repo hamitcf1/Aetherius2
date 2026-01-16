@@ -128,7 +128,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
       <div className="w-full max-w-2xl bg-skyrim-paper p-4 rounded border border-skyrim-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-skyrim-gold">Companions</h3>
-          <button onClick={onClose} className="px-2 py-1 rounded border border-skyrim-border">Close</button>
+          <button onClick={onClose} data-sfx="button_click" className="px-2 py-1 rounded border border-skyrim-border">Close</button>
         </div>
 
         <div className="grid grid-cols-1 gap-3 mb-4">

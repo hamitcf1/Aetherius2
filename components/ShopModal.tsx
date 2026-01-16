@@ -587,7 +587,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
               <Coins size={14} className="text-yellow-500" />
               <span className="text-yellow-400 font-bold text-sm">{gold}</span>
             </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-skyrim-paper/40 rounded transition-colors">
+            <button onClick={onClose} data-sfx="button_click" className="p-1.5 hover:bg-skyrim-paper/40 rounded transition-colors">
               <X size={18} className="text-skyrim-text hover:text-white" />
             </button>
           </div>

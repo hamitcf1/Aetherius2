@@ -260,7 +260,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
         {/* Footer */}
         <div className="flex items-center justify-between p-3 border-t border-skyrim-border bg-skyrim-dark/30">
           <div className="text-sm text-skyrim-text">{learned.length > 0 && <span><span className="text-green-400 font-bold">{learned.length}</span> spells learned</span>}</div>
-          <button onClick={onClose} className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">Close</button>
+          <button onClick={onClose} data-sfx="button_click" className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">Close</button>
         </div>
       </div>
 

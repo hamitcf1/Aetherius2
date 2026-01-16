@@ -280,7 +280,7 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
             )}
           </div>
           {/* Close button visible on mobile at top right */}
-          <button onClick={onClose} className="sm:hidden p-2 text-skyrim-text hover:text-white flex-shrink-0">
+          <button onClick={onClose} data-sfx="button_click" className="sm:hidden p-2 text-skyrim-text hover:text-white flex-shrink-0">
             <X size={24} />
           </button>
         </div>
@@ -318,7 +318,7 @@ export const SkyrimMap: React.FC<SkyrimMapProps> = ({
               <Navigation size={16} className="text-green-400" />
             </button>
           )}
-          <button onClick={onClose} className="hidden sm:block p-2 text-skyrim-text hover:text-white flex-shrink-0">
+          <button onClick={onClose} data-sfx="button_click" className="hidden sm:block p-2 text-skyrim-text hover:text-white flex-shrink-0">
             <X size={24} />
           </button>
         </div>
