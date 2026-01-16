@@ -1,0 +1,10 @@
+.level-badge{display:inline-block;position:relative;font-size:12px}
+.level-badge__svg{display:block;border-radius:50%;box-shadow:0 6px 18px rgba(0,0,0,0.35)}
+.level-badge__label{position:absolute;left:50%;transform:translateX(-50%);bottom:-12px;background:rgba(0,0,0,0.7);color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;border:1px solid rgba(255,255,255,0.05)}
+
+/* tier variants (for theming if needed) */
+.level-badge--compact .level-badge__label{display:none}
+
+@media (prefers-reduced-motion: reduce){
+  .level-badge__svg{transition:none}
+}

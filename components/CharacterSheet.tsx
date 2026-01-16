@@ -12,6 +12,8 @@ import { useAppContext } from '../AppContext';
 import { getXPForNextLevel, getXPProgress, formatXPDisplay } from '../utils/levelingSystem';
 import { isFeatureEnabled } from '../featureFlags';
 import { useLocalization } from '../services/localization';
+import LevelBadge from './LevelBadge';
+import XPProgressBar from './XPProgressBar';
 
 interface CharacterSheetProps {
   character: Character;
@@ -635,57 +637,19 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 {/* Level Badge */}
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full border-2 border-skyrim-gold flex items-center justify-center bg-skyrim-paper relative shadow-[0_0_15px_rgba(192,160,98,0.2)]">
-                    <span className="text-2xl font-serif text-skyrim-gold">{character.level}</span>
-                    <div className="absolute -bottom-2 text-[10px] uppercase bg-black px-1 border border-skyrim-border rounded">{t('character.level')}</div>
-                  </div>
-                  
+                  <LevelBadge level={character.level} size={64} />
+
                   {/* XP Progress Section */}
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <TrendingUp size={14} className="text-skyrim-gold" />
                       <span className="text-xs text-skyrim-text uppercase tracking-widest">{t('character.experience')}</span>
                     </div>
-                    
-                    {/* XP Progress Bar */}
+
                     {(() => {
                       const xpData = getXPProgress(character.experience || 0, character.level);
-                      const percentage = Math.max(0, Math.min(100, xpData.percentage || 0));
                       return (
-                        <>
-                          <div className="relative w-48 sm:w-64 h-3 bg-gray-900 rounded-full overflow-hidden border border-skyrim-border/50">
-                            <div 
-                              className="absolute top-0 left-0 h-full rounded-full"
-                              style={{ 
-                                width: `${percentage}%`,
-                                background: 'linear-gradient(to right, #b8860b, #ffd700)',
-                                minWidth: percentage > 0 ? '4px' : '0px'
-                              }}
-                            />
-                            {/* Glow effect */}
-                            {percentage > 0 && (
-                              <div 
-                                className="absolute top-0 left-0 h-full rounded-full blur-sm"
-                                style={{ 
-                                  width: `${percentage}%`,
-                                  background: 'rgba(212, 164, 74, 0.4)',
-                                  minWidth: '4px'
-                                }}
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-xs text-skyrim-gold font-semibold">
-                              {xpData.current.toLocaleString()} / {xpData.required.toLocaleString()} XP
-                            </span>
-                            <span className="text-[10px] text-gray-500">
-                              {Math.round(percentage)}%
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-gray-500 mt-0.5">
-                            Total: {xpData.totalXP.toLocaleString()} XP
-                          </div>
-                        </>
+                        <XPProgressBar current={xpData.current} required={xpData.required} total={xpData.totalXP} />
                       );
                     })()}
                   </div>
