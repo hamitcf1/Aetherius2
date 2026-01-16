@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useRef } from 'react';
+import { audioService } from '../services/audioService';
 
 interface ModalWrapperProps {
   open: boolean;

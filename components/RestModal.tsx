@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { audioService } from '../services/audioService';
 import ModalWrapper from './ModalWrapper';
 
 interface Props {

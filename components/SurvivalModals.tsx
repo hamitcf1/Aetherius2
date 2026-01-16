@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { audioService } from '../services/audioService';
 import { X, Moon, Apple, Droplets, Tent, Home, TreePine, Clock, Coins, FlaskConical } from 'lucide-react';
 import { InventoryItem } from '../types';
 import { getFoodNutrition, getDrinkNutrition, getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
