@@ -7,7 +7,7 @@ import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags
 import { audioService } from '../services/audioService';
 import { ThemeSelector, AIModelSelector } from './GameFeatures';
 import { VOICE_OPTIONS, getVoiceSettings, saveVoiceSettings, getVoicesForLanguage, type VoiceSettings } from '../services/ttsService';
-import { useLocalization, AVAILABLE_LANGUAGES, type Language } from '../services/localization';
+import { useLocalization, AVAILABLE_LANGUAGES, getLanguageFlag, type Language } from '../services/localization';
 
 type SnowIntensity = SnowSettings['intensity'];
 
@@ -333,7 +333,7 @@ const ActionBar: React.FC = () => {
             className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-skyrim-gold/20 to-skyrim-gold/10 border border-skyrim-gold rounded font-bold text-skyrim-gold hover:from-skyrim-gold/30 hover:to-skyrim-gold/20 transition-all"
           >
             <SlidersHorizontal size={16} /> Settings
-            <span className="ml-auto text-xs text-skyrim-text/60">{AVAILABLE_LANGUAGES.find(l => l.code === language)?.flag}</span>
+            <span className="ml-auto text-xs text-skyrim-text/60">{getLanguageFlag(language)}</span>
           </button>
           
           {/* Theme Selector */}
@@ -523,7 +523,7 @@ const ActionBar: React.FC = () => {
                         : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
                     }`}
                   >
-                    <span className="text-lg">{lang.flag}</span>
+                    <span className="text-lg">{getLanguageFlag(lang.code)}</span>
                     <span>{lang.nativeName}</span>
                   </button>
                 ))}
@@ -570,7 +570,7 @@ const ActionBar: React.FC = () => {
                     type="range"
                     min="0"
                     max="1"
-                    step="0.05"
+                    step="0.01"
                     value={musicVolume}
                     onChange={(e) => handleMusicVolumeChange(parseFloat(e.target.value))}
                     className="flex-1 accent-skyrim-gold"
@@ -598,7 +598,7 @@ const ActionBar: React.FC = () => {
                     type="range"
                     min="0"
                     max="1"
-                    step="0.05"
+                    step="0.01"
                     value={soundVolume}
                     onChange={(e) => handleSoundVolumeChange(parseFloat(e.target.value))}
                     className="flex-1 accent-skyrim-gold"

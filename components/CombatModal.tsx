@@ -856,11 +856,22 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       const last = newState.combatLog[newState.combatLog.length - 1];
       if (last && last.actor !== 'player' && last.damage && last.damage > 0) {
         const id = `hit_e_${Date.now()}`;
-        // Anchor to the player stats panel
+        // Anchor to the target of the attack if possible (ally or enemy), otherwise fallback to player
         let x: number | undefined;
         let y: number | undefined;
         try {
-          const el = playerRef.current;
+          let el: HTMLElement | null = null;
+          if (!last.target || last.target === 'player') {
+            el = playerRef.current;
+          } else {
+            // Try to find an ally or enemy with matching name and use its registered element ref
+            const ally = (combatState.allies || []).find(a => a.name === last.target);
+            const enemy = (combatState.enemies || []).find(e => e.name === last.target);
+            if (ally && enemyRefs.current[ally.id]) el = enemyRefs.current[ally.id];
+            else if (enemy && enemyRefs.current[enemy.id]) el = enemyRefs.current[enemy.id];
+            else el = playerRef.current; // fallback
+          }
+
           if (el) {
             const r = el.getBoundingClientRect();
             x = r.left + r.width / 2;
@@ -868,7 +879,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           }
         } catch (e) {}
 
-          setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
+        setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
         setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
 
         try {
@@ -963,7 +974,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       // Check combat end
       let finalState = checkCombatEnd(newState, newPlayerStats);
-      if (finalState.active && (action !== 'flee' || !narrative.includes('failed'))) {
+      if (finalState.active) {
+        // For skip we always advance the turn when combat remains active
         finalState = advanceTurn(finalState);
         // Only apply regen when the turn advanced to the player
         if (finalState.currentTurnActor === 'player') {
@@ -1238,7 +1250,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               }
             }}
           >
-            <h3 className="text-lg font-bold text-amber-100 mb-3">{getEasterEggName(character.name)}</h3>
+            <h3 className="text-lg font-bold text-amber-100 mb-3">
+              {getEasterEggName(character.name)}
+              <span className="ml-2 text-xs text-stone-400">• Lv.{character.level}</span>
+            </h3>
             <div className="space-y-3">
               <HealthBar 
                 current={playerStats.currentHealth} 

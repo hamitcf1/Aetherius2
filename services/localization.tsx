@@ -35,6 +35,43 @@ export const AVAILABLE_LANGUAGES: LanguageOption[] = [
   { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', flag: '🇹🇷' },
 ];
 
+// Return a platform-appropriate flag: on Windows systems use inline SVGs (better visual fidelity),
+// otherwise return the emoji fallback. This helps when Windows fonts render flags as two-letter
+// sequences (GB/TR) instead of colorful emoji.
+export const getLanguageFlag = (code: Language): React.ReactNode => {
+  const isWindows = (typeof navigator !== 'undefined') && /Windows/.test(navigator.userAgent);
+  if (!isWindows) {
+    const flag = (AVAILABLE_LANGUAGES.find(l => l.code === code)?.flag) || '';
+    return <span role="img" aria-label={`${AVAILABLE_LANGUAGES.find(l => l.code === code)?.name || code} flag`}>{flag}</span>;
+  }
+
+  // Inline SVGs for GB and TR (small, 20x14 aspect) - keeps styling consistent with surrounding text
+  switch (code) {
+    case 'en':
+      return (
+        <svg width="20" height="14" viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="English flag">
+          <rect width="20" height="14" fill="#012169" />
+          <path d="M0 0L20 14M20 0L0 14" stroke="#FFF" strokeWidth="2" />
+          <path d="M0 0L12 0M8 14L20 14" stroke="#C8102E" strokeWidth="1.4" />
+          <path d="M10 0V14M0 7H20" stroke="#FFF" strokeWidth="2" />
+          <path d="M10 0V14M0 7H20" stroke="#C8102E" strokeWidth="1" />
+        </svg>
+      );
+    case 'tr':
+      return (
+        <svg width="20" height="14" viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Turkish flag">
+          <rect width="20" height="14" fill="#E30A17" />
+          <circle cx="8" cy="7" r="3.5" fill="#fff" />
+          <path d="M9.6 7a2 2 0 100-2.5 2 2 0 000 2.5z" transform="translate(0 .2)" fill="#E30A17" />
+          <path d="M11.8 5.5l-0.6 0.4 0.2-0.8-0.6-0.4 0.8 0 0.2-0.8 0.2 0.8 0.8 0-0.6 0.4 0.2 0.8z" fill="#fff" />
+        </svg>
+      );
+    default:
+      const fallback = (AVAILABLE_LANGUAGES.find(l => l.code === code)?.flag) || '';
+      return <span role="img" aria-label={`${AVAILABLE_LANGUAGES.find(l => l.code === code)?.name || code} flag`}>{fallback}</span>;
+  }
+};
+
 // Translation keys structure (type-safe)
 export interface TranslationKeys {
   // Common UI elements
@@ -459,10 +496,36 @@ export const LocalizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 };
 
 // Hook to use localization
+let hasWarnedMissingProvider = false;
+
 export const useLocalization = (): LocalizationContextType => {
   const context = useContext(LocalizationContext);
   if (!context) {
-    throw new Error('useLocalization must be used within a LocalizationProvider');
+    if (!hasWarnedMissingProvider) {
+      console.warn('useLocalization used without a provider - returning default localization values');
+      hasWarnedMissingProvider = true;
+    }
+    // Provide a safe default to avoid runtime crashes when components are rendered outside of the provider
+    return {
+      language: 'en',
+      setLanguage: () => {},
+      t: (key: string, params?: Record<string, string | number>) => {
+        const translations = TRANSLATIONS['en'];
+        const keys = key.split('.');
+        let value: any = translations;
+        for (const k of keys) {
+          if (value && typeof value === 'object' && k in value) {
+            value = value[k];
+          } else {
+            return key;
+          }
+        }
+        if (typeof value !== 'string') return key;
+        if (params) return value.replace(/\{\{(\w+)\}\}/g, (_, paramKey) => (params[paramKey] !== undefined ? String(params[paramKey]) : `{{${paramKey}}}`));
+        return value;
+      },
+      availableLanguages: AVAILABLE_LANGUAGES
+    } as LocalizationContextType;
   }
   return context;
 };

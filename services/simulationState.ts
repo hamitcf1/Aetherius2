@@ -379,10 +379,33 @@ export function createNPC(
 }
 
 export function findNPCByName(state: SimulationState, name: string): NPC | undefined {
-  const normalizedName = name.toLowerCase().trim();
-  return Object.values(state.npcs).find(
-    npc => npc.name.toLowerCase() === normalizedName
-  );
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const target = normalize(name || '');
+
+  // 1) Exact match
+  let exact = Object.values(state.npcs).find(npc => normalize(npc.name) === target);
+  if (exact) return exact;
+
+  // 2) StartsWith (e.g., 'Bandit Thug 1' should match 'Bandit Thug')
+  let starts = Object.values(state.npcs).find(npc => normalize(npc.name).startsWith(target));
+  if (starts) return starts;
+
+  // 3) Includes
+  let incl = Object.values(state.npcs).find(npc => normalize(npc.name).includes(target));
+  if (incl) return incl;
+
+  // 4) Token overlap scoring - pick best match
+  const targetTokens = new Set(target.split(' ').filter(Boolean));
+  let best: { npc?: NPC; score: number } = { npc: undefined, score: 0 };
+  for (const npc of Object.values(state.npcs)) {
+    const tokens = normalize(npc.name).split(' ').filter(Boolean);
+    let score = 0;
+    for (const t of tokens) if (targetTokens.has(t)) score++;
+    if (score > best.score) best = { npc, score };
+  }
+  if (best.score > 0) return best.npc;
+
+  return undefined;
 }
 
 export function updateNPCDisposition(npc: NPC, change: number): NPCDisposition {

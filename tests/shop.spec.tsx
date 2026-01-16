@@ -85,4 +85,54 @@ describe('Shop inventory sanity', () => {
     await waitFor(() => expect(screen.queryAllByText(/\(Armor\)/i).length).toBeGreaterThan(0));
     expect(screen.queryAllByText(/\(Weapons\)/i).length).toBe(0);
   });
+
+  it('sell mode shows categories and filters inventory by selected category', async () => {
+    const ctx = ({ showQuantityControls: false } as any);
+    const inv = [
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', description: 'A sword', quantity: 1, equipped: false },
+      { id: 'leather_armor', characterId: 'c1', name: 'Leather Armor', type: 'apparel', description: 'A worn set of leather armor.', quantity: 1, equipped: false }
+    ];
+
+    render(<AppContext.Provider value={ctx}><ShopModal open={true} onClose={() => {}} gold={1000000} onPurchase={() => {}} inventory={inv} onSell={() => {}} /></AppContext.Provider>);
+
+    // Switch to Sell tab
+    const sellBtn = screen.getByText('Sell');
+    fireEvent.click(sellBtn);
+
+    // Click Armor category
+    const armorBtn = screen.getByText('Armor');
+    fireEvent.click(armorBtn);
+
+    // Leather Armor should be visible, Iron Sword should not
+    await waitFor(() => expect(screen.getByText('Leather Armor')).toBeTruthy());
+    expect(screen.queryByText('Iron Sword')).toBeNull();
+  });
+
+  it('sell mode sorting by price works', async () => {
+    const ctx = ({ showQuantityControls: false } as any);
+    const inv = [
+      { id: 'cheap_item', characterId: 'c1', name: 'Iron Sword', type: 'weapon', description: 'A sword', quantity: 1, equipped: false },
+      { id: 'expensive_item', characterId: 'c1', name: 'Leather Armor', type: 'apparel', description: 'A worn set of leather armor.', quantity: 1, equipped: false }
+    ];
+
+    render(<AppContext.Provider value={ctx}><ShopModal open={true} onClose={() => {}} gold={1000000} onPurchase={() => {}} inventory={inv} onSell={() => {}} /></AppContext.Provider>);
+
+    // Switch to Sell tab
+    fireEvent.click(screen.getByText('Sell'));
+
+    // Open Sort selector and choose Price
+    fireEvent.click(screen.getByText('Name'));
+    // The SortSelector button opened; pick Price
+    fireEvent.click(screen.getByText('Price'));
+
+    // Toggle direction to descending
+    fireEvent.click(screen.getByLabelText('toggle-sort-direction'));
+
+    // Now the first visible item should be Leather Armor (higher sell price)
+    await waitFor(() => {
+      const names = screen.getAllByText(/Leather Armor|Iron Sword/);
+      expect(names.length).toBeGreaterThanOrEqual(2);
+      expect(names[0].textContent).toContain('Leather Armor');
+    });
+  });
 });

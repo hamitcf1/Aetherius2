@@ -5,7 +5,7 @@ import { generateCharacterProfile, chatWithScribe } from '../services/geminiServ
 import { isFeatureEnabled } from '../featureFlags';
 import { DropdownSelector } from './GameFeatures';
 import { audioService } from '../services/audioService';
-import { useLocalization, AVAILABLE_LANGUAGES, type Language } from '../services/localization';
+import { useLocalization, AVAILABLE_LANGUAGES, getLanguageFlag, type Language } from '../services/localization';
 
 export type WeatherEffect = 'snow' | 'rain' | 'none';
 
@@ -310,7 +310,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 >
                   {AVAILABLE_LANGUAGES.map(lang => (
                     <option key={lang.code} value={lang.code}>
-                      {lang.flag} {lang.nativeName}
+                      {getLanguageFlag(lang.code)} {lang.nativeName}
                     </option>
                   ))}
                 </select>

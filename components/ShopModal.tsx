@@ -385,7 +385,20 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   const [recentlyPurchased, setRecentlyPurchased] = useState<Set<string>>(new Set());
   const [recentlySold, setRecentlySold] = useState<Set<string>>(new Set());
   const [shopSort, setShopSort] = useState<string>('name:asc');
+  const [sellSort, setSellSort] = useState<string>('name:asc');
   const { showQuantityControls } = useAppContext();
+
+  // Map inventory item types to shop categories for the Sell tab
+  const TYPE_TO_CATEGORY: Record<string, string> = {
+    food: 'Food',
+    drink: 'Drinks',
+    potion: 'Potions',
+    camping: 'Camping',
+    weapon: 'Weapons',
+    apparel: 'Armor',
+    misc: 'Misc',
+    ingredient: 'Ingredients'
+  };
 
   // Handle ESC key to close
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -485,7 +498,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   }, [category, search, characterLevel, shopSort]);
 
   const filteredInventoryItems = useMemo(() => {
-    return inventory.filter(item => {
+    const base = inventory.filter(item => {
       // Don't allow selling keys
       if (item.type === 'key') return false;
       if ((item.quantity || 0) <= 0) return false;
@@ -496,7 +509,40 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         item.description.toLowerCase().includes(search.toLowerCase());
       return matchesSearch;
     });
-  }, [inventory, search]);
+
+    // Apply category filter for Sell tab
+    const categoryFiltered = category === 'All' ? base : base.filter(item => {
+      // Special-case Jewelry detection
+      if (category === 'Jewelry') {
+        const n = item.name.toLowerCase();
+        return n.includes('ring') || n.includes('necklace') || n.includes('circlet');
+      }
+      const mapped = TYPE_TO_CATEGORY[item.type] || 'Misc';
+      return mapped === category;
+    });
+
+    // Apply sorting based on sellSort
+    const parseSellSort = (s: string) => {
+      const parts = (s || '').split(':');
+      return { key: parts[0] || 'name', dir: parts[1] === 'desc' ? 'desc' : 'asc' };
+    };
+
+    const parsed = parseSellSort(sellSort);
+
+    const sorted = [...categoryFiltered].sort((a, b) => {
+      const dir = parsed.dir === 'desc' ? -1 : 1;
+      const key = parsed.key;
+      if (key === 'price') {
+        return dir * (getSellPrice(a) - getSellPrice(b));
+      }
+      if (key === 'damage') return dir * ((a.damage || 0) - (b.damage || 0));
+      if (key === 'armor') return dir * ((a.armor || 0) - (b.armor || 0));
+      if (key === 'weight') return dir * ((a.weight || 0) - (b.weight || 0));
+      return dir * a.name.localeCompare(b.name);
+    });
+
+    return sorted;
+  }, [inventory, search, category, sellSort]);
 
   const getQuantity = (id: string) => quantities[id] || 1;
   const setQuantity = (id: string, qty: number, max?: number) => {
@@ -610,7 +656,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
             Buy
           </button>
           <button
-            onClick={() => { setMode('sell'); setSearch(''); }}
+            onClick={() => { setMode('sell'); setSearch(''); setCategory('All'); }}
             disabled={!onSell}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors ${
               mode === 'sell'
@@ -635,7 +681,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
               className="w-full pl-8 pr-3 py-1.5 bg-skyrim-paper/40 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:border-skyrim-gold focus:outline-none text-sm"
             />
           </div>
-          {mode === 'buy' && (
+          {(mode === 'buy' || mode === 'sell') && (
             <>
               <div className="flex flex-wrap gap-1">
                 {CATEGORIES.map(cat => (
@@ -644,7 +690,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                     onClick={() => setCategory(cat)}
                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
                       category === cat
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                        ? (mode === 'buy' ? 'bg-skyrim-gold text-skyrim-dark font-bold' : 'bg-green-700 text-white font-bold')
                         : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/50'
                     }`}
                   >
@@ -657,8 +703,8 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
               <div className="mt-2 flex items-center gap-2">
                 <div className="text-xs text-skyrim-text">Sort:</div>
                 <SortSelector
-                  currentSort={shopSort}
-                  onSelect={(s) => setShopSort(s)}
+                  currentSort={mode === 'buy' ? shopSort : sellSort}
+                  onSelect={(s) => mode === 'buy' ? setShopSort(s) : setSellSort(s)}
                   allowDirection={true}
                   options={[
                     { id: 'name', label: 'Name' },

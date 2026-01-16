@@ -2719,6 +2719,7 @@ export const createEnemyFromTemplate = (
     levelModifier?: number;  // -3 to +5 level adjustment
     isElite?: boolean;       // Elite enemies have better stats
     forceUnique?: boolean;   // Always generate unique name
+    targetLevel?: number;    // Prefer to generate enemies around this level (e.g., player level)
   } = {}
 ): CombatEnemy => {
   const template = BASE_ENEMY_TEMPLATES[templateId];
@@ -2737,10 +2738,17 @@ export const createEnemyFromTemplate = (
   }
   if (nameOverride) name = nameOverride;
 
-  // Calculate level with variation
+  // Calculate level with variation. If a targetLevel is provided (e.g., player's level), bias toward it
   const baseLevel = template.baseLevel + levelModifier;
-  const level = Math.max(1, randomRange(baseLevel - 1, baseLevel + 2));
-  
+  let level: number;
+  if (typeof options.targetLevel === 'number') {
+    // Bias around targetLevel +/-2
+    const t = Math.max(1, Math.floor(options.targetLevel));
+    level = Math.max(1, randomRange(t - 2, t + 2));
+  } else {
+    level = Math.max(1, randomRange(baseLevel - 1, baseLevel + 2));
+  }
+
   // Scale stats based on level difference and add random variation (±15%)
   const levelScale = 1 + (level - template.baseLevel) * 0.1;
   const variance = 0.15; // 15% variance

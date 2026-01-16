@@ -131,15 +131,62 @@ export const finalizeLoot = (
 
     const qty = sel.quantity || 1;
 
+    // Debug meta for this selection
+    console.log('[finalizeLoot] selection:', sel.name, 'meta=', meta);
+
     // Enrich with item stats when possible
     let itemType = meta?.type || 'misc';
     let itemDesc = meta?.description || '';
     let itemRarity = meta?.rarity;
 
-    // Use core stats for weapons/apparel
+    // Use core stats for weapons/apparel. If meta.type is 'misc' (AI-crafted name), attempt to infer type from name
     try {
+      console.log('[finalizeLoot] enrichment try start for', sel.name, 'itemTypeBefore=', itemType);
       const { getItemStats, shouldHaveStats } = require('./itemStats');
-      const stats = getItemStats(sel.name, itemType);
+      // If meta reports misc, aggressively infer type by keyword first
+      if (itemType === 'misc') {
+        const nameLower = (sel.name || '').toLowerCase();
+        if (/\b(dagger|sword|axe|mace|hammer|bow|staff|greatsword|warhammer|battleaxe)\b/.test(nameLower)) {
+          itemType = 'weapon';
+        } else if (/\b(armor|helm|helmet|boots|gauntlet|shield|cloak|robe|circlet|necklace|ring)\b/.test(nameLower)) {
+          itemType = 'apparel';
+        }
+        console.log('[finalizeLoot] early inference result =>', sel.name, '->', itemType);
+      }
+
+      // Now attempt to get stats using the (possibly inferred) type
+      let stats = getItemStats(sel.name, itemType);
+
+      // If no helpful stats and item still labeled as misc, try guessing type based on name keywords
+      if ((!stats.damage && !stats.armor) && itemType === 'misc') {
+        const nameLower = (sel.name || '').toLowerCase();
+        // debug
+        console.log('[finalizeLoot] attempting type inference for', sel.name, 'nameLower=', nameLower);
+        // quick heuristics: prioritize obvious weapon keywords
+        if (/\b(dagger|sword|axe|mace|hammer|bow|staff|greatsword|warhammer|battleaxe)\b/.test(nameLower)) {
+          console.log('[finalizeLoot] inferred weapon by keyword');
+          itemType = 'weapon';
+          stats = getItemStats(sel.name, 'weapon');
+        } else if (/\b(armor|helm|helmet|boots|gauntlet|shield|cloak|robe|circlet|necklace|ring)\b/.test(nameLower)) {
+          console.log('[finalizeLoot] inferred apparel by keyword');
+          itemType = 'apparel';
+          stats = getItemStats(sel.name, 'apparel');
+        } else {
+          const guessedWeapon = getItemStats(sel.name, 'weapon');
+          const guessedArmor = getItemStats(sel.name, 'apparel');
+          console.log('[finalizeLoot] guessedWeapon=', guessedWeapon, 'guessedArmor=', guessedArmor);
+          // Prefer weapon if it reports damage, otherwise apparel if it reports armor
+          if (guessedWeapon && guessedWeapon.damage) {
+            console.log('[finalizeLoot] inferred weapon by guessedWeapon');
+            itemType = 'weapon';
+            stats = guessedWeapon;
+          } else if (guessedArmor && guessedArmor.armor) {
+            console.log('[finalizeLoot] inferred apparel by guessedArmor');
+            itemType = 'apparel';
+            stats = guessedArmor;
+          }
+        }
+      }
 
       // Add fallback description/value/weight from stats
       const value = stats.value ?? (itemType === 'potion' ? 10 : itemType === 'misc' ? 5 : 15);
@@ -230,6 +277,29 @@ export const finalizeLoot = (
   newState.lootPending = false;
   newState.pendingLoot = [];
   newState.pendingRewards = undefined;
+
+  // Post-process inventory: ensure AI-crafted names get stats inferred when possible
+  // Best-effort post-process enrichment using imported helpers
+  updatedInventory = updatedInventory.map(it => {
+    if ((it.type === 'misc' || !it.type) && it.name) {
+      const nameLower = it.name.toLowerCase();
+      if (/\b(dagger|sword|axe|mace|hammer|bow|staff|greatsword|warhammer|battleaxe)\b/.test(nameLower)) {
+        const stats = getItemStats(it.name, 'weapon');
+        const copy = { ...it, type: 'weapon' } as InventoryItem;
+        if (stats.damage) copy.damage = stats.damage;
+        if (stats.value) copy.value = copy.value ?? stats.value;
+        return copy;
+      }
+      if (/\b(armor|helm|helmet|boots|gauntlet|shield|cloak|robe|circlet|necklace|ring)\b/.test(nameLower)) {
+        const stats = getItemStats(it.name, 'apparel');
+        const copy = { ...it, type: 'apparel' } as InventoryItem;
+        if (stats.armor) copy.armor = stats.armor;
+        if (stats.value) copy.value = copy.value ?? stats.value;
+        return copy;
+      }
+    }
+    return it;
+  });
 
   // DO NOT record here - let the caller record after applying to prevent duplicate-filtering bug
 

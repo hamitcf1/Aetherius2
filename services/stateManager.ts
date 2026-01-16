@@ -569,10 +569,18 @@ export function processAISimulationUpdate(
   // Process NPC updates
   if (update.npcUpdates) {
     for (const npcUpdate of update.npcUpdates) {
-      const npc = manager.getNPCByName(npcUpdate.name);
+      let npc = manager.getNPCByName(npcUpdate.name);
       if (!npc) {
-        warnings.push(`NPC "${npcUpdate.name}" not found for update`);
-        continue;
+        // Auto-introduce NPC so updates from the AI can apply even if the NPC wasn't present
+        const location = npcUpdate.location || manager.getCurrentScene()?.location || 'Unknown';
+        const introduced = manager.introduceNPC(npcUpdate.name, npcUpdate.role || 'unknown', location, {
+          disposition: npcUpdate.disposition,
+          description: npcUpdate.description,
+          personality: npcUpdate.personality,
+          faction: npcUpdate.faction
+        });
+        appliedChanges.push(`Auto-introduced NPC: ${introduced.name}`);
+        npc = introduced;
       }
 
       if (npcUpdate.tensionChange !== undefined) {
