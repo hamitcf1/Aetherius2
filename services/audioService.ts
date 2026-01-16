@@ -69,7 +69,22 @@ const DEFAULT_CONFIG: AudioConfig = {
 
 // Sound effect paths (to be populated with actual sound files)
 import { BASE_PATH } from './basePath';
-const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
+// SOUND_EFFECTS now accepts a single path string or an array of alternative paths per effect.
+// This allows random variation for more organic audio feedback (e.g., multiple attack variants).
+
+// Helper to generate variant paths for a base file name. For example, `variantPaths('attack_melee', 2)` returns
+// ["/audio/sfx/attack_melee.mp3", "/audio/sfx/attack_melee_2.mp3"]. Drop additional files named with `_2`, `_3`, etc.
+// into `public/audio/sfx` and they will be picked randomly without changing code.
+function variantPaths(baseName: string, count: number = 2): string[] {
+  const arr: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    const suffix = i === 1 ? '' : `_${i}`;
+    arr.push(`${BASE_PATH}/audio/sfx/${baseName}${suffix}.mp3`);
+  }
+  return arr;
+}
+
+const SOUND_EFFECTS: Record<SoundEffect, string | string[] | null> = {
   purchase: `${BASE_PATH}/audio/sfx/purchase.mp3`,       // drop at public./audio/sfx/
   sell: `${BASE_PATH}/audio/sfx/sell.mp3`,
   gold_gain: `${BASE_PATH}/audio/sfx/gold_gain.mp3`,
@@ -90,28 +105,28 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   button_click: `${BASE_PATH}/audio/sfx/button_click.mp3`,
   error: `${BASE_PATH}/audio/sfx/error.mp3`,
   success: `${BASE_PATH}/audio/sfx/success.mp3`,
-  // Combat sounds
-  attack_melee: `${BASE_PATH}/audio/sfx/attack_melee.mp3`,
-  attack_ranged: `${BASE_PATH}/audio/sfx/attack_ranged.mp3`,
-  attack_magic: `${BASE_PATH}/audio/sfx/attack_magic.mp3`,
-  attack_fire: `${BASE_PATH}/audio/sfx/attack_fire.mp3`,
-  attack_ice: `${BASE_PATH}/audio/sfx/attack_ice.mp3`,
-  attack_shock: `${BASE_PATH}/audio/sfx/attack_shock.mp3`,
-  attack_bite: `${BASE_PATH}/audio/sfx/attack_bite.mp3`,
-  attack_claw: `${BASE_PATH}/audio/sfx/attack_claw.mp3`,
-  block: `${BASE_PATH}/audio/sfx/block.mp3`,
-  shield_bash: `${BASE_PATH}/audio/sfx/shield_bash.mp3`,
-  spell_impact: `${BASE_PATH}/audio/sfx/spell_impact.mp3`,
-  spell_impact_fire: `${BASE_PATH}/audio/sfx/spell_impact_fire.mp3`,
-  spell_impact_ice: `${BASE_PATH}/audio/sfx/spell_impact_ice.mp3`,
-  spell_impact_shock: `${BASE_PATH}/audio/sfx/spell_impact_shock.mp3`,
-  hit_received: `${BASE_PATH}/audio/sfx/hit_received.mp3`,
-  enemy_death: `${BASE_PATH}/audio/sfx/enemy_death.mp3`,
+  // Combat sounds - prefer variantPaths so users can add _2/_3 files easily
+  attack_melee: variantPaths('attack_melee', 3),
+  attack_ranged: variantPaths('attack_ranged', 2),
+  attack_magic: variantPaths('attack_magic', 2),
+  attack_fire: variantPaths('attack_fire', 2),
+  attack_ice: variantPaths('attack_ice', 2),
+  attack_shock: variantPaths('attack_shock', 2),
+  attack_bite: variantPaths('attack_bite', 2),
+  attack_claw: variantPaths('attack_claw', 2),
+  block: variantPaths('block', 2),
+  shield_bash: variantPaths('shield_bash', 2),
+  spell_impact: variantPaths('spell_impact', 2),
+  spell_impact_fire: variantPaths('spell_impact_fire', 2),
+  spell_impact_ice: variantPaths('spell_impact_ice', 2),
+  spell_impact_shock: variantPaths('spell_impact_shock', 2),
+  hit_received: variantPaths('hit_received', 2),
+  // Use explicit enemy_death variants rather than falling back to unrelated sounds
+  enemy_death: variantPaths('enemy_death', 2),
   dice_tick: `${BASE_PATH}/audio/sfx/dice_tick.mp3`,
   // Blacksmith sounds
-  // Use a more distinct sound for upgrade success (falls back to level_up)
-  forge_upgrade: `${BASE_PATH}/audio/sfx/level_up.mp3`,
-  anvil_hit: `${BASE_PATH}/audio/sfx/anvil_hit.mp3`,
+  forge_upgrade: `${BASE_PATH}/audio/sfx/forge_upgrade.mp3`,
+  anvil_hit: variantPaths('anvil_hit', 2),
 
 };
 
@@ -173,6 +188,11 @@ class AudioService {
   public setDebugSfx(enabled: boolean): void {
     this.debugSfx = !!enabled;
   }
+
+  // Clear the internal availability cache (useful for tests/dev when sounds marked unavailable)
+  public clearSoundAvailabilityCache(): void {
+    this.soundAvailabilityCache.clear();
+  }
   private isInitialized: boolean = false;
   private pendingTrack: MusicTrack | null = null; // Track to play after user interaction
   private lastRequestedTrack: MusicTrack | null = null; // Remember last track for re-enabling music
@@ -230,12 +250,24 @@ class AudioService {
   public playSoundEffect(effect: SoundEffect): void {
     if (!this.config.soundEffectsEnabled) return;
     
-    const path = SOUND_EFFECTS[effect];
-    if (!path) {
+    const pathOrArray = SOUND_EFFECTS[effect];
+    if (!pathOrArray) {
       // Sound file not yet added - log for debugging
       console.debug(`🔇 Sound effect "${effect}" not yet added`);
       return;
     }
+
+    // Support multiple variant paths: choose a random entry when an array is provided
+    const path = Array.isArray(pathOrArray) ? pathOrArray[Math.floor(Math.random() * pathOrArray.length)] : pathOrArray;    
+    if (!path) {
+      console.debug(`🔇 Sound effect "${effect}" resolved to empty path`);
+      return;
+    }
+
+    // If the chosen path is an absolute path starting with '/', normalize it to use BASE_PATH
+    // (helps with tests and dev where relative roots are expected)
+    const normalizedPath = path.startsWith('/') ? path : path;
+    
 
     try {
       // If we previously determined the audio URL is unavailable, skip attempts
@@ -600,6 +632,22 @@ class AudioService {
     this.saveConfig();
   }
 
+  // Add a runtime variant for a given sound effect (useful for tests and dev console)
+  public addSoundEffectVariant(effect: SoundEffect, path: string): void {
+    try {
+      const cur: any = SOUND_EFFECTS[effect];
+      if (!cur) {
+        SOUND_EFFECTS[effect] = [path];
+      } else if (Array.isArray(cur)) {
+        cur.push(path);
+      } else {
+        SOUND_EFFECTS[effect] = [cur, path];
+      }
+    } catch (e) {
+      console.warn('Failed to add sound effect variant', e);
+    }
+  }
+
   public setMusicVolume(volume: number): void {
     this.config.musicVolume = Math.max(0, Math.min(1, volume));
     if (this.musicAudio) {
@@ -610,7 +658,68 @@ class AudioService {
 
   // Check if sound effects are available
   public isSoundEffectAvailable(effect: SoundEffect): boolean {
-    return SOUND_EFFECTS[effect] !== null;
+    const val = SOUND_EFFECTS[effect];
+    if (val === null || typeof val === 'undefined') return false;
+    if (Array.isArray(val)) return val.length > 0;
+    return true;
+  }
+
+  // Enumerate all registered SoundEffect keys
+  public getAllRegisteredSoundEffects(): SoundEffect[] {
+    return Object.keys(SOUND_EFFECTS) as SoundEffect[];
+  }
+
+  // Return the registered file paths for a specific SoundEffect (may include placeholders like _2)
+  public getRegisteredSoundEffectPaths(effect: SoundEffect): string[] {
+    const val = SOUND_EFFECTS[effect];
+    if (!val) return [];
+    return Array.isArray(val) ? [...val] : [val];
+  }
+
+  // Play a specific sound file path directly (useful for variant testing in dev console)
+  public async playSoundEffectPath(path: string): Promise<{status:'played'|'error'|'unavailable', path: string, msg?: string}> {
+    if (!this.config.soundEffectsEnabled) return { status: 'unavailable', path, msg: 'disabled' };
+    try {
+      const cachedAvailable = this.soundAvailabilityCache.get(path);
+      if (cachedAvailable === false) {
+        this.pushSfxEvent({ kind: 'skip', path, msg: 'cached-unavailable' });
+        return { status: 'unavailable', path, msg: 'cached-unavailable' };
+      }
+
+      let audio = this.soundEffectCache.get(path);
+      if (!audio) {
+        audio = new Audio(path);
+        this.soundEffectCache.set(path, audio);
+      }
+
+      audio.volume = this.config.soundEffectsVolume;
+      audio.currentTime = 0;
+      const playResult: any = audio.play();
+
+      this.pushSfxEvent({ kind: 'play', path, stack: (new Error().stack || '') });
+
+      if (playResult && typeof playResult.catch === 'function') {
+        try {
+          await playResult;
+          return { status: 'played', path };
+        } catch (e: any) {
+          const msg = (e && e.message) ? e.message : String(e);
+          this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg });
+          if (e && (e.name === 'NotSupportedError' || /no supported source/i.test(msg) || /not supported/i.test(msg))) {
+            this.soundAvailabilityCache.set(path, false);
+          }
+          return { status: 'error', path, msg };
+        }
+      } else {
+        // play() is not implemented in this environment (e.g., JSDOM) - mark unavailable
+        this.soundAvailabilityCache.set(path, false);
+        this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg: 'no play support' });
+        return { status: 'unavailable', path, msg: 'no play support' };
+      }
+    } catch (e: any) {
+      this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg: (e && e.message) ? e.message : String(e) });
+      return { status: 'error', path, msg: (e && e.message) ? e.message : String(e) };
+    }
   }
 
   // Check if music track is available

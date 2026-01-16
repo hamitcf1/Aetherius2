@@ -10,6 +10,7 @@ describe('Combat sound selection for conjurations and allies', () => {
   beforeEach(() => {
     audioService.setDebugSfx(true);
     audioService.clearRecentSfxEvents();
+    audioService.clearSoundAvailabilityCache();
   });
   afterEach(() => {
     audioService.setDebugSfx(false);

@@ -885,6 +885,97 @@ window.demo.clearDemoData = function(options = {}) {
   return summary;
 };
 
+// SFX Test Modal - open an overlay and sequentially test all registered SFX and their variants
+window.demo.sfxTest = function(opts = { auto: true, delay: 500 }) {
+  if (!window.audioService) {
+    console.error('Audio service not available as window.audioService');
+    return null;
+  }
+  const conf = Object.assign({ auto: true, delay: 500 }, opts || {});
+
+  // Build overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'demo-sfx-test-overlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', left: '0', top: '0', right: '0', bottom: '0', background: 'rgba(0,0,0,0.6)', zIndex: 99999, padding: '30px', overflow: 'auto'
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, { background: '#fff', borderRadius: '8px', padding: '18px', maxWidth: '900px', margin: '0 auto', boxShadow: '0 8px 30px rgba(0,0,0,0.4)' });
+
+  const header = document.createElement('div');
+  header.style.display = 'flex'; header.style.justifyContent = 'space-between'; header.style.alignItems = 'center';
+  const title = document.createElement('h3'); title.innerText = 'SFX Test'; header.appendChild(title);
+  const controls = document.createElement('div');
+  const startBtn = document.createElement('button'); startBtn.innerText = conf.auto ? 'Running...' : 'Start'; startBtn.disabled = !!conf.auto; startBtn.style.marginRight = '8px';
+  const closeBtn = document.createElement('button'); closeBtn.innerText = 'Close';
+  controls.appendChild(startBtn); controls.appendChild(closeBtn); header.appendChild(controls);
+
+  const list = document.createElement('div'); list.style.maxHeight = '60vh'; list.style.overflow = 'auto'; list.style.marginTop = '12px';
+
+  modal.appendChild(header);
+  modal.appendChild(list);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  let cancelled = false;
+
+  closeBtn.onclick = () => {
+    cancelled = true;
+    try { document.body.removeChild(overlay); } catch (e) { /* ignore */ }
+  };
+
+  const runTest = async () => {
+    const effects = window.audioService.getAllRegisteredSoundEffects();
+    const summary = { played: 0, unavailable: 0, error: 0, total: 0 };
+
+    for (const effect of effects) {
+      if (cancelled) break;
+      const effectNode = document.createElement('div');
+      effectNode.style.borderTop = '1px solid #eee'; effectNode.style.padding = '8px 0';
+      const h = document.createElement('strong'); h.innerText = effect; effectNode.appendChild(h);
+      const ul = document.createElement('ul'); ul.style.marginTop = '8px'; effectNode.appendChild(ul);
+      list.appendChild(effectNode);
+
+      const paths = window.audioService.getRegisteredSoundEffectPaths(effect);
+      if (!paths || !paths.length) {
+        const li = document.createElement('li'); li.innerText = 'No registered paths'; li.style.color = '#666'; ul.appendChild(li);
+        continue;
+      }
+
+      for (const path of paths) {
+        if (cancelled) break;
+        const li = document.createElement('li'); li.innerText = `Testing ${path} ...`; ul.appendChild(li);
+        try {
+          const res = await window.audioService.playSoundEffectPath(path);
+          if (res.status === 'played') { li.style.color = 'green'; li.innerText += ' OK'; summary.played++; }
+          else if (res.status === 'unavailable') { li.style.color = 'orange'; li.innerText += ` ${res.msg || 'unavailable'}`; summary.unavailable++; }
+          else { li.style.color = 'red'; li.innerText += ` ERROR: ${res.msg || ''}`; summary.error++; }
+        } catch (e) {
+          li.style.color = 'red'; li.innerText += ' ERROR'; summary.error++;
+        }
+        summary.total++;
+        // brief delay between files
+        await new Promise(r => setTimeout(r, conf.delay));
+      }
+
+      // small pause between effects
+      await new Promise(r => setTimeout(r, 120));
+    }
+
+    const footer = document.createElement('div'); footer.style.marginTop = '12px'; footer.innerText = `Done: ${summary.total} tests • played: ${summary.played} • unavailable: ${summary.unavailable} • error: ${summary.error}`;
+    list.appendChild(footer);
+    startBtn.disabled = false; startBtn.innerText = 'Run again';
+    return summary;
+  };
+
+  startBtn.onclick = () => { startBtn.disabled = true; startBtn.innerText = 'Running...'; runTest(); };
+
+  if (conf.auto) runTest();
+
+  return { overlay, runTest };
+};
+
 /**
  * Show detailed help for combat simulation
  */
@@ -1077,6 +1168,7 @@ window.demo.help = function() {
     '  demo.getAppState()             - Show current app state',
     '  demo.getRawState()             - Dump raw window.app [ADMIN]',
     '  demo.clearDemoData(opts)       - Clear items/quests/journal/story',
+    '  demo.sfxTest(opts)             - Open SFX test modal; plays registered SFX & `_2` variants (opts: {auto:true, delay:500})',
     '  demo.help()                    - Show this help',
     '  demo.simulateCombatHelp()      - Show combat simulation details',
     '',
