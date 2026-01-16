@@ -597,7 +597,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     const { newState, updatedInventory, grantedXp, grantedGold, grantedItems } = finalizeLoot(
       combatState,
       selectedItems,
-      inventory
+      inventory,
+      character?.id
     );
 
     setCombatState(newState);

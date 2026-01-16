@@ -85,8 +85,8 @@ function variantPaths(baseName: string, count: number = 2): string[] {
 }
 
 const SOUND_EFFECTS: Record<SoundEffect, string | string[] | null> = {
-  purchase: `${BASE_PATH}/audio/sfx/purchase.mp3`,       // drop at public./audio/sfx/
-  sell: `${BASE_PATH}/audio/sfx/sell.mp3`,
+  purchase: variantPaths('purchase', 3), // supports purchase.mp3 and purchase_2.mp3
+  sell: variantPaths('sell', 3),         // supports sell.mp3 and sell_2.mp3
   gold_gain: `${BASE_PATH}/audio/sfx/gold_gain.mp3`,
   gold_spend: `${BASE_PATH}/audio/sfx/gold_spend.mp3`,
   item_pickup: `${BASE_PATH}/audio/sfx/item_pickup.mp3`,
@@ -501,7 +501,7 @@ class AudioService {
       // If we just closed and reopened very quickly, suppress the menu_open sound to avoid spam
       if (this.lastModalEventKind === 'close' && now - this.lastModalNotifyTs < 150) {
         if (this.debugSfx) console.debug('🔇 Suppressing quick modal re-open (rapid toggle)', new Error().stack);
-        this.pushSfxEvent({ kind: 'skip', effect: 'menu_open', path: SOUND_EFFECTS['menu_open'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_open', path: this.getRepresentativePath('menu_open'), stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
       } else {
         this.pushSfxEvent({ kind: 'modal_open', stack: callerStack || (new Error().stack || '') });
         if (this.modalOpenCount === 1) {
@@ -525,11 +525,11 @@ class AudioService {
       // If we just opened and closed very quickly, suppress the menu_close sound to avoid spam
       if (this.lastModalEventKind === 'open' && now - this.lastModalNotifyTs < 150) {
         if (this.debugSfx) console.debug('🔇 Suppressing quick modal close (rapid toggle)', new Error().stack);
-        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: SOUND_EFFECTS['menu_close'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: this.getRepresentativePath('menu_close'), stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
       // Additionally, if we've recently emitted a menu_close, suppress repeated closes for a longer window
       } else if (this.lastModalEventKind === 'close' && now - this.lastModalNotifyTs < 800) {
         if (this.debugSfx) console.debug('🔇 Suppressing repeated menu_close (within 800ms)', new Error().stack);
-        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: SOUND_EFFECTS['menu_close'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'repeated close suppress' });
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: this.getRepresentativePath('menu_close'), stack: callerStack || (new Error().stack || ''), msg: 'repeated close suppress' });
       } else {
         this.pushSfxEvent({ kind: 'modal_close', stack: callerStack || (new Error().stack || '') });
         if (this.modalOpenCount === 0) {
@@ -664,6 +664,13 @@ class AudioService {
     return true;
   }
 
+  // Return a representative file path for an effect (first variant if present)
+  private getRepresentativePath(effect: SoundEffect): string | undefined {
+    const val = SOUND_EFFECTS[effect];
+    if (!val) return undefined;
+    return Array.isArray(val) ? val[0] : val;
+  }
+
   // Enumerate all registered SoundEffect keys
   public getAllRegisteredSoundEffects(): SoundEffect[] {
     return Object.keys(SOUND_EFFECTS) as SoundEffect[];
@@ -677,7 +684,12 @@ class AudioService {
   }
 
   // Play a specific sound file path directly (useful for variant testing in dev console)
-  public async playSoundEffectPath(path: string): Promise<{status:'played'|'error'|'unavailable', path: string, msg?: string}> {
+  /**
+   * Play a specific sound file path directly (useful for variant testing in dev console)
+   * @param path - file path to play
+   * @param waitForEndOrMs - if true, wait for the audio to end (or its duration) before resolving; if a number, wait that many ms after playback starts
+   */
+  public async playSoundEffectPath(path: string, waitForEndOrMs?: boolean | number): Promise<{status:'played'|'error'|'unavailable', path: string, msg?: string}> {
     if (!this.config.soundEffectsEnabled) return { status: 'unavailable', path, msg: 'disabled' };
     try {
       const cachedAvailable = this.soundAvailabilityCache.get(path);
@@ -701,7 +713,6 @@ class AudioService {
       if (playResult && typeof playResult.catch === 'function') {
         try {
           await playResult;
-          return { status: 'played', path };
         } catch (e: any) {
           const msg = (e && e.message) ? e.message : String(e);
           this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg });
@@ -716,6 +727,25 @@ class AudioService {
         this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg: 'no play support' });
         return { status: 'unavailable', path, msg: 'no play support' };
       }
+
+      // If requested, wait for the audio to finish (or a specified timeout)
+      if (waitForEndOrMs) {
+        const timeoutMs = typeof waitForEndOrMs === 'number' ? waitForEndOrMs : Math.max(600, Math.floor((audio.duration || 0) * 1000) + 200);
+        await new Promise<void>(resolve => {
+          let resolved = false;
+          const onEnded = () => { if (!resolved) { resolved = true; cleanup(); resolve(); } };
+          const onError = () => { if (!resolved) { resolved = true; cleanup(); resolve(); } };
+          const cleanup = () => { try { audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError); } catch (e) { /* ignore */ } };
+
+          audio.addEventListener('ended', onEnded);
+          audio.addEventListener('error', onError);
+
+          // Fallback timeout
+          setTimeout(() => { if (!resolved) { resolved = true; cleanup(); resolve(); } }, timeoutMs);
+        });
+      }
+
+      return { status: 'played', path };
     } catch (e: any) {
       this.pushSfxEvent({ kind: 'error', path, stack: (new Error().stack || ''), msg: (e && e.message) ? e.message : String(e) });
       return { status: 'error', path, msg: (e && e.message) ? e.message : String(e) };

@@ -885,33 +885,60 @@ window.demo.clearDemoData = function(options = {}) {
   return summary;
 };
 
-// SFX Test Modal - open an overlay and sequentially test all registered SFX and their variants
-window.demo.sfxTest = function(opts = { auto: true, delay: 500 }) {
+// SFX Test Modal - interactive list with per-effect and per-file Play buttons
+window.demo.sfxTest = function(opts = { auto: true, delay: 500, waitForEnd: true, maxWaitMs: 2500 }) {
   if (!window.audioService) {
     console.error('Audio service not available as window.audioService');
     return null;
   }
-  const conf = Object.assign({ auto: true, delay: 500 }, opts || {});
+  const conf = Object.assign({ auto: true, delay: 500, waitForEnd: true, maxWaitMs: 2500 }, opts || {});
 
-  // Build overlay
+  // Build overlay (cleaner styling)
   const overlay = document.createElement('div');
   overlay.id = 'demo-sfx-test-overlay';
   Object.assign(overlay.style, {
-    position: 'fixed', left: '0', top: '0', right: '0', bottom: '0', background: 'rgba(0,0,0,0.6)', zIndex: 99999, padding: '30px', overflow: 'auto'
+    position: 'fixed', left: '0', top: '0', right: '0', bottom: '0', background: 'rgba(0,0,0,0.55)', zIndex: 99999, padding: '32px', overflow: 'auto'
   });
 
   const modal = document.createElement('div');
-  Object.assign(modal.style, { background: '#fff', borderRadius: '8px', padding: '18px', maxWidth: '900px', margin: '0 auto', boxShadow: '0 8px 30px rgba(0,0,0,0.4)' });
+  Object.assign(modal.style, {
+    background: 'var(--skyrim-paper, #1a1a1a)',
+    color: 'var(--skyrim-text, #d1d1d1)',
+    border: '1px solid var(--skyrim-border, #4a4a4a)',
+    borderRadius: '10px',
+    padding: '18px',
+    maxWidth: '980px',
+    margin: '0 auto',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+    fontFamily: 'sans-serif'
+  });
 
   const header = document.createElement('div');
   header.style.display = 'flex'; header.style.justifyContent = 'space-between'; header.style.alignItems = 'center';
-  const title = document.createElement('h3'); title.innerText = 'SFX Test'; header.appendChild(title);
-  const controls = document.createElement('div');
-  const startBtn = document.createElement('button'); startBtn.innerText = conf.auto ? 'Running...' : 'Start'; startBtn.disabled = !!conf.auto; startBtn.style.marginRight = '8px';
-  const closeBtn = document.createElement('button'); closeBtn.innerText = 'Close';
-  controls.appendChild(startBtn); controls.appendChild(closeBtn); header.appendChild(controls);
+  const title = document.createElement('h3'); title.innerText = 'SFX Test — Interactive'; title.style.margin = '0'; title.style.paddingRight = '8px'; header.appendChild(title);
 
-  const list = document.createElement('div'); list.style.maxHeight = '60vh'; list.style.overflow = 'auto'; list.style.marginTop = '12px';
+  const controls = document.createElement('div');
+  controls.style.display = 'flex'; controls.style.alignItems = 'center'; controls.style.gap = '8px';
+
+  const searchInput = document.createElement('input'); searchInput.type = 'search'; searchInput.placeholder = 'Filter effects...'; searchInput.style.padding = '6px'; searchInput.style.minWidth = '220px';
+
+  const waitChk = document.createElement('input'); waitChk.type = 'checkbox'; waitChk.checked = !!conf.waitForEnd;
+  const waitLabel = document.createElement('label'); waitLabel.style.fontSize = '12px'; waitLabel.style.marginLeft = '6px'; waitLabel.appendChild(waitChk); waitLabel.appendChild(document.createTextNode(' Wait for end'));
+
+  const delayInput = document.createElement('input'); delayInput.type = 'number'; delayInput.value = String(conf.delay); delayInput.style.width = '72px'; delayInput.title = 'Delay after each file (ms)';
+  const maxWaitInput = document.createElement('input'); maxWaitInput.type = 'number'; maxWaitInput.value = String(conf.maxWaitMs); maxWaitInput.style.width = '88px'; maxWaitInput.title = 'Max wait for playback (ms)';
+
+  const closeBtn = document.createElement('button'); closeBtn.innerText = 'Close'; closeBtn.style.marginLeft = '12px'; closeBtn.style.padding = '6px 10px'; closeBtn.style.border = '1px solid var(--skyrim-border, #4a4a4a)'; closeBtn.style.background = 'transparent'; closeBtn.style.color = 'var(--skyrim-text, #d1d1d1)'; closeBtn.style.borderRadius = '6px'; closeBtn.style.cursor = 'pointer'; closeBtn.onmouseenter = () => closeBtn.style.background = 'rgba(255,255,255,0.02)'; closeBtn.onmouseleave = () => closeBtn.style.background = 'transparent';
+
+  controls.appendChild(searchInput);
+  controls.appendChild(waitLabel);
+  controls.appendChild(document.createTextNode(' Delay:')); controls.appendChild(delayInput);
+  controls.appendChild(document.createTextNode(' Max wait:')); controls.appendChild(maxWaitInput);
+  controls.appendChild(closeBtn);
+
+  header.appendChild(controls);
+
+  const list = document.createElement('div'); list.style.maxHeight = '64vh'; list.style.overflow = 'auto'; list.style.marginTop = '12px'; list.style.borderTop = '1px solid var(--skyrim-border, #4a4a4a)';
 
   modal.appendChild(header);
   modal.appendChild(list);
@@ -925,55 +952,132 @@ window.demo.sfxTest = function(opts = { auto: true, delay: 500 }) {
     try { document.body.removeChild(overlay); } catch (e) { /* ignore */ }
   };
 
-  const runTest = async () => {
+  const buildList = async () => {
     const effects = window.audioService.getAllRegisteredSoundEffects();
-    const summary = { played: 0, unavailable: 0, error: 0, total: 0 };
+
+    // Clear
+    list.innerHTML = '';
 
     for (const effect of effects) {
       if (cancelled) break;
-      const effectNode = document.createElement('div');
-      effectNode.style.borderTop = '1px solid #eee'; effectNode.style.padding = '8px 0';
-      const h = document.createElement('strong'); h.innerText = effect; effectNode.appendChild(h);
-      const ul = document.createElement('ul'); ul.style.marginTop = '8px'; effectNode.appendChild(ul);
-      list.appendChild(effectNode);
 
-      const paths = window.audioService.getRegisteredSoundEffectPaths(effect);
-      if (!paths || !paths.length) {
-        const li = document.createElement('li'); li.innerText = 'No registered paths'; li.style.color = '#666'; ul.appendChild(li);
+      const effectRow = document.createElement('div');
+      effectRow.style.borderTop = '1px solid var(--skyrim-border, #4a4a4a)'; effectRow.style.padding = '10px 0';
+      effectRow.style.display = 'flex'; effectRow.style.flexDirection = 'column';
+
+      const head = document.createElement('div'); head.style.display = 'flex'; head.style.alignItems = 'center';
+      const name = document.createElement('strong'); name.innerText = effect; name.style.flex = '1'; name.style.fontSize = '14px'; head.appendChild(name);
+
+      const playEffectBtn = document.createElement('button'); playEffectBtn.innerText = 'Play effect'; playEffectBtn.style.marginRight = '8px'; playEffectBtn.style.padding = '6px 10px'; playEffectBtn.style.border = '1px solid var(--skyrim-border, #4a4a4a)'; playEffectBtn.style.background = 'var(--skyrim-gold, #c0a062)'; playEffectBtn.style.color = 'var(--skyrim-dark, #0f0f0f)'; playEffectBtn.style.borderRadius = '6px'; playEffectBtn.style.cursor = 'pointer';
+      const playAllBtn = document.createElement('button'); playAllBtn.innerText = 'Play all variants'; playAllBtn.style.marginRight = '8px'; playAllBtn.style.padding = '6px 10px'; playAllBtn.style.border = '1px solid var(--skyrim-border, #4a4a4a)'; playAllBtn.style.background = 'transparent'; playAllBtn.style.color = 'var(--skyrim-text, #d1d1d1)'; playAllBtn.style.borderRadius = '6px'; playAllBtn.style.cursor = 'pointer'; playAllBtn.onmouseenter = () => playAllBtn.style.background = 'rgba(255,255,255,0.02)'; playAllBtn.onmouseleave = () => playAllBtn.style.background = 'transparent';
+
+      head.appendChild(playAllBtn); head.appendChild(playEffectBtn);
+      effectRow.appendChild(head);
+
+      const sub = document.createElement('div'); sub.style.marginTop = '8px'; sub.style.paddingLeft = '8px';
+      const ul = document.createElement('ul'); ul.style.margin = '0'; ul.style.paddingLeft = '18px'; sub.appendChild(ul);
+      effectRow.appendChild(sub);
+
+      list.appendChild(effectRow);
+
+      // Get registered paths
+      const paths = window.audioService.getRegisteredSoundEffectPaths(effect) || [];
+      if (!paths.length) {
+        const li = document.createElement('li'); li.innerText = 'No registered paths'; li.style.color = 'var(--skyrim-text-muted, #9aa7b2)'; ul.appendChild(li);
         continue;
       }
 
+      // For each path, create list entry with Play button and status
       for (const path of paths) {
-        if (cancelled) break;
-        const li = document.createElement('li'); li.innerText = `Testing ${path} ...`; ul.appendChild(li);
-        try {
-          const res = await window.audioService.playSoundEffectPath(path);
-          if (res.status === 'played') { li.style.color = 'green'; li.innerText += ' OK'; summary.played++; }
-          else if (res.status === 'unavailable') { li.style.color = 'orange'; li.innerText += ` ${res.msg || 'unavailable'}`; summary.unavailable++; }
-          else { li.style.color = 'red'; li.innerText += ` ERROR: ${res.msg || ''}`; summary.error++; }
-        } catch (e) {
-          li.style.color = 'red'; li.innerText += ' ERROR'; summary.error++;
-        }
-        summary.total++;
-        // brief delay between files
-        await new Promise(r => setTimeout(r, conf.delay));
+        const li = document.createElement('li'); li.style.display = 'flex'; li.style.alignItems = 'center'; li.style.gap = '8px';
+        const text = document.createElement('span'); text.innerText = path; text.style.flex = '1'; text.style.wordBreak = 'break-all'; li.appendChild(text);
+
+        const status = document.createElement('span'); status.innerText = '…'; status.style.width = '90px'; status.style.fontSize = '12px'; status.style.color = 'var(--skyrim-text-muted, #8b8b8b)'; li.appendChild(status);
+
+        const playBtn = document.createElement('button'); playBtn.innerText = 'Play'; playBtn.style.padding = '4px 8px'; playBtn.style.border = '1px solid var(--skyrim-border, #4a4a4a)'; playBtn.style.background = 'transparent'; playBtn.style.color = 'var(--skyrim-text, #d1d1d1)'; playBtn.style.borderRadius = '6px'; playBtn.style.cursor = 'pointer'; li.appendChild(playBtn);
+
+        // Quick HEAD check to detect missing files (same-origin)
+        (async () => {
+          try {
+            const headResp = await fetch(path, { method: 'HEAD' });
+            if (!headResp.ok) {
+              status.innerText = `Not found (${headResp.status})`;
+              status.style.color = '#b36d00';
+              playBtn.disabled = true;
+              return;
+            }
+            status.innerText = 'ready'; status.style.color = 'var(--skyrim-accent, #1f6feb)';
+          } catch (e) {
+            // HEAD may fail due to CORS; keep ready state but allow play
+            status.innerText = 'unknown'; status.style.color = 'var(--skyrim-text-muted, #8b8b8b)';
+          }
+        })();
+
+        // Play handler
+        playBtn.onclick = async () => {
+          try {
+            playBtn.disabled = true; status.innerText = 'playing'; status.style.color = 'var(--skyrim-accent, #1a7f37)';
+            const waitParam = waitChk.checked ? Math.max(200, Number(maxWaitInput.value) || 2500) : false;
+            const res = await window.audioService.playSoundEffectPath(path, waitParam);
+            if (res.status === 'played') { status.innerText = 'OK'; status.style.color = 'var(--skyrim-accent, #1a7f37)'; }
+            else if (res.status === 'unavailable') { status.innerText = 'unavailable'; status.style.color = '#b36d00'; }
+            else { status.innerText = 'error'; status.style.color = '#b32626'; }
+          } catch (e) {
+            status.innerText = 'error'; status.style.color = '#b32626';
+          } finally { playBtn.disabled = false; }
+        };
+
+        ul.appendChild(li);
       }
 
-      // small pause between effects
-      await new Promise(r => setTimeout(r, 120));
-    }
+      // Play all variants sequentially
+      playAllBtn.onclick = async () => {
+        playAllBtn.disabled = true; playEffectBtn.disabled = true;
+        const liveDelay = Math.max(0, Number(delayInput.value) || 0);
+        const liveMaxWait = Math.max(200, Number(maxWaitInput.value) || 2500);
+        for (const path of paths) {
+          const waitParam = waitChk.checked ? liveMaxWait : false;
+          // find the li node to show status
+          const pathLi = Array.from(list.querySelectorAll('li')).find(l => l.firstChild && l.firstChild.textContent === path);
+          const status = pathLi ? pathLi.querySelector('span:nth-child(2)') : null;
+          if (status) { status.textContent = 'playing'; status.style.color = 'var(--skyrim-accent, #1a7f37)'; }
+          try {
+            const res = await window.audioService.playSoundEffectPath(path, waitParam);
+            if (status) {
+              if (res.status === 'played') { status.textContent = 'OK'; status.style.color = 'var(--skyrim-accent, #1a7f37)'; }
+              else if (res.status === 'unavailable') { status.textContent = 'unavailable'; status.style.color = '#b36d00'; }
+              else { status.textContent = 'error'; status.style.color = '#b32626'; }
+            }
+          } catch (e) {
+            if (status) { status.textContent = 'error'; status.style.color = '#b32626'; }
+          }
+          await new Promise(r => setTimeout(r, liveDelay));
+        }
+        playAllBtn.disabled = false; playEffectBtn.disabled = false;
+      };
 
-    const footer = document.createElement('div'); footer.style.marginTop = '12px'; footer.innerText = `Done: ${summary.total} tests • played: ${summary.played} • unavailable: ${summary.unavailable} • error: ${summary.error}`;
-    list.appendChild(footer);
-    startBtn.disabled = false; startBtn.innerText = 'Run again';
-    return summary;
+      // Play logical effect (may map to multiple files) for quick audition
+      playEffectBtn.onclick = async () => {
+        playEffectBtn.disabled = true; playAllBtn.disabled = true; const badge = document.createElement('span'); badge.innerText = 'playing'; badge.style.marginLeft = '8px'; badge.style.color = 'var(--skyrim-accent, #1a7f37)'; head.appendChild(badge);
+        try {
+          window.audioService.playSoundEffect(effect);
+          await new Promise(r => setTimeout(r, 350)); // short visual debounce
+        } finally { badge.remove(); playEffectBtn.disabled = false; playAllBtn.disabled = false; }
+      };
+
+      // Filter support
+      searchInput.addEventListener('input', () => {
+        const q = (searchInput.value || '').toLowerCase();
+        const show = !q || effect.toLowerCase().includes(q);
+        effectRow.style.display = show ? '' : 'none';
+      });
+    }
   };
 
-  startBtn.onclick = () => { startBtn.disabled = true; startBtn.innerText = 'Running...'; runTest(); };
+  // Initial build
+  buildList();
 
-  if (conf.auto) runTest();
-
-  return { overlay, runTest };
+  return { overlay, buildList };
 };
 
 /**

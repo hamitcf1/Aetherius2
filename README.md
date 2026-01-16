@@ -21,6 +21,7 @@ This README is both a player tutorial and a developer/operator guide.
 - Data + saving model (Firestore + Realtime)
 - Local development
 - Testing
+- **Customization & Extension Guide** (see `docs/CUSTOMIZATION_README.md`)
 - Firebase setup (required)
 - Deployment (Netlify)
 - Do / Don’t (important)
