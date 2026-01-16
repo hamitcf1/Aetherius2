@@ -49,7 +49,8 @@ export function ModalWrapper({
   useEffect(() => {
     if (!open) return;
 
-    try { audioService.playSoundEffect('menu_open'); } catch (e) { console.warn('Failed to play menu_open SFX', e); }
+    // Use modal stack tracking so nested or repeated mounts don't spam open/close SFX
+    try { audioService.notifyModalOpen(); } catch (e) { console.warn('Failed to notify modal open', e); }
 
     // Add event listener for ESC
     document.addEventListener('keydown', handleKeyDown);
@@ -59,7 +60,7 @@ export function ModalWrapper({
     document.body.style.overflow = 'hidden';
 
     return () => {
-      try { audioService.playSoundEffect('menu_close'); } catch (e) { console.warn('Failed to play menu_close SFX', e); }
+      try { audioService.notifyModalClose(); } catch (e) { console.warn('Failed to notify modal close', e); }
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
