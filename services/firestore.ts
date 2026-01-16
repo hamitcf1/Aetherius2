@@ -455,7 +455,9 @@ export interface UserSettings {
   // Audio settings
   soundEffectsEnabled?: boolean;
   musicEnabled?: boolean;
-}
+  // Weather UI settings
+  weatherMouseInteractionEnabled?: boolean;
+} 
 
 const userSettingsDocRef = (uid: string) => {
   const db = getDb();
@@ -488,9 +490,11 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
     // Audio settings
     soundEffectsEnabled: settings.soundEffectsEnabled,
     musicEnabled: settings.musicEnabled,
+    // Weather settings
+    weatherMouseInteractionEnabled: settings.weatherMouseInteractionEnabled,
     createdAt: settings.createdAt ?? now,
     updatedAt: now,
-  };
+  }; 
 
   // Remove undefined values before saving
   Object.keys(next).forEach(key => {

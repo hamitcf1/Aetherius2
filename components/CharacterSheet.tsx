@@ -636,16 +636,11 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             <div className="mb-6 bg-skyrim-paper/40 border border-skyrim-border p-4 rounded">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 {/* Level Badge */}
-                <div className="flex items-center gap-4">
-                  <LevelBadge level={character.level} size={64} />
+                <div className="flex items-center gap-6">
+                  <LevelBadge level={character.level} size={72} />
 
                   {/* XP Progress Section */}
                   <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp size={14} className="text-skyrim-gold" />
-                      <span className="text-xs text-skyrim-text uppercase tracking-widest">{t('character.experience')}</span>
-                    </div>
-
                     {(() => {
                       const xpData = getXPProgress(character.experience || 0, character.level);
                       return (

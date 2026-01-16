@@ -13,21 +13,43 @@ export const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObj
   const animationRef = useRef<number | null>(null);
   
   useEffect(() => {
-    if (!active || !buttonRef.current) return;
+    // Defensive: ensure we always cancel any prior animation before starting new one
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    if (!active) {
+      // Clear any lingering sparks if effect toggles off
+      setSparks([]);
+      return;
+    }
+
+    if (!buttonRef.current) {
+      // If the button isn't available yet (edge case with rapid mounts), try again shortly
+      const retry = window.setTimeout(() => {
+        if (buttonRef.current) {
+          // Force a re-run by toggling local state - simplest approach is to setSparks to [] and reapply the effect
+          setSparks([]);
+        }
+        window.clearTimeout(retry);
+      }, 30);
+      return () => window.clearTimeout(retry);
+    }
 
     try {
       const rect = buttonRef.current.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
 
-      // Generate initial sparks
+      // Generate initial sparks with a larger initial spread for more visible scattering
       const seed = Date.now();
-      const initialSparks = Array.from({ length: 25 }, (_, i) => ({
+      const initialSparks = Array.from({ length: 30 }, (_, i) => ({
         id: seed + i,
         x: centerX,
         y: centerY,
-        vx: (Math.random() - 0.5) * 12,
-        vy: (Math.random() - 0.5) * 12 - 4,
+        vx: (Math.random() - 0.5) * 24, // wider horizontal spread
+        vy: (Math.random() - 0.5) * 18 - 6, // stronger upward impulse
         life: 1,
         color: Math.random() > 0.3 
           ? `rgba(${255}, ${150 + Math.random() * 100}, ${Math.random() * 50}, 1)` // Orange/red
@@ -36,38 +58,30 @@ export const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObj
 
       setSparks(initialSparks);
 
-      // Animate sparks
+      // Animate sparks using RAF; cancel previous RAF if any
       const animate = () => {
-        try {
-          setSparks(prev => {
-            const updated = prev
-              .map(s => ({
-                ...s,
-                x: s.x + s.vx,
-                y: s.y + s.vy,
-                vy: s.vy + 0.3, // gravity
-                life: s.life - 0.025
-              }))
-              .filter(s => s.life > 0);
+        setSparks(prev => {
+          const updated = prev
+            .map(s => ({
+              ...s,
+              x: s.x + s.vx,
+              y: s.y + s.vy,
+              vy: s.vy + 0.45, // gravity
+              life: s.life - 0.03
+            }))
+            .filter(s => s.life > 0);
 
-            if (updated.length === 0) {
+          if (updated.length === 0) {
+            if (animationRef.current) {
+              cancelAnimationFrame(animationRef.current);
               animationRef.current = null;
-              return [];
             }
-
-            animationRef.current = requestAnimationFrame(animate);
-            return updated;
-          });
-        } catch (err) {
-          // Defensive: ensure any animation errors don't bubble to React and break the tree
-          // eslint-disable-next-line no-console
-          console.error('Spark animation error', err);
-          if (animationRef.current) {
-            cancelAnimationFrame(animationRef.current);
-            animationRef.current = null;
+            return [];
           }
-          setSparks([]);
-        }
+
+          animationRef.current = requestAnimationFrame(animate);
+          return updated;
+        });
       };
 
       animationRef.current = requestAnimationFrame(animate);
@@ -78,12 +92,10 @@ export const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObj
     }
 
     return () => {
-      // Ensure animation stops and any remaining sparks are cleared when the effect is torn down
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
-      // Clear sparks so they don't remain frozen on screen if active toggles off mid-animation
       setSparks([]);
     };
   }, [active, buttonRef]);
@@ -127,14 +139,51 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSparks, setShowSparks] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
   const upgradeButtonRef = useRef<HTMLButtonElement>(null);
   const sparkTimeoutRef = useRef<number | null>(null);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
 
+  const startSpark = () => {
+    // Clear any existing timeout so repeated starts reset the timer cleanly
+    if (sparkTimeoutRef.current) {
+      clearTimeout(sparkTimeoutRef.current as any);
+      sparkTimeoutRef.current = null;
+    }
+
+    // If button not ready, try again shortly (handles race conditions when modal renders)
+    if (!upgradeButtonRef.current) {
+      const later = window.setTimeout(() => {
+        window.clearTimeout(later);
+        startSpark();
+      }, 30);
+      return;
+    }
+
+    audioService.playSoundEffect('anvil_hit');
+    setTimeout(() => audioService.playSoundEffect('forge_upgrade'), 90);
+
+    setShowSparks(true);
+    setIsUpgrading(true);
+
+    sparkTimeoutRef.current = window.setTimeout(() => {
+      setShowSparks(false);
+      sparkTimeoutRef.current = null;
+      setIsUpgrading(false);
+    }, 800);
+  };
+
   const handleConfirm = () => {
     if (!selected) return;
+
+    // If an upgrade is already in progress visually, restart the spark and do not re-run the upgrade logic
+    if (isUpgrading) {
+      startSpark();
+      return;
+    }
+
     if (!upgradeSvc.canUpgrade(selected)) {
       showToast?.('Item cannot be upgraded further', 'warning');
       return;
@@ -147,25 +196,15 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
 
     const { updated, cost } = upgradeSvc.applyUpgrade(selected);
     if (gold < cost) {
+      // Even if the player quickly clicked and didn't have enough gold for a subsequent upgrade,
+      // restart the spark to provide consistent feedback that their click was registered visually
+      startSpark();
       showToast?.('Insufficient gold for upgrade', 'warning');
       return;
     }
 
-    // Play forge upgrade sound and anvil hit sound
-    audioService.playSoundEffect('anvil_hit');
-    setTimeout(() => audioService.playSoundEffect('forge_upgrade'), 100);
-    
-    // Trigger spark effect. Allow the particle system to fully animate (≈800ms) before hiding.
-    // Clear any existing timeout so repeated upgrades reset the timer cleanly.
-    if (sparkTimeoutRef.current) {
-      clearTimeout(sparkTimeoutRef.current as any);
-      sparkTimeoutRef.current = null;
-    }
-    setShowSparks(true);
-    sparkTimeoutRef.current = window.setTimeout(() => {
-      setShowSparks(false);
-      sparkTimeoutRef.current = null;
-    }, 800);
+    // Start spark + sounds and lock input until visual completes
+    startSpark();
 
     // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
     // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.
@@ -286,7 +325,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                     ref={upgradeButtonRef}
                     onClick={handleConfirm}
                     data-sfx="button_click"
-                    className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95"
+                    disabled={isUpgrading}
+                    className={`px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 ${isUpgrading ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     Confirm Upgrade
                   </button>

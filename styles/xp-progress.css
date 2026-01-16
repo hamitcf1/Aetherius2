@@ -1,12 +1,12 @@
-.xp-progress__bar{height:14px}
-.xp-progress__fill{height:100%;background:linear-gradient(90deg,#b8860b,#ffd700);transition:width 700ms cubic-bezier(.2,.9,.2,1);min-width:4px}
+.xp-progress__bar{height:14px;position:relative;background:rgba(10,12,16,0.8);border-radius:9999px}
+.xp-progress__fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#b8860b,#ffd700);transition:width 700ms cubic-bezier(.2,.9,.2,1);min-width:6px;border-radius:9999px}
 /* animated shimmering gradient inside filled area */
-.xp-progress__fill::before{content:"";position:absolute;left:0;top:0;bottom:0;right:0;background:linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.0));mix-blend-mode:overlay}
-.xp-progress{position:relative}
+.xp-progress__fill::before{content:"";position:absolute;left:0;top:0;bottom:0;right:0;background:linear-gradient(90deg,rgba(255,255,255,0.08) 0%,rgba(255,255,255,0.16) 50%,rgba(255,255,255,0.08) 100%);mix-blend-mode:overlay;border-radius:9999px}
+.xp-progress{position:relative;padding-bottom:6px}
 
 /* subtle slow shift of the gradient using background-position */
-.xp-progress__fill{background-size:200% 100%;animation:xpShift 6s linear infinite}
-@keyframes xpShift{from{background-position:0%}to{background-position:200%}}
+.xp-progress__fill{background-size:200% 100%;animation:xpShift 5s ease-in-out infinite alternate}
+@keyframes xpShift{from{background-position:0% 50%}to{background-position:100% 50%}}
 
 @media (prefers-reduced-motion: reduce){
   .xp-progress__fill{animation:none}

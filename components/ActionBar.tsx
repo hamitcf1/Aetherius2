@@ -184,6 +184,22 @@ const ActionBar: React.FC = () => {
     setSoundVolume(volume);
     audioService.setSoundEffectsVolume(volume);
   };
+
+  // Weather mouse interaction toggle - initialize from userSettings (default true)
+  const [weatherMouseInteractionEnabled, setWeatherMouseInteractionEnabled] = useState<boolean>(() => userSettings?.weatherMouseInteractionEnabled ?? true);
+
+  useEffect(() => {
+    // When userSettings load, sync the local toggle
+    if (typeof userSettings?.weatherMouseInteractionEnabled === 'boolean') {
+      setWeatherMouseInteractionEnabled(userSettings.weatherMouseInteractionEnabled);
+    }
+  }, [userSettings]);
+
+  const handleToggleWeatherMouseInteraction = () => {
+    const newState = !weatherMouseInteractionEnabled;
+    setWeatherMouseInteractionEnabled(newState);
+    updateUserSettings?.({ weatherMouseInteractionEnabled: newState });
+  };
   
   // Ref for the button to align dropdown
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -706,8 +722,22 @@ const ActionBar: React.FC = () => {
                         </button>
                       ))}
                     </div>
+
+                    {/* Mouse Interaction Toggle */}
+                    <div className="mt-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={weatherMouseInteractionEnabled}
+                          onChange={handleToggleWeatherMouseInteraction}
+                          className="accent-skyrim-gold w-4 h-4"
+                        />
+                        <span className="text-sm text-skyrim-text">Enable mouse interaction (repel particles)</span>
+                      </label>
+                    </div>
+
                   </div>
-                )}
+                )} 
               </div>
             )}
 

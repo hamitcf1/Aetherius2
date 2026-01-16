@@ -196,6 +196,8 @@ const computeDamageFromNat = (
 // Normalize misclassified summoned companions: move any enemies that have `isCompanion` set into `allies`.
 // Be generic: treat any enemy flagged `isCompanion` as a companion (covers future conjuration spells).
 const normalizeSummonedCompanions = (state: CombatState): CombatState => {
+  // Helper: guess whether an actor name suggests an animal summon
+  const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|horse|fox|warg|sabrecat|cat/i.test((name || '').toLowerCase());
   const newState = { ...state } as CombatState;
   if (!newState.enemies || newState.enemies.length === 0) return newState;
   // Move any enemies that are companions (don't rely on id prefix)
@@ -734,13 +736,22 @@ export const initializeCombat = (
   const companionAllies: CombatEnemy[] = validCompanions.map((c, idx) => ({
     id: `ally_${c.id}_${Date.now()}_${idx}`,
     name: c.name,
-    type: 'humanoid',
+    // Derive combat type from companion data: animals are 'beast', humanoid companions remain 'humanoid'
+    type: c.isAnimal ? 'beast' : 'humanoid',
     level: c.level || 1,
     maxHealth: c.maxHealth || c.health || 50,
     currentHealth: c.maxHealth || c.health || 50,
     armor: c.armor || 0,
     damage: c.damage || 4,
-    abilities: [{ id: `comp_attack_${c.id}`, name: `Strike (${c.name})`, type: 'melee', damage: c.damage || 4, cost: 0, description: 'Companion attack' }],
+    // Use animal-appropriate ability names when it's an animal companion
+    abilities: [{
+      id: `comp_attack_${c.id}`,
+      name: c.isAnimal ? `${(c.species ? (c.species[0]?.toUpperCase() + c.species.slice(1)) : 'Bite')} (${c.name})` : `Strike (${c.name})`,
+      type: 'melee',
+      damage: c.damage || 4,
+      cost: 0,
+      description: c.isAnimal ? `${c.name} the ${c.species || 'creature'} attacks with a natural attack.` : 'Companion attack'
+    }],
     behavior: 'support',
     isCompanion: true,
     xpReward: 0,
@@ -1017,10 +1028,7 @@ export const executePlayerAction = (
           const companion: CombatEnemy = {
             id: summonId,
             name: summonName,
-            type: 'humanoid',
-            level,
-            maxHealth,
-            currentHealth: maxHealth,
+            type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
             armor: 5,
             damage: 8 + level,
             abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
@@ -1742,10 +1750,7 @@ export const executeEnemyTurn = (
       const companion: CombatEnemy = {
         id: summonId,
         name: summonName,
-        type: 'humanoid',
-        level,
-        maxHealth,
-        currentHealth: maxHealth,
+        type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
         armor: 5,
         damage: 8 + level,
         abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],

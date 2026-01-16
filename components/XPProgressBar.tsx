@@ -15,16 +15,18 @@ const XPProgressBar: React.FC<XPProgressBarProps> = ({ current, required, total,
 
   return (
     <div className={`xp-progress ${className}`}>
-      <div className="xp-progress__header flex items-center justify-between">
+      <div className="xp-progress__header flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-skyrim-gold"><path d="M3 12h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          <span className="text-xs text-skyrim-text uppercase tracking-widest">Experience</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-skyrim-gold">
+            <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className="text-xs text-skyrim-text uppercase tracking-widest font-semibold">Experience</span>
         </div>
-        <div className="text-[10px] text-gray-500">{percentage}%</div>
+        <span className="text-xs text-skyrim-gold font-bold">{percentage}%</span>
       </div>
 
       <div
-        className="xp-progress__bar mt-2 rounded-full overflow-hidden border border-skyrim-border/50 bg-gray-900"
+        className="xp-progress__bar rounded-full overflow-hidden border border-skyrim-border/50"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={safeRequired}
@@ -37,9 +39,9 @@ const XPProgressBar: React.FC<XPProgressBarProps> = ({ current, required, total,
         />
       </div>
 
-      <div className="flex items-center justify-between mt-1">
-        <span className="text-xs text-skyrim-gold font-semibold">{clamped.toLocaleString()} / {safeRequired.toLocaleString()} XP</span>
-        <span className="text-[10px] text-gray-500">Total: {total?.toLocaleString() ?? ''}</span>
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-sm text-skyrim-gold font-semibold">{clamped.toLocaleString()} / {safeRequired.toLocaleString()} XP</span>
+        <span className="text-xs text-gray-400">Total: {total?.toLocaleString() ?? ''} XP</span>
       </div>
     </div>
   );

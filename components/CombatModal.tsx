@@ -3,7 +3,7 @@
  * Full-screen combat interface with health bars, abilities, and action log
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { waitMs } from '../utils/animation';
 import { 
   Character, 
@@ -216,13 +216,58 @@ const EnemyCard: React.FC<{
 };
 
 // Action button component
-const ActionButton: React.FC<{
+// Helper: determine the logical subcategory for an ability (used for accents)
+const determineSubcategory = (ability: CombatAbility) => {
+  if (ability.type === 'melee' || ability.type === 'ranged') {
+    const isDefensive = /shield|block|defend|bash/i.test(ability.name);
+    if (isDefensive) return 'Defensive';
+    return ability.type === 'melee' ? 'Melee' : 'Ranged';
+  }
+  if (ability.type === 'shout') return 'Shouts';
+  if ((ability.heal && ability.heal > 0) || ability.effects?.some(e => e.type === 'heal')) return 'Restoration';
+  if (ability.damage > 0) return 'Destruction';
+  return 'Support';
+};
+
+// Helper: accent color for (tab, subcategory)
+const getAccentColor = (tab: 'Physical' | 'Magical', subCat: string) => {
+  const map: Record<string, string> = {
+    // Physical
+    Melee: '#ef4444',      // red-500
+    Ranged: '#f59e0b',     // amber-500
+    Defensive: '#06b6d4',  // cyan-500
+    // Magical
+    Destruction: '#ef4444',// red-500
+    Restoration: '#10b981',// green-500
+    Shouts: '#7c3aed',     // purple-600
+    Support: '#06b6d4'     // cyan-500
+  };
+  return map[subCat] || (tab === 'Physical' ? '#f97316' : '#60a5fa');
+};
+
+// Helper: pick readable text color for accent
+const getTextColorForAccent = (hex?: string) => {
+  if (!hex) return '#fff';
+  const c = hex.replace('#','');
+  const r = parseInt(c.substring(0,2),16);
+  const g = parseInt(c.substring(2,4),16);
+  const b = parseInt(c.substring(4,6),16);
+  // Perceived luminance
+  const l = 0.2126*r + 0.7152*g + 0.0722*b;
+  return l > 160 ? '#000' : '#fff';
+};
+
+type ActionButtonProps = {
   ability: CombatAbility;
   disabled: boolean;
   cooldown: number;
   canAfford: boolean;
   onClick: () => void;
-}> = ({ ability, disabled, cooldown, canAfford, onClick }) => {
+  accentColor?: string;
+  compact?: boolean;
+};
+
+const ActionButton: React.FC<ActionButtonProps> = ({ ability, disabled, cooldown, canAfford, onClick, accentColor, compact }) => {
   const getTypeIcon = () => {
     switch (ability.type) {
       case 'melee': return '⚔️';
@@ -238,6 +283,24 @@ const ActionButton: React.FC<{
   // Build tooltip text: show description (not values since they're already visible)
   const tooltipText = ability.description || `${ability.name} - ${ability.type} ability`;
   
+  // Compact variant for mobile small buttons
+  if (compact) {
+    return (
+      <button
+        onClick={onClick}
+        disabled={isDisabled}
+        title={tooltipText}
+        data-sfx="button_click"
+        className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${isDisabled ? 'bg-stone-700 text-stone-500 opacity-50' : ''}`}
+        style={!isDisabled && accentColor ? { background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}11, rgba(0,0,0,0.35))`, color: getTextColorForAccent(accentColor), boxShadow: `inset 4px 0 0 ${accentColor}` } : undefined}
+      >
+        <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accentColor }} />
+        {ability.name}
+        {cooldown > 0 && <span className="text-[10px] ml-1">({cooldown})</span>}
+      </button>
+    );
+  }
+
   return (
     <button
       onClick={onClick}
@@ -251,6 +314,7 @@ const ActionButton: React.FC<{
           : 'bg-gradient-to-br from-amber-900/40 to-stone-900/60 border-amber-700/50 hover:border-amber-500 hover:from-amber-900/60'
         }
       `}
+      style={accentColor && !isDisabled ? { background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}11, rgba(0,0,0,0.6))`, borderColor: `${accentColor}88`, color: getTextColorForAccent(accentColor) } as React.CSSProperties : undefined}
     >
       {/* Cooldown overlay */}
       {cooldown > 0 && (
@@ -260,17 +324,18 @@ const ActionButton: React.FC<{
       )}
       
       <div className="flex items-center gap-2 mb-1">
+        <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: accentColor }} />
         <span className="text-lg">{getTypeIcon()}</span>
-        <span className={`font-bold ${isDisabled ? 'text-stone-500' : 'text-amber-100'}`}>
+        <span className={`font-bold ${isDisabled ? 'text-stone-500' : 'text-amber-100'}`} style={accentColor && !isDisabled ? { color: accentColor } : undefined}>
           {ability.name}
         </span>
       </div>
       
-      <div className="flex gap-3 text-sm sm:text-xs">
+      <div className="flex gap-3 text-sm sm:text-xs items-center">
         {ability.damage > 0 && (
           <span className="text-red-400">⚔ {ability.damage}</span>
         )}
-        <span className={`${ability.type === 'magic' ? 'text-blue-400' : 'text-green-400'}`}>
+        <span className={`${ability.type === 'magic' ? 'text-blue-400' : 'text-green-400'}`} style={accentColor && !isDisabled ? { color: accentColor } : undefined}>
           {ability.type === 'magic' ? '💧' : '⚡'} {ability.cost}
         </span>
       </div>
@@ -298,6 +363,53 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   // Quick visual highlight when a target is newly selected (transient)
   const [recentlyHighlighted, setRecentlyHighlighted] = useState<string | null>(null);
+  
+  // Ability categorization state
+  const [activeAbilityTab, setActiveAbilityTab] = useState<'Physical' | 'Magical'>('Physical');
+
+  const categorizedAbilities = useMemo(() => {
+    const groups = {
+      Physical: {
+        Melee: [] as CombatAbility[],
+        Ranged: [] as CombatAbility[],
+        Defensive: [] as CombatAbility[]
+      },
+      Magical: {
+        Destruction: [] as CombatAbility[],
+        Restoration: [] as CombatAbility[],
+        Shouts: [] as CombatAbility[],
+        Support: [] as CombatAbility[]
+      }
+    };
+
+    playerStats.abilities.forEach(ability => {
+      // Physical
+      if (ability.type === 'melee' || ability.type === 'ranged') {
+        const isDefensive = /shield|block|defend|bash/i.test(ability.name);
+        if (isDefensive) {
+          groups.Physical.Defensive.push(ability);
+        } else if (ability.type === 'melee') {
+          groups.Physical.Melee.push(ability);
+        } else {
+          groups.Physical.Ranged.push(ability);
+        }
+      } 
+      // Magical / Special
+      else {
+        if (ability.type === 'shout') {
+          groups.Magical.Shouts.push(ability);
+        } else if ((ability.heal && ability.heal > 0) || ability.effects?.some(e => e.type === 'heal')) {
+          groups.Magical.Restoration.push(ability);
+        } else if (ability.damage > 0) {
+          groups.Magical.Destruction.push(ability);
+        } else {
+          groups.Magical.Support.push(ability);
+        }
+      }
+    });
+
+    return groups;
+  }, [playerStats.abilities]);
   // Pending targeting for abilities which require explicit target selection (heals/buffs)
   const [pendingTargeting, setPendingTargeting] = useState<null | { abilityId: string; abilityName: string; allow: 'allies' | 'enemies' | 'both' }>(null);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -1237,14 +1349,33 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         {/* Right side - Actions (Desktop only, hidden on mobile) */}
         <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
           {/* Abilities */}
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-stone-400">ABILITIES</h3>
+          <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30 flex flex-col h-[400px]">
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              {(!awaitingCompanionAction && !pendingTargeting) ? (
+                <div className="flex gap-1 bg-stone-900/80 p-1 rounded border border-stone-700">
+                  <button 
+                    onClick={() => setActiveAbilityTab('Physical')} 
+                    className={`px-3 py-1 text-xs font-bold rounded transition-colors ${activeAbilityTab === 'Physical' ? 'bg-amber-900 text-amber-100' : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800'}`}
+                  >
+                    PHYSICAL
+                  </button>
+                  <button 
+                    onClick={() => setActiveAbilityTab('Magical')} 
+                    className={`px-3 py-1 text-xs font-bold rounded transition-colors ${activeAbilityTab === 'Magical' ? 'bg-blue-900 text-blue-100' : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800'}`}
+                  >
+                    MAGICAL
+                  </button>
+                </div>
+              ) : (
+                <h3 className="text-sm font-bold text-stone-400">
+                  {awaitingCompanionAction ? 'COMPANION TURN' : 'SELECT TARGET'}
+                </h3>
+              )}
               <div className="flex items-center gap-2">
-                <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700">Equipment</button>
+                <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700 border border-blue-600">Equipment</button>
               </div>
             </div>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
               {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
                 (() => {
                   const allyActor = combatState.allies.find(a => a.id === combatState.currentTurnActor);
@@ -1253,21 +1384,28 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <div>
                       <div className="text-xs text-skyrim-text mb-2">Control {allyActor.name} (Companion)</div>
                       <div className="space-y-2">
-                        {allyActor.abilities.map(ab => (
-                          <button key={ab.id} disabled={isAnimating} onClick={async () => {
-                            setIsAnimating(true);
-                            const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
-                            setCombatState(res.newState);
-                            if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                            // Play companion-specific attack sound
-                            try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
-                            // End companion turn and advance
-                            setAwaitingCompanionAction(false);
-                            setIsAnimating(false);
-                            setCombatState(prev => advanceTurn(prev));
-                            setTimeout(() => processEnemyTurns(), 200);
-                          }} className="w-full px-3 py-2 rounded bg-skyrim-gold text-black">{ab.name}</button>
-                        ))}
+                        {allyActor.abilities.map(ab => {
+                          const sub = determineSubcategory(ab);
+                          const tab = (ab.type === 'melee' || ab.type === 'ranged') ? 'Physical' : 'Magical';
+                          const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
+                          return (
+                            <button key={ab.id} disabled={isAnimating} onClick={async () => {
+                              setIsAnimating(true);
+                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
+                              setCombatState(res.newState);
+                              if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                              // Play companion-specific attack sound
+                              try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
+                              // End companion turn and advance
+                              setAwaitingCompanionAction(false);
+                              setIsAnimating(false);
+                              setCombatState(prev => advanceTurn(prev));
+                              setTimeout(() => processEnemyTurns(), 200);
+                            }} className="w-full px-3 py-2 rounded text-left" style={{ background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.5))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` }}>
+                              <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />{ab.name}
+                            </button>
+                          );
+                        })}
                         <button onClick={() => {
                           // Skip companion's turn
                           setAwaitingCompanionAction(false);
@@ -1311,20 +1449,43 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <button onClick={() => setPendingTargeting(null)} data-sfx="button_click" className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
                   </div>
                 ) : (
-                  playerStats.abilities.map(ability => (
-                    <ActionButton
-                      key={ability.id}
-                      ability={ability}
-                      disabled={!isPlayerTurn || isAnimating}
-                      cooldown={combatState.abilityCooldowns[ability.id] || 0}
-                      canAfford={
-                        ability.type === 'magic' 
-                          ? playerStats.currentMagicka >= ability.cost
-                          : true
-                      }
-                      onClick={() => handleAbilityClick(ability)}
-                    />
-                  ))
+                  <div className="space-y-4 pt-1">
+                    {/* Render Categorized Abilities */}
+                    {Object.entries(categorizedAbilities[activeAbilityTab]).map(([subCat, abilities]: [string, CombatAbility[]]) => {
+                      if (abilities.length === 0) return null;
+                      return (
+                         <div key={subCat} className="space-y-1">
+                            <div className="text-[10px] font-bold text-stone-500 uppercase flex items-center gap-2 mb-1 pl-1">
+                               <span>{subCat}</span>
+                               <div className="h-px flex-1 bg-stone-800"></div>
+                            </div>
+                            <div className="space-y-2">
+                              {abilities.map((ability: CombatAbility) => (
+                                <ActionButton
+                                  key={ability.id}
+                                  ability={ability}
+                                  disabled={!isPlayerTurn || isAnimating}
+                                  cooldown={combatState.abilityCooldowns[ability.id] || 0}
+                                  canAfford={
+                                    ability.type === 'magic' 
+                                      ? playerStats.currentMagicka >= ability.cost
+                                      : true
+                                  }
+                                  accentColor={getAccentColor(activeAbilityTab as 'Physical' | 'Magical', subCat)}
+                                  onClick={() => handleAbilityClick(ability)}
+                                />
+                              ))}
+                            </div>
+                         </div>
+                      );
+                    })}
+                    {/* Empty state handle */}
+                    {Object.values(categorizedAbilities[activeAbilityTab] as Record<string, CombatAbility[]>).every(arr => arr.length === 0) && (
+                      <div className="text-center text-stone-600 py-8 text-sm italic">
+                        No {activeAbilityTab.toLowerCase()} abilities available.
+                      </div>
+                    )}
+                  </div>
                 )
               )}
             </div>
@@ -1445,50 +1606,59 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     if (!allyActor) return null;
                     return (
                       <>
-                        {allyActor.abilities.slice(0, 3).map(ab => (
-                          <button 
-                            key={ab.id} 
-                            disabled={isAnimating} 
-                            onClick={async () => {
-                              setIsAnimating(true);
-                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
-                              setCombatState(res.newState);
-                              if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                              setAwaitingCompanionAction(false);
-                              setIsAnimating(false);
-                              setCombatState(prev => advanceTurn(prev));
-                              setTimeout(() => processEnemyTurns(), 200);
-                            }} 
-                            className="px-2 py-2 rounded bg-skyrim-gold text-black text-xs font-bold truncate"
-                          >
-                            {ab.name}
-                          </button>
-                        ))}
+                        {allyActor.abilities.slice(0, 3).map(ab => {
+                          const sub = determineSubcategory(ab);
+                          const tab = (ab.type === 'melee' || ab.type === 'ranged') ? 'Physical' : 'Magical';
+                          const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
+                          return (
+                            <button 
+                              key={ab.id} 
+                              disabled={isAnimating} 
+                              onClick={async () => {
+                                setIsAnimating(true);
+                                const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
+                                setCombatState(res.newState);
+                                if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                setAwaitingCompanionAction(false);
+                                setIsAnimating(false);
+                                setCombatState(prev => advanceTurn(prev));
+                                setTimeout(() => processEnemyTurns(), 200);
+                              }} 
+                              className="px-2 py-2 rounded bg-skyrim-gold text-black text-xs font-bold truncate"
+                              style={{ boxShadow: `inset 4px 0 0 ${accent}` }}
+                            >
+                              <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />
+                              {ab.name}
+                            </button>
+                          );
+                        })}
                       </>
                     );
                   })()
                 ) : (
-                  playerStats.abilities.slice(0, 6).map(ability => (
-                    <button
-                      key={ability.id}
-                      disabled={!isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)}
-                      onClick={() => handlePlayerAction('attack', ability.id)}
-                      title={ability.description || `${ability.name} - ${ability.type} ability`}
-                      data-sfx="button_click"
-                      className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${
-                        !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost)
-                          ? 'bg-stone-700 text-stone-500 opacity-50'
-                          : ability.type === 'magic'
-                            ? 'bg-blue-700 text-blue-100 hover:bg-blue-600'
-                            : 'bg-amber-700 text-amber-100 hover:bg-amber-600'
-                      }`}
-                    >
-                      {ability.name}
-                      {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
-                        <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
-                      )}
-                    </button>
-                  ))
+                  playerStats.abilities.slice(0, 6).map(ability => {
+                    const sub = determineSubcategory(ability);
+                    const tab = (ability.type === 'melee' || ability.type === 'ranged') ? 'Physical' : 'Magical';
+                    const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
+                    const isDisabledBtn = !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
+                    return (
+                      <button
+                        key={ability.id}
+                        disabled={isDisabledBtn}
+                        onClick={() => handlePlayerAction('attack', ability.id)}
+                        title={ability.description || `${ability.name} - ${ability.type} ability`}
+                        data-sfx="button_click"
+                        className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${isDisabledBtn ? 'bg-stone-700 text-stone-500 opacity-50' : ''}`}
+                        style={!isDisabledBtn ? { background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.45))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` } : undefined}
+                      >
+                        <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />
+                        {ability.name}
+                        {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
+                          <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>

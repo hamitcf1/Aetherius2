@@ -24,6 +24,7 @@ import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
 import { QuestNotificationOverlay, QuestNotification } from './components/QuestNotification';
 import { LevelUpNotificationOverlay, LevelUpNotificationData } from './components/LevelUpNotification';
+import LevelBadge from './components/LevelBadge';
 import SnowEffect from './components/SnowEffect';
 import type { SnowSettings } from './components/SnowEffect';
 import { 
@@ -3972,11 +3973,11 @@ const App: React.FC = () => {
           {/* Global Weather Effect on login page */}
           {weatherEffect !== 'none' && (
             <SnowEffect 
-              settings={{ intensity: weatherIntensity, enableMouseInteraction: true }} 
+              settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
               theme={colorTheme} 
               weatherType={weatherEffect} 
             />
-          )}
+          )} 
           {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
             <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
           )}
@@ -4231,6 +4232,13 @@ const App: React.FC = () => {
                 ))}
                 {/* Actions button inline with tabs */}
                 <ActionBarToggle />
+
+                {/* Persistent Level Badge (HUD) */}
+                {activeCharacter && (
+                  <div className="ml-2 hidden sm:block">
+                    <LevelBadge level={activeCharacter.level} size={40} compact />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -4686,7 +4694,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         {/* Global Weather Effect */}
         {weatherEffect !== 'none' && (
           <SnowEffect 
-            settings={{ intensity: weatherIntensity, enableMouseInteraction: true }} 
+            settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
             theme={colorTheme} 
             weatherType={weatherEffect} 
           />

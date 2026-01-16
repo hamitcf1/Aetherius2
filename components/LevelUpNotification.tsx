@@ -49,6 +49,13 @@ const LevelUpNotificationCard: React.FC<{
   useEffect(() => {
     // Play level-up sound
     audioService.playSoundEffect('level_up');
+
+    // Dispatch a global event so other UI (HUD badges) can react
+    try {
+      window.dispatchEvent(new CustomEvent('levelUpPulse', { detail: { level: notification.newLevel } }));
+    } catch (e) {
+      // ignore in environments that don't support CustomEvent
+    }
     
     // Fade in
     const showTimer = setTimeout(() => setVisible(true), 50);

@@ -87,46 +87,46 @@ function variantPaths(baseName: string, count: number = 2): string[] {
 const SOUND_EFFECTS: Record<SoundEffect, string | string[] | null> = {
   purchase: variantPaths('purchase', 3), // supports purchase.mp3 and purchase_2.mp3
   sell: variantPaths('sell', 3),         // supports sell.mp3 and sell_2.mp3
-  gold_gain: `${BASE_PATH}/audio/sfx/gold_gain.mp3`,
-  gold_spend: `${BASE_PATH}/audio/sfx/gold_spend.mp3`,
-  item_pickup: `${BASE_PATH}/audio/sfx/item_pickup.mp3`,
-  item_equip: `${BASE_PATH}/audio/sfx/item_equip.mp3`,
-  item_unequip: `${BASE_PATH}/audio/sfx/item_unequip.mp3`,
-  level_up: `${BASE_PATH}/audio/sfx/level_up.mp3`,
-  quest_complete: `${BASE_PATH}/audio/sfx/quest_complete.mp3`,
-  quest_start: `${BASE_PATH}/audio/sfx/quest_start.mp3`,
-  eat: `${BASE_PATH}/audio/sfx/eat.mp3`,
-  drink: `${BASE_PATH}/audio/sfx/drink.mp3`,
-  drink_potion: `${BASE_PATH}/audio/sfx/drink_potion.mp3`,
-  rest: `${BASE_PATH}/audio/sfx/rest.mp3`,
+  gold_gain: variantPaths('gold_gain', 2),
+  gold_spend: variantPaths('gold_spend', 2),
+  item_pickup: variantPaths('item_pickup', 2),
+  item_equip: variantPaths('item_equip', 2),
+  item_unequip: variantPaths('item_unequip', 2),
+  level_up: variantPaths('level_up', 2),
+  quest_complete: variantPaths('quest_complete', 2),
+  quest_start: variantPaths('quest_start', 2),
+  eat: variantPaths('eat', 2),
+  drink: variantPaths('drink', 2),
+  drink_potion: variantPaths('drink_potion', 2),
+  rest: variantPaths('rest', 2),
   // menu open/close sounds intentionally disabled due to repeated triggering issues
   menu_open: null,
   menu_close: null,
-  button_click: `${BASE_PATH}/audio/sfx/button_click.mp3`,
+  button_click: variantPaths('button_click', 2),
   error: `${BASE_PATH}/audio/sfx/error.mp3`,
   success: `${BASE_PATH}/audio/sfx/success.mp3`,
   // Combat sounds - prefer variantPaths so users can add _2/_3 files easily
   attack_melee: variantPaths('attack_melee', 3),
-  attack_ranged: variantPaths('attack_ranged', 2),
+  attack_ranged: variantPaths('attack_ranged', 3),
   attack_magic: variantPaths('attack_magic', 2),
   attack_fire: variantPaths('attack_fire', 2),
   attack_ice: variantPaths('attack_ice', 2),
   attack_shock: variantPaths('attack_shock', 2),
   attack_bite: variantPaths('attack_bite', 2),
   attack_claw: variantPaths('attack_claw', 2),
-  block: variantPaths('block', 2),
+  block: variantPaths('block', 3),
   shield_bash: variantPaths('shield_bash', 2),
   spell_impact: variantPaths('spell_impact', 2),
   spell_impact_fire: variantPaths('spell_impact_fire', 2),
   spell_impact_ice: variantPaths('spell_impact_ice', 2),
   spell_impact_shock: variantPaths('spell_impact_shock', 2),
-  hit_received: variantPaths('hit_received', 2),
+  hit_received: variantPaths('hit_received', 3),
   // Use explicit enemy_death variants rather than falling back to unrelated sounds
   enemy_death: variantPaths('enemy_death', 2),
   dice_tick: `${BASE_PATH}/audio/sfx/dice_tick.mp3`,
   // Blacksmith sounds
-  forge_upgrade: `${BASE_PATH}/audio/sfx/forge_upgrade.mp3`,
-  anvil_hit: variantPaths('anvil_hit', 2),
+  forge_upgrade: null, // to be added later
+  anvil_hit: variantPaths('anvil_hit', 3),
 
 };
 
@@ -277,27 +277,38 @@ class AudioService {
         return;
       }
 
-      let audio = this.soundEffectCache.get(path);
-      if (!audio) {
+      // Allow overlapping rapid triggers for specific effects (e.g., dice ticks)
+      const allowOverlap = effect === 'dice_tick';
+
+      let audio: HTMLAudioElement;
+      if (allowOverlap) {
+        // Create a fresh audio element so multiple ticks can overlap cleanly
         audio = new Audio(path);
-        this.soundEffectCache.set(path, audio);
+      } else {
+        audio = this.soundEffectCache.get(path) as HTMLAudioElement;
+        if (!audio) {
+          audio = new Audio(path);
+          this.soundEffectCache.set(path, audio);
+        }
       }
 
       audio.volume = this.config.soundEffectsVolume;
-      audio.currentTime = 0;
+      // Only reset playback position for non-overlapping sounds
+      if (!allowOverlap) audio.currentTime = 0;
       const playResult: any = audio.play();
 
-      // Rate-limit duplicate trigger spam for the same sound effect
+      // Rate-limit duplicate trigger spam for the same sound effect (skip only when not overlapping)
       try {
         const now = Date.now();
         const cooldown = SOUND_COOLDOWNS_MS[effect] ?? 0;
         const last = this.lastPlayedTimestamps.get(effect) || 0;
-        if (cooldown > 0 && now - last < cooldown) {
+        if (!allowOverlap && cooldown > 0 && now - last < cooldown) {
           // Skip playing to prevent spam
           if (this.debugSfx) console.debug(`🔇 SFX cooldown: Skipping "${effect}" (${now - last}ms < ${cooldown}ms)`, new Error().stack);
           this.pushSfxEvent({ kind: 'skip', effect, path, stack: new Error().stack });
           return;
         }
+
         if (this.debugSfx) console.debug(`▶️ Playing SFX "${effect}"`, new Error().stack);
         this.pushSfxEvent({ kind: 'play', effect, path, stack: new Error().stack });
         this.lastPlayedTimestamps.set(effect, now);
