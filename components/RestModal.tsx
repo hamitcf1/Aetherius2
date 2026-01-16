@@ -42,8 +42,8 @@ export default function RestModal({ open, onClose, onRest, hasBedroll }: Props) 
         </div>
 
         <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 rounded bg-transparent border border-skyrim-border text-sm">Cancel</button>
-          <button onClick={handleConfirm} className="px-4 py-2 rounded bg-skyrim-gold text-black text-sm">Rest</button>
+          <button onClick={onClose} data-sfx="button_click" className="px-4 py-2 rounded bg-transparent border border-skyrim-border text-sm">Cancel</button>
+          <button onClick={handleConfirm} data-sfx="button_click" className="px-4 py-2 rounded bg-skyrim-gold text-black text-sm">Rest</button>
         </div>
       </div>
     </ModalWrapper>

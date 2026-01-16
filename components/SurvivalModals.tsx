@@ -168,6 +168,7 @@ export function RestModal({ open, onClose, onRest, gold, hasCampingGear, hasBedr
           {/* Action Button */}
           <button
             onClick={handleRest}
+            data-sfx="button_click"
             className="w-full py-3 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-400 transition-colors"
           >
             Rest for {hours} hours

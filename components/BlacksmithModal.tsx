@@ -284,12 +284,13 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                 <div className="mt-4 flex flex-col sm:flex-row gap-2 relative">
                   <button 
                     ref={upgradeButtonRef}
-                    onClick={handleConfirm} 
+                    onClick={handleConfirm}
+                    data-sfx="button_click"
                     className="px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95"
                   >
                     Confirm Upgrade
                   </button>
-                  <button onClick={onClose} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-all">Cancel</button>
+                  <button onClick={onClose} data-sfx="button_click" className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-all">Cancel</button>
                 </div>
                 {/* Spark particles for upgrade effect */}
                 <SparkParticles active={showSparks} buttonRef={upgradeButtonRef} />

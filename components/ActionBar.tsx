@@ -313,6 +313,7 @@ const ActionBar: React.FC = () => {
               setShowSettingsModal(true);
               setOpen(false);
             }}
+            data-sfx="button_click"
             className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-skyrim-gold/20 to-skyrim-gold/10 border border-skyrim-gold rounded font-bold text-skyrim-gold hover:from-skyrim-gold/30 hover:to-skyrim-gold/20 transition-all"
           >
             <SlidersHorizontal size={16} /> Settings

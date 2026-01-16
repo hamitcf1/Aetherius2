@@ -701,12 +701,14 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
             )}
             <button 
               onClick={() => setBlacksmithOpen(true)}
+              data-sfx="button_click"
               className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-700 transition-colors rounded flex items-center gap-2 font-bold"
             >
               Blacksmith
             </button>
             <button 
                 onClick={() => setIsAdding(!isAdding)}
+                data-sfx="button_click"
                 className="px-4 py-2 border border-skyrim-gold text-skyrim-gold hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors rounded flex items-center gap-2"
             >
                 <Plus size={18} /> Add Item

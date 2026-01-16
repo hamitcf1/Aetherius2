@@ -579,6 +579,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     setCombatState(newState);
     // Persist updated inventory snapshot
     onInventoryUpdate && onInventoryUpdate(updatedInventory);
+
+    // Play audio feedback for loot confirmation
+    try {
+      if ((grantedGold || 0) > 0) audioService.playSoundEffect('gold_gain');
+      if ((grantedItems || []).length > 0) audioService.playSoundEffect('item_pickup');
+    } catch (e) { console.warn('Failed to play loot SFX', e); }
+
     showToast?.(`Loot collected: ${grantedItems.map(item => item.name).join(', ')}`, 'success');
     setLootPhase(false);
 

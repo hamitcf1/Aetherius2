@@ -92,8 +92,10 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   enemy_death: `${BASE_PATH}/audio/sfx/enemy_death.mp3`,
   dice_tick: `${BASE_PATH}/audio/sfx/dice_tick.mp3`,
   // Blacksmith sounds
-  forge_upgrade: `${BASE_PATH}/audio/sfx/forge_upgrade.mp3`,
+  // Use a more distinct sound for upgrade success (falls back to level_up)
+  forge_upgrade: `${BASE_PATH}/audio/sfx/level_up.mp3`,
   anvil_hit: `${BASE_PATH}/audio/sfx/anvil_hit.mp3`,
+
 };
 
 // Music track paths (to be populated with actual music files)

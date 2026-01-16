@@ -48,6 +48,8 @@ export function ModalWrapper({
   useEffect(() => {
     if (!open) return;
 
+    try { audioService.playSoundEffect('menu_open'); } catch (e) { console.warn('Failed to play menu_open SFX', e); }
+
     // Add event listener for ESC
     document.addEventListener('keydown', handleKeyDown);
 
@@ -56,6 +58,7 @@ export function ModalWrapper({
     document.body.style.overflow = 'hidden';
 
     return () => {
+      try { audioService.playSoundEffect('menu_close'); } catch (e) { console.warn('Failed to play menu_close SFX', e); }
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };

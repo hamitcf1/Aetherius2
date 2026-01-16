@@ -82,10 +82,10 @@ export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onC
         </div>
 
         <div className="flex gap-2">
-          <button onClick={lootAll} className="px-3 py-2 bg-amber-700 rounded text-white">Loot All</button>
-          <button onClick={confirm} className="px-3 py-2 bg-green-700 rounded text-white">Confirm</button>
-          <button onClick={skip} className="px-3 py-2 bg-stone-700 rounded text-white">Skip</button>
-          <button onClick={onCancel} className="px-3 py-2 ml-auto bg-stone-600 rounded text-white">Cancel</button>
+          <button onClick={lootAll} data-sfx="button_click" className="px-3 py-2 bg-amber-700 rounded text-white">Loot All</button>
+          <button onClick={confirm} data-sfx="button_click" className="px-3 py-2 bg-green-700 rounded text-white">Confirm</button>
+          <button onClick={skip} data-sfx="button_click" className="px-3 py-2 bg-stone-700 rounded text-white">Skip</button>
+          <button onClick={onCancel} data-sfx="button_click" className="px-3 py-2 ml-auto bg-stone-600 rounded text-white">Cancel</button>
         </div>
       </div>
     </div>
