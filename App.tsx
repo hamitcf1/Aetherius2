@@ -1228,9 +1228,21 @@ const App: React.FC = () => {
       try {
         const el = (e.target as HTMLElement);
         const sfxEl = el.closest<HTMLElement>('[data-sfx]');
-        if (!sfxEl) return;
-        const key = sfxEl.getAttribute('data-sfx') || 'button_click';
-        audioService.playSoundEffect(key as any);
+        if (sfxEl) {
+          const key = sfxEl.getAttribute('data-sfx') || 'button_click';
+          if (key && key !== 'none') audioService.playSoundEffect(key as any);
+          return;
+        }
+
+        // Fallback: play generic button click for plain buttons/anchors if no data-sfx is set
+        const btn = el.closest<HTMLElement>('button, [role="button"], a');
+        if (btn) {
+          // Respect explicit opt-out attributes
+          if (btn.getAttribute('data-sfx') === 'none' || btn.hasAttribute('data-sfx-disable')) return;
+          // Don't play for disabled buttons
+          if ((btn as HTMLButtonElement).disabled) return;
+          audioService.playSoundEffect('button_click');
+        }
       } catch (err) {
         // Never throw from global handler
         console.warn('Global SFX handler error', err);
