@@ -1675,7 +1675,7 @@ export const executeEnemyTurn = (
 
   // Choose ability based on behavior
   let chosenAbility: CombatAbility;
-  const availableAbilities = actor.abilities.filter(a => {
+  const availableAbilities = (actor.abilities || []).filter(a => {
     // Disallow magic if not enough magicka, but allow melee even with low stamina
     if (a.type === 'magic' && actor.currentMagicka && actor.currentMagicka < a.cost) return false;
     return true;

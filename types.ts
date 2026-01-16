@@ -374,6 +374,9 @@ export interface GameStateUpdate {
   // Transaction tracking - prevents duplicate charges
   transactionId?: string;  // Unique ID for this specific transaction
   isPreview?: boolean;     // If true, this response is showing OPTIONS, not executing a transaction
+  // Internal helper flag: when true the caller already applied xp/gold locally and the handler
+  // should avoid double-applying. This is used by defensive local updates (combat rewards).
+  _alreadyAppliedLocally?: boolean;
   // Optional tags emitted by AI/narrative to signal special handling (e.g., 'bonfire')
   tags?: string[];
   
@@ -494,7 +497,8 @@ export type CombatActionType = 'attack' | 'power_attack' | 'magic' | 'shout' | '
 export interface CombatAbility {
   id: string;
   name: string;
-  type: 'melee' | 'ranged' | 'magic' | 'shout';
+  // 'utility' included for non-damaging or special abilities (summons, buffs, etc.)
+  type: 'melee' | 'ranged' | 'magic' | 'shout' | 'utility';
   damage: number;
   cost: number; // stamina for melee, magicka for magic
   cooldown?: number; // turns until can use again
@@ -507,11 +511,14 @@ export interface CombatAbility {
 }
 
 export interface CombatEffect {
-  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain';
+  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility';
   stat?: 'health' | 'magicka' | 'stamina' | 'armor' | 'damage';
   value: number;
   duration?: number; // turns
   chance?: number; // 0-100
+  // Optional fields used by summon/utility effects
+  name?: string;
+  playerTurns?: number;
 }
 
 // LootRarity is defined once at line 169 - do not duplicate
@@ -548,7 +555,7 @@ export interface CombatEnemy {
   // Status effects currently on this enemy
   activeEffects?: Array<{ effect: CombatEffect; turnsRemaining: number }>;
   // Companion metadata for ally summons
-  companionMeta?: { name?: string; xpContribution?: number; companionId?: string; autoLoot?: boolean; autoControl?: boolean };
+  companionMeta?: { name?: string; xpContribution?: number; companionId?: string; autoLoot?: boolean; autoControl?: boolean; isSummon?: boolean };
 }
 
 export interface CombatState {
@@ -631,6 +638,7 @@ export interface CombatLogEntry {
   healing?: number;
   effect?: string;
   isCrit?: boolean;
+  hitLocation?: string;
   // Natural d20 roll for the action (1-20)
   nat?: number;
   // Tier derived from nat ("miss","low","mid","high","crit","fail")

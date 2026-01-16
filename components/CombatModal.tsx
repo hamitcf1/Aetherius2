@@ -33,33 +33,52 @@ import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
-// Play combat sound based on action type
-const playCombatSound = (actionType: 'melee' | 'ranged' | 'magic' | 'shout' | 'block' | 'shield_bash' | 'hit' | 'enemy_death') => {
-  switch (actionType) {
-    case 'melee':
-      audioService.playSoundEffect('attack_melee');
-      break;
-    case 'ranged':
-      audioService.playSoundEffect('attack_ranged');
-      break;
-    case 'magic':
-      audioService.playSoundEffect('attack_magic');
-      break;
-    case 'shout':
-      audioService.playSoundEffect('attack_magic'); // Use magic sound for shouts
-      break;
-    case 'block':
-      audioService.playSoundEffect('block');
-      break;
-    case 'shield_bash':
-      audioService.playSoundEffect('shield_bash');
-      break;
-    case 'hit':
-      audioService.playSoundEffect('hit_received');
-      break;
-    case 'enemy_death':
-      audioService.playSoundEffect('enemy_death');
-      break;
+// Play combat sound based on action type and actor info (enemy/ally/player)
+const playCombatSound = (
+  actionType: 'melee' | 'ranged' | 'magic' | 'shout' | 'block' | 'shield_bash' | 'hit' | 'enemy_death',
+  actor?: any
+) => {
+  // Helper to inspect actor name/description for elemental or creature hints
+  const name = (actor?.name || '').toLowerCase() + ' ' + (actor?.description || '').toLowerCase();
+  const isSummon = !!actor?.companionMeta?.isSummon || !!actor?.companionMeta?.isSummon;
+
+  const looksLikeFire = /fire|flame|ember|pyro|ignis/i.test(name);
+  const looksLikeIce = /frost|ice|cold|chill|glacier/i.test(name);
+  const looksLikeShock = /shock|storm|lightning|thunder|electr/i.test(name);
+  const looksLikeWolf = /wolf|hound|dog|warg/i.test(name);
+  const looksLikeBear = /bear|paw|claw|talon|sabre|saber/i.test(name);
+
+  try {
+    if (actionType === 'magic' || actionType === 'shout') {
+      if (looksLikeFire) return audioService.playSoundEffect('spell_impact_fire');
+      if (looksLikeIce) return audioService.playSoundEffect('spell_impact_ice');
+      if (looksLikeShock) return audioService.playSoundEffect('spell_impact_shock');
+      return audioService.playSoundEffect('attack_magic');
+    }
+
+    if (actionType === 'melee' || actionType === 'ranged') {
+      // Prefer creature-specific sounds for companions/beasts
+      if (looksLikeWolf) return audioService.playSoundEffect('attack_bite');
+      if (looksLikeBear) return audioService.playSoundEffect('attack_claw');
+
+      // For summoned elementals, use elemental attack sounds
+      if (isSummon || looksLikeFire || looksLikeIce || looksLikeShock) {
+        if (looksLikeFire) return audioService.playSoundEffect('attack_fire');
+        if (looksLikeIce) return audioService.playSoundEffect('attack_ice');
+        if (looksLikeShock) return audioService.playSoundEffect('attack_shock');
+      }
+
+      // Fallbacks
+      if (actionType === 'ranged') return audioService.playSoundEffect('attack_ranged');
+      return audioService.playSoundEffect('attack_melee');
+    }
+
+    if (actionType === 'block') return audioService.playSoundEffect('block');
+    if (actionType === 'shield_bash') return audioService.playSoundEffect('shield_bash');
+    if (actionType === 'hit') return audioService.playSoundEffect('hit_received');
+    if (actionType === 'enemy_death') return audioService.playSoundEffect('enemy_death');
+  } catch (e) {
+    console.warn('Failed to play combat sound', e);
   }
 };
 
@@ -464,7 +483,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [combatState.enemies, selectedTarget, pendingTargeting]);
 
   // Slow down combat animations at higher player levels for more dramatic pacing
-  const timeScale = 1 + Math.floor((character?.level || 1) / 20) * 0.25;
+  // During tests we want animations to be effectively instant to keep tests fast and deterministic
+  const timeScale = process.env.NODE_ENV === 'test' ? 0 : 1 + Math.floor((character?.level || 1) / 20) * 0.25;
 
   // Scroll combat log to bottom (if auto-scroll is enabled)
   useEffect(() => {
@@ -653,6 +673,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
           currentState = res.newState;
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+          // Play companion attack sound for their ability
+          try { playCombatSound(allyActor.abilities[0].type as any, allyActor); } catch (e) {}
           // Update UI and play companion animation
           setCombatState(currentState);
           await waitMs(Math.floor(600 * timeScale));
@@ -732,8 +754,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
 
         try {
-          // Play centralized 'hit received' sound via AudioService to ensure availability and user settings are respected
-          playCombatSound('hit');
+          // Play centralized 'hit received' sound matched to attacker (if available)
+          const attacker = (combatState.enemies || []).find(e => e.id === last.actor) || (combatState.allies || []).find(a => a.id === last.actor) || null;
+          playCombatSound('hit', attacker || undefined);
         } catch (e) { console.warn('Failed to play hit received sound', e); }
       }
       
@@ -836,18 +859,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     if (action === 'attack' || action === 'power_attack' || action === 'magic' || action === 'shout') {
       const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
       const actionType = ability?.type || 'melee';
+      const targetEnemy = selectedTarget ? combatState.enemies.find(e => e.id === selectedTarget) : undefined;
       if (ability?.name?.toLowerCase().includes('bash')) {
-        playCombatSound('shield_bash');
+        playCombatSound('shield_bash', undefined);
       } else if (ability?.name?.toLowerCase().includes('block')) {
-        playCombatSound('block');
+        playCombatSound('block', undefined);
       } else {
-        playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout');
+        playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout', targetEnemy);
       }
     } else if (action === 'defend') {
-      playCombatSound('block');
+      playCombatSound('block', undefined);
     }
-
-    // Check if any enemies died from this action
     const deadEnemies = newState.enemies.filter(e => e.currentHealth <= 0 && combatState.enemies.find(oe => oe.id === e.id && oe.currentHealth > 0));
     if (deadEnemies.length > 0) {
       playCombatSound('enemy_death');
@@ -920,13 +942,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setFloatingHits(h => [{ id, actor: 'player', damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
       setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
 
-      // Play hit or crit sound if available
+      // Play hit or crit sound if available (actor-aware based on target enemy)
       try {
         // Use centralized audio service for impact/crit feedback to respect user settings
+        const targetEnemy = combatState.enemies.find(e => e.id === selectedTarget);
         if (last.isCrit) {
-          audioService.playSoundEffect('attack_melee');
+          playCombatSound('melee', targetEnemy);
         } else {
-          audioService.playSoundEffect('spell_impact');
+          // For non-crit, prefer spell_impact variants if target looks elemental
+          playCombatSound('magic', targetEnemy);
         }
       } catch (e) { console.warn('Failed to play impact sound', e); }
     }
@@ -1226,6 +1250,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
                             setCombatState(res.newState);
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                            // Play companion-specific attack sound
+                            try { playCombatSound(ab.type as any, allyActor); } catch (e) {}
                             // End companion turn and advance
                             setAwaitingCompanionAction(false);
                             setIsAnimating(false);

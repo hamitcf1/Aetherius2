@@ -49,8 +49,13 @@ export function ModalWrapper({
   useEffect(() => {
     if (!open) return;
 
-    // Use modal stack tracking so nested or repeated mounts don't spam open/close SFX
-    try { audioService.notifyModalOpen(); } catch (e) { console.warn('Failed to notify modal open', e); }
+    // Capture mount stack so we can trace which component opened this modal
+    const mountStack = (new Error()).stack || '';
+
+    if ((window as any).DEBUG_MODAL_SFX) console.debug('🧭 ModalWrapper mount', { ts: Date.now(), stack: mountStack });
+
+    // NOTE: Disabled modal open SFX triggers to avoid spurious close/open sound spam
+    // (previously audioService.notifyModalOpen was called here)
 
     // Add event listener for ESC
     document.addEventListener('keydown', handleKeyDown);
@@ -60,7 +65,9 @@ export function ModalWrapper({
     document.body.style.overflow = 'hidden';
 
     return () => {
-      try { audioService.notifyModalClose(); } catch (e) { console.warn('Failed to notify modal close', e); }
+      if ((window as any).DEBUG_MODAL_SFX) console.debug('🧭 ModalWrapper unmount', { ts: Date.now(), stack: mountStack });
+      // NOTE: Disabled modal close SFX triggers to avoid spurious close/open sound spam
+      // (previously audioService.notifyModalClose was called here)
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };

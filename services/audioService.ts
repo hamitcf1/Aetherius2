@@ -25,9 +25,17 @@ export type SoundEffect =
   | 'attack_melee'    // Weapon melee attack
   | 'attack_ranged'   // Bow/ranged attack
   | 'attack_magic'    // Spell cast
+  | 'attack_fire'     // Fire-flavored attack (conjurations, fire elementals)
+  | 'attack_ice'      // Ice/frost attack
+  | 'attack_shock'    // Shock/lightning attack
+  | 'attack_bite'     // Bite/animal attack
+  | 'attack_claw'     // Claw/paw attack
   | 'block'           // Blocking/defending
   | 'shield_bash'     // Shield bash attack
-  | 'spell_impact'    // Spell hitting target
+  | 'spell_impact'    // Spell hitting target (generic)
+  | 'spell_impact_fire'
+  | 'spell_impact_ice'
+  | 'spell_impact_shock'
   | 'hit_received'    // Taking damage
   | 'enemy_death'     // Enemy defeated
   | 'dice_tick'       // Small tick for D20 roll animation
@@ -76,8 +84,9 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   drink: `${BASE_PATH}/audio/sfx/drink.mp3`,
   drink_potion: `${BASE_PATH}/audio/sfx/drink_potion.mp3`,
   rest: `${BASE_PATH}/audio/sfx/rest.mp3`,
-  menu_open: `${BASE_PATH}/audio/sfx/menu_open.mp3`,
-  menu_close: `${BASE_PATH}/audio/sfx/menu_close.mp3`,
+  // menu open/close sounds intentionally disabled due to repeated triggering issues
+  menu_open: null,
+  menu_close: null,
   button_click: `${BASE_PATH}/audio/sfx/button_click.mp3`,
   error: `${BASE_PATH}/audio/sfx/error.mp3`,
   success: `${BASE_PATH}/audio/sfx/success.mp3`,
@@ -85,9 +94,17 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
   attack_melee: `${BASE_PATH}/audio/sfx/attack_melee.mp3`,
   attack_ranged: `${BASE_PATH}/audio/sfx/attack_ranged.mp3`,
   attack_magic: `${BASE_PATH}/audio/sfx/attack_magic.mp3`,
+  attack_fire: `${BASE_PATH}/audio/sfx/attack_fire.mp3`,
+  attack_ice: `${BASE_PATH}/audio/sfx/attack_ice.mp3`,
+  attack_shock: `${BASE_PATH}/audio/sfx/attack_shock.mp3`,
+  attack_bite: `${BASE_PATH}/audio/sfx/attack_bite.mp3`,
+  attack_claw: `${BASE_PATH}/audio/sfx/attack_claw.mp3`,
   block: `${BASE_PATH}/audio/sfx/block.mp3`,
   shield_bash: `${BASE_PATH}/audio/sfx/shield_bash.mp3`,
   spell_impact: `${BASE_PATH}/audio/sfx/spell_impact.mp3`,
+  spell_impact_fire: `${BASE_PATH}/audio/sfx/spell_impact_fire.mp3`,
+  spell_impact_ice: `${BASE_PATH}/audio/sfx/spell_impact_ice.mp3`,
+  spell_impact_shock: `${BASE_PATH}/audio/sfx/spell_impact_shock.mp3`,
   hit_received: `${BASE_PATH}/audio/sfx/hit_received.mp3`,
   enemy_death: `${BASE_PATH}/audio/sfx/enemy_death.mp3`,
   dice_tick: `${BASE_PATH}/audio/sfx/dice_tick.mp3`,
@@ -101,8 +118,9 @@ const SOUND_EFFECTS: Record<SoundEffect, string | null> = {
 // Per-effect fallback cooldowns (milliseconds) to avoid spam from repeated triggers
 const SOUND_COOLDOWNS_MS: Partial<Record<SoundEffect, number>> = {
   button_click: 120,
-  menu_open: 500,
-  menu_close: 500,
+  // Make menu open/close less chatty by increasing cooldown
+  menu_open: 1000,
+  menu_close: 1000,
   dice_tick: 30,
   hit_received: 80,
   attack_melee: 100,
@@ -129,6 +147,28 @@ class AudioService {
   private lastPlayedTimestamps: Map<SoundEffect, number> = new Map();
   // Debug flag to enable verbose SFX logs for troubleshooting repeated triggers
   private debugSfx: boolean = false;
+  // Recent SFX event buffer (circular) to aid debugging repeated triggers
+  private recentSfxEvents: Array<{ts:number, kind:'play'|'skip'|'modal_open'|'modal_close'|'error', effect?: SoundEffect, path?: string, stack?: string, msg?: string}> = [];
+
+  private pushSfxEvent(event: {kind:'play'|'skip'|'modal_open'|'modal_close'|'error', effect?: SoundEffect, path?: string, stack?: string, msg?: string}) {
+    try {
+      const item = { ...event, ts: Date.now() };
+      this.recentSfxEvents.push(item);
+      // Keep buffer bounded
+      if (this.recentSfxEvents.length > 250) this.recentSfxEvents.shift();
+      if (this.debugSfx) console.debug('📝 SFX event:', item);
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  public getRecentSfxEvents() {
+    return [...this.recentSfxEvents];
+  }
+
+  public clearRecentSfxEvents() {
+    this.recentSfxEvents = [];
+  }
 
   public setDebugSfx(enabled: boolean): void {
     this.debugSfx = !!enabled;
@@ -223,9 +263,11 @@ class AudioService {
         if (cooldown > 0 && now - last < cooldown) {
           // Skip playing to prevent spam
           if (this.debugSfx) console.debug(`🔇 SFX cooldown: Skipping "${effect}" (${now - last}ms < ${cooldown}ms)`, new Error().stack);
+          this.pushSfxEvent({ kind: 'skip', effect, path, stack: new Error().stack });
           return;
         }
         if (this.debugSfx) console.debug(`▶️ Playing SFX "${effect}"`, new Error().stack);
+        this.pushSfxEvent({ kind: 'play', effect, path, stack: new Error().stack });
         this.lastPlayedTimestamps.set(effect, now);
       } catch (e) {
         // ignore timing guard failures
@@ -238,6 +280,8 @@ class AudioService {
           console.warn(`Failed to play sound effect "${effect}" (${path}):`, e);
           try {
             const msg = (e && e.message) ? e.message : String(e);
+            // push an event for debug tracing
+            this.pushSfxEvent({ kind: 'error', effect, path, stack: (new Error().stack || ''), msg });
             if (e && (e.name === 'NotSupportedError' || /no supported source/i.test(msg) || /not supported/i.test(msg))) {
               this.soundAvailabilityCache.set(path, false);
               console.debug(`Marked sound as unavailable: ${path}`);
@@ -249,6 +293,7 @@ class AudioService {
       } else if (typeof playResult === 'undefined') {
         // Non-throwing fallback: play() is not implemented; mark as unavailable to silence repeated attempts
         this.soundAvailabilityCache.set(path, false);
+        this.pushSfxEvent({ kind: 'error', effect, path, stack: (new Error().stack || ''), msg: 'no play support' });
         console.debug(`Marked sound as unavailable (no play support): ${path}`);
       }
     } catch (e) {
@@ -413,27 +458,58 @@ class AudioService {
   // Track how many modals are open. This prevents repeatedly playing menu_open/menu_close when
   // nested modal components mount/unmount while the overall modal stack stays open.
   private modalOpenCount: number = 0;
+  // Track last modal notify time to suppress rapid open/close toggle noise
+  private lastModalNotifyTs: number = 0;
+  private lastModalEventKind: 'open' | 'close' | null = null;
 
-  public notifyModalOpen(): void {
+  public notifyModalOpen(callerStack?: string): void {
     try {
+      const now = Date.now();
       this.modalOpenCount = (this.modalOpenCount || 0) + 1;
-      if (this.modalOpenCount === 1) {
-        this.playSoundEffect('menu_open');
+      // If we just closed and reopened very quickly, suppress the menu_open sound to avoid spam
+      if (this.lastModalEventKind === 'close' && now - this.lastModalNotifyTs < 150) {
+        if (this.debugSfx) console.debug('🔇 Suppressing quick modal re-open (rapid toggle)', new Error().stack);
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_open', path: SOUND_EFFECTS['menu_open'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
+      } else {
+        this.pushSfxEvent({ kind: 'modal_open', stack: callerStack || (new Error().stack || '') });
+        if (this.modalOpenCount === 1) {
+          // menu_open sound suppressed intentionally
+          if (this.debugSfx) console.debug('🔇 menu_open sound suppressed (disabled)');
+        }
       }
+      this.lastModalNotifyTs = now;
+      this.lastModalEventKind = 'open';
     } catch (e) {
       console.warn('Failed to notify modal open', e);
+      this.pushSfxEvent({ kind: 'error', msg: 'notifyModalOpen failure', stack: (e && e.stack) ? e.stack : String(e) });
     }
   }
 
-  public notifyModalClose(): void {
+  public notifyModalClose(callerStack?: string): void {
     try {
       if (!this.modalOpenCount) return;
+      const now = Date.now();
       this.modalOpenCount = Math.max(0, this.modalOpenCount - 1);
-      if (this.modalOpenCount === 0) {
-        this.playSoundEffect('menu_close');
+      // If we just opened and closed very quickly, suppress the menu_close sound to avoid spam
+      if (this.lastModalEventKind === 'open' && now - this.lastModalNotifyTs < 150) {
+        if (this.debugSfx) console.debug('🔇 Suppressing quick modal close (rapid toggle)', new Error().stack);
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: SOUND_EFFECTS['menu_close'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'rapid toggle suppress' });
+      // Additionally, if we've recently emitted a menu_close, suppress repeated closes for a longer window
+      } else if (this.lastModalEventKind === 'close' && now - this.lastModalNotifyTs < 800) {
+        if (this.debugSfx) console.debug('🔇 Suppressing repeated menu_close (within 800ms)', new Error().stack);
+        this.pushSfxEvent({ kind: 'skip', effect: 'menu_close', path: SOUND_EFFECTS['menu_close'] || undefined, stack: callerStack || (new Error().stack || ''), msg: 'repeated close suppress' });
+      } else {
+        this.pushSfxEvent({ kind: 'modal_close', stack: callerStack || (new Error().stack || '') });
+        if (this.modalOpenCount === 0) {
+          // menu_close sound suppressed intentionally
+          if (this.debugSfx) console.debug('🔇 menu_close sound suppressed (disabled)');
+        }
       }
+      this.lastModalNotifyTs = now;
+      this.lastModalEventKind = 'close';
     } catch (e) {
       console.warn('Failed to notify modal close', e);
+      this.pushSfxEvent({ kind: 'error', msg: 'notifyModalClose failure', stack: (e && e.stack) ? e.stack : String(e) });
     }
   }
 
@@ -555,6 +631,11 @@ class AudioService {
 
 // Singleton instance
 export const audioService = new AudioService();
+
+// Expose helper globally for easy debugging in dev (console): window.audioService
+if (typeof window !== 'undefined') {
+  try { (window as any).audioService = audioService; } catch (e) { /* ignore */ }
+}
 
 // Helper hooks for React components
 export function useAudioConfig() {
