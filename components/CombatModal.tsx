@@ -555,65 +555,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     return () => { if (t) window.clearInterval(t); };
   }, [combatState.combatStartTime]);
 
-  // Trigger loot phase after combat ends - auto-finalize loot and emit result
+  // Trigger loot phase after combat ends - show loot modal for player to review before finalizing
   useEffect(() => {
     if (combatState.result === 'victory') {
       const populatedState = populatePendingLoot(combatState);
 
-      // Automatically finalize loot (award all pending rewards) to avoid a separate victory screen
-      try {
-        const { newState, updatedInventory, grantedXp, grantedGold, grantedItems } = finalizeLoot(
-          populatedState,
-          // null indicates no manual selection; default to granting pending rewards
-          null,
-          inventory
-        );
-
-        setCombatState(newState);
-        // Persist updated inventory snapshot
-        onInventoryUpdate && onInventoryUpdate(updatedInventory);
-        // Show consolidated loot toast: items (if any) and explicit XP/gold gains
-        if ((grantedItems && grantedItems.length) || (grantedGold && grantedGold > 0) || (grantedXp && grantedXp > 0)) {
-          const parts: string[] = [];
-          if (grantedItems && grantedItems.length) parts.push(`Items: ${grantedItems.map(i => i.name).join(', ')}`);
-          if (grantedXp && grantedXp > 0) parts.push(`${grantedXp} XP`);
-          if (grantedGold && grantedGold > 0) parts.push(`${grantedGold} gold`);
-          showToast?.(`Loot collected: ${parts.join(' — ')}`, 'success');
-        } else {
-          showToast?.('Loot collected: nothing found.', 'info');
-        }
-
-        // Build a structured combat result and notify parent immediately
-        const combatResult = {
-          id: newState.id || `combat_${Date.now()}`,
-          result: 'victory' as const,
-          winner: 'player' as const,
-          survivors: newState.enemies.filter(e => e.currentHealth > 0).map(e => ({ id: e.id, name: e.name, currentHealth: e.currentHealth })),
-          playerStatus: {
-            currentHealth: playerStats.currentHealth,
-            currentMagicka: playerStats.currentMagicka,
-            currentStamina: playerStats.currentStamina,
-            isAlive: playerStats.currentHealth > 0
-          },
-          rewards: newState.rewards,
-          timestamp: Date.now()
-        };
-
-        // Attach combatResult to state for observability
-        setCombatState(prev => ({ ...prev, combatResult } as any));
-
-        // Propagate final result so App can apply narrative and auto-resume (include full combatResult)
-        onCombatEnd && onCombatEnd('victory', newState.rewards, {
-          health: playerStats.currentHealth,
-          magicka: playerStats.currentMagicka,
-          stamina: playerStats.currentStamina
-        }, Math.max(0, Math.round((newState.combatElapsedSec || 0) / 60)), combatResult);
-      } catch (e) {
-        // Fallback: if finalize fails, open the normal loot modal so the player can continue manually
-        console.error('Auto-finalize loot failed, falling back to manual loot phase:', e);
-        setCombatState(populatedState);
-        setLootPhase(true);
-      }
+      // Show the loot modal for the player to review and confirm loot collection.
+      // This prevents the combat UI from closing abruptly and ensures players can see loot.
+      setCombatState(populatedState);
+      setLootPhase(true);
+      // Informational toast
+      showToast?.('Victory! Review your loot and confirm to finish combat.', 'success');
     }
   }, [combatState.result]);
 
@@ -630,7 +582,30 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     showToast?.(`Loot collected: ${grantedItems.map(item => item.name).join(', ')}`, 'success');
     setLootPhase(false);
 
-    // Victory is now handled inline (auto-finalized). Parent will be notified via onCombatEnd; no separate victory screen.
+    // After player confirms loot, build combat result and notify parent to finish combat.
+    const combatResult = {
+      id: newState.id || `combat_${Date.now()}`,
+      result: 'victory' as const,
+      winner: 'player' as const,
+      survivors: newState.enemies.filter(e => e.currentHealth > 0).map(e => ({ id: e.id, name: e.name, currentHealth: e.currentHealth })),
+      playerStatus: {
+        currentHealth: playerStats.currentHealth,
+        currentMagicka: playerStats.currentMagicka,
+        currentStamina: playerStats.currentStamina,
+        isAlive: playerStats.currentHealth > 0
+      },
+      rewards: newState.rewards,
+      timestamp: Date.now()
+    };
+
+    setCombatState(prev => ({ ...prev, combatResult } as any));
+
+    // Notify parent that combat is finished (victory) after loot accepted by player
+    onCombatEnd && onCombatEnd('victory', newState.rewards, {
+      health: playerStats.currentHealth,
+      magicka: playerStats.currentMagicka,
+      stamina: playerStats.currentStamina
+    }, Math.max(0, Math.round((newState.combatElapsedSec || 0) / 60)), combatResult);
   };
 
   // When entering loot phase, keep combat UI open and show LootModal
