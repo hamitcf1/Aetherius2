@@ -725,12 +725,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
 
         try {
-          if (last.isCrit) {
-            new Audio(`${BASE_PATH}/audio/sfx/crit_player.mp3`).play().catch(() => {});
-          } else {
-            new Audio(`${BASE_PATH}/audio/sfx/hit_player.mp3`).play().catch(() => {});
-          }
-        } catch (e) {}
+          // Play centralized 'hit received' sound via AudioService to ensure availability and user settings are respected
+          playCombatSound('hit');
+        } catch (e) { console.warn('Failed to play hit received sound', e); }
       }
       
       // Check for combat end
@@ -918,12 +915,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       // Play hit or crit sound if available
       try {
+        // Use centralized audio service for impact/crit feedback to respect user settings
         if (last.isCrit) {
-          new Audio(`${BASE_PATH}/audio/sfx/crit.mp3`).play().catch(() => {});
+          audioService.playSoundEffect('attack_melee');
         } else {
-          new Audio(`${BASE_PATH}/audio/sfx/hit.mp3`).play().catch(() => {});
+          audioService.playSoundEffect('spell_impact');
         }
-      } catch (e) {}
+      } catch (e) { console.warn('Failed to play impact sound', e); }
     }
     
     // In tests this will resolve instantly, but in production we keep the short delay for UX
