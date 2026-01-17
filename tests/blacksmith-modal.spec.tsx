@@ -80,6 +80,9 @@ describe('Blacksmith modal upgrade flow', () => {
     const itemBtn = screen.getByText(/Test Sword/i);
     fireEvent.click(itemBtn);
 
+    // visual selection should set ARIA state so it's testable
+    expect(itemBtn.closest('button')?.getAttribute('aria-pressed')).toBe('true');
+
     const confirm = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirm).toBeTruthy();
 
@@ -101,7 +104,7 @@ describe('Blacksmith modal upgrade flow', () => {
 
   it('disables upgrade when required materials are not present in shop and shows requirement text', () => {
     const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1 } as any
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' } as any
     ];
     let currentItems = [...items];
     const setItems = (next: any) => { currentItems = next; };
@@ -124,7 +127,7 @@ describe('Blacksmith modal upgrade flow', () => {
 
   it('allows upgrade when required materials are available in the shop', () => {
     const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1 } as any
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' } as any
     ];
     let currentItems = [...items];
     const setItems = (next: any) => { currentItems = next; };

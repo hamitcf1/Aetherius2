@@ -2493,6 +2493,8 @@ const App: React.FC = () => {
           quantity: 1,
           ...( { value: shopItem.price, slot } as any),
           ...stats,
+          ...(stats.damage ? { baseDamage: stats.damage } : {}),
+          ...(stats.armor ? { baseArmor: stats.armor } : {}),
           ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
           __forceCreate: true,
           createdAt: Date.now()

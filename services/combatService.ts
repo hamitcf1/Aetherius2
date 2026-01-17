@@ -109,6 +109,12 @@ const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|hors
 const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
   state.combatLog = state.combatLog || [];
   const last = state.combatLog[state.combatLog.length - 1];
+  // Debug: surface when nat/roll entries are pushed (helps trace races in tests)
+  try {
+    // eslint-disable-next-line no-console
+    if (entry.nat !== undefined) console.debug && console.debug('[combatService] pushCombatLogUnique adding roll entry', { entry });
+  } catch (e) {}
+
   // Consider entries duplicates if same turn, actor, narrative, and damage (ignoring timestamp)
   if (!last || last.turn !== entry.turn || last.actor !== entry.actor || last.narrative !== entry.narrative || (last.damage !== undefined && entry.damage !== undefined && last.damage !== entry.damage)) {
     state.combatLog.push(entry);

@@ -168,9 +168,15 @@ export interface InventoryItem {
   // Upgrade fields for blacksmith system
   upgradeLevel?: number; // current upgrade tier (0 = base)
   maxUpgradeLevel?: number; // optional per-item override for max upgrades
+  // Persisted base stats (if present) — used to show "base + upgrade bonus" in UI.
+  // When an item is created (shop/loot) we set these from canonical stats; the
+  // upgrade flow will preserve `baseDamage`/`baseArmor` so UI can show breakdowns.
+  baseDamage?: number;
+  baseArmor?: number;
   // Optional per-item material requirements for upgrades. When present, the blacksmith
   // will require these materials to be available in the shop (or provided via the
-  // upgradeService context) before allowing the upgrade.
+  // upgradeService context) before allowing the upgrade. By default, centralized
+  // recipes are only enforced for rarity `rare` and above (see upgradeService).
   upgradeRequirements?: Array<{ itemId: string; quantity?: number }>;
   // Optional explicit hints
   handedness?: 'one-handed' | 'two-handed' | 'off-hand-only';

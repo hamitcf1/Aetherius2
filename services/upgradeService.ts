@@ -65,7 +65,7 @@ export function getUpgradeCost(item: InventoryItem): number {
   }
 
   // Soft cap to avoid astronomical upgrade prices in corner cases
-  const SOFT_CAP = 2000;
+  const SOFT_CAP = 10000;
   cost = Math.min(cost, SOFT_CAP);
   return Math.max(1, cost);
 }
@@ -79,15 +79,32 @@ const UPGRADE_RECIPES: Record<string, Array<{ nextUpgradeLevel?: number; require
   'honed_steel_longsword': [ { requirements: [{ itemId: 'steel_ingot', quantity: 3 }] } ]
 };
 
+// Rarity map used for gating recipe enforcement
+const RARITY_INDEX: Record<string, number> = {
+  common: 0,
+  uncommon: 1,
+  rare: 2,
+  mythic: 3,
+  epic: 4,
+  legendary: 5
+};
+const isRarityAtLeast = (r?: string, threshold: string = 'rare') => (RARITY_INDEX[(r || 'common')] ?? 0) >= (RARITY_INDEX[threshold] ?? 2);
+
 /**
  * Returns material requirements for the *next* upgrade of `item`, if any.
  * Prefers an explicit `item.upgradeRequirements` on the InventoryItem, then
- * falls back to named entries in UPGRADE_RECIPES.
+ * falls back to named entries in UPGRADE_RECIPES. Central recipes are only
+ * enforced for rarity `rare` and above — per design, common/uncommon upgrades
+ * do not require smithing materials by default.
  */
 export function getRequirementsForNextUpgrade(item: InventoryItem) {
   if (!item) return undefined;
   const explicit = (item as any).upgradeRequirements as Array<{ itemId: string; quantity?: number }> | undefined;
   if (explicit && explicit.length > 0) return explicit;
+
+  // Only enforce central recipes for items of rarity `rare` or higher
+  const itemRarity = (item.rarity || 'common') as string;
+  if (!isRarityAtLeast(itemRarity, 'rare')) return undefined;
 
   const key = item.id || (item.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
   const recipes = UPGRADE_RECIPES[key];
@@ -127,7 +144,7 @@ export function canUpgrade(item: InventoryItem, opts?: { shopItemIds?: string[] 
     return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
   }
   return true;
-} 
+}  
 
 // Player level gating: require higher player levels for high-tier upgrades.
 // Returns required player level for the *next* upgrade (0 = no requirement).
@@ -177,6 +194,9 @@ export function previewUpgradeStats(item: InventoryItem) {
   return preview;
 }
 
+// support computing base stats and bonuses (uses canonical stats as fallback)
+import { getItemStats } from './itemStats';
+
 export function applyUpgrade(item: InventoryItem): { updated: InventoryItem; cost: number } {
   if (!canUpgrade(item)) throw new Error('Max upgrade reached');
   const cost = getUpgradeCost(item);
@@ -187,7 +207,8 @@ export function applyUpgrade(item: InventoryItem): { updated: InventoryItem; cos
   // If not yet at max: apply a normal per-level upgrade using the per-rarity per-level bonus
   if (currentLevel < max) {
     const nextLevel = currentLevel + 1;
-    const updated: InventoryItem = { ...item, upgradeLevel: nextLevel };
+    // Preserve base stats so UI can always show base + bonus
+    const updated: InventoryItem = { ...item, upgradeLevel: nextLevel, baseDamage: item.baseDamage ?? item.damage, baseArmor: item.baseArmor ?? item.armor };
     if (item.type === 'weapon' && typeof item.damage === 'number') {
       const perLevel = WEAPON_DAMAGE_BONUS_PER_LEVEL_BY_RARITY[rarity] ?? WEAPON_DAMAGE_BONUS_PER_LEVEL_BY_RARITY.common;
       const bonus = 1 + perLevel * nextLevel;
@@ -225,10 +246,29 @@ export function applyUpgrade(item: InventoryItem): { updated: InventoryItem; cos
   throw new Error('Item is already at highest rarity and maxed');
 }
 
+/**
+ * Utility: return base / bonus / total values for UI display. Falls back to
+ * canonical stats (`getItemStats`) when `baseDamage`/`baseArmor` are not set on
+ * the InventoryItem.
+ */
+export function getItemBaseAndBonus(item: InventoryItem) {
+  const canonical = getItemStats(item.name || '', item.type);
+  const baseDamage = (item.baseDamage ?? canonical.damage ?? (item.damage ?? 0)) as number | undefined;
+  const totalDamage = (item.damage ?? baseDamage) as number | undefined;
+  const bonusDamage = typeof baseDamage === 'number' && typeof totalDamage === 'number' ? Math.max(0, totalDamage - baseDamage) : 0;
+
+  const baseArmor = (item.baseArmor ?? canonical.armor ?? (item.armor ?? 0)) as number | undefined;
+  const totalArmor = (item.armor ?? baseArmor) as number | undefined;
+  const bonusArmor = typeof baseArmor === 'number' && typeof totalArmor === 'number' ? Math.max(0, totalArmor - baseArmor) : 0;
+
+  return { baseDamage, bonusDamage, totalDamage, baseArmor, bonusArmor, totalArmor };
+}
+
 export default {
   getUpgradeCost,
   applyUpgrade,
   canUpgrade,
   previewUpgradeStats,
-  getMaxUpgradeForItem
+  getMaxUpgradeForItem,
+  getItemBaseAndBonus
 };

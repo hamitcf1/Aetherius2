@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { InventoryItem, EquipmentSlot } from '../types';
 import { Sword, Shield, Crown, Shirt, Hand, Footprints, CircleDot, Gem, X, Swords, Star, Lock } from 'lucide-react';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
+// Show base + upgrade bonus breakdowns in equipment tooltips
+import { getItemBaseAndBonus } from '../services/upgradeService';
 
 interface EquipmentHUDProps {
   items: InventoryItem[];
@@ -78,6 +80,11 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
       // Get stats from item, or fall back to itemStats service
       let itemArmor = item.armor;
       let itemDamage = item.damage;
+      try {
+        const b = getItemBaseAndBonus(item as any);
+        if (b.totalArmor) itemArmor = b.totalArmor;
+        if (b.totalDamage) itemDamage = b.totalDamage;
+      } catch (e) {}
       
       if ((itemArmor === undefined || itemDamage === undefined) && shouldHaveStats(item.type)) {
         const stats = getItemStats(item.name, item.type);
@@ -194,8 +201,14 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                     {/* Stats tooltip */}
                     <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-skyrim-paper/95 border border-skyrim-gold/50 rounded px-2 py-1 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
                       <div className="text-skyrim-gold font-bold">{equipped.name}</div>
-                      {equipped.armor && <div className="text-blue-400">Armor: {equipped.armor}</div>}
-                      {equipped.damage && <div className="text-red-400">Damage: {equipped.damage}</div>}
+                      {equipped.armor && (() => {
+                        const b = getItemBaseAndBonus(equipped as any);
+                        return <div className="text-blue-400">Armor: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</div>; 
+                      })()}
+                      {equipped.damage && (() => {
+                        const b = getItemBaseAndBonus(equipped as any);
+                        return <div className="text-red-400">Damage: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</div>; 
+                      })()}
                     </div>
                   </>
                 ) : (

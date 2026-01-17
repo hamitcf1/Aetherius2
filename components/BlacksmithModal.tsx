@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
 import type { ShopItem } from './ShopModal';
-import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade } from '../services/upgradeService';
+import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade, getItemBaseAndBonus } from '../services/upgradeService';
 import { Sword, Shield, Coins } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
@@ -260,21 +260,27 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-1">
             <h3 className="text-sm text-skyrim-text mb-2">Eligible Items</h3>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-6" style={{ scrollbarGutter: 'stable' as any }}>
+              {/* Reserved gutter and extra right padding prevents the scrollbar from overlapping the "Selected" badge */}
               {eligible.map(it => (
-                <button key={it.id} onClick={() => setSelectedId(it.id)} className={`w-full text-left p-3 rounded border ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/10' : 'border-skyrim-border hover:border-skyrim-gold/40'}`}>
+                <button aria-pressed={selectedId === it.id} key={it.id} onClick={() => setSelectedId(it.id)} className={`w-full text-left p-3 rounded border transition-all ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/12 ring-2 ring-skyrim-gold/30 shadow-[0_8px_30px_rgba(0,0,0,0.45)]' : 'border-skyrim-border hover:border-skyrim-gold/40'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="p-2 rounded bg-skyrim-paper/40 text-skyrim-gold">{it.type === 'weapon' ? <Sword size={16}/> : <Shield size={16}/>}</div>
+                      <div className={`p-2 rounded bg-skyrim-paper/40 text-skyrim-gold ${selectedId === it.id ? 'scale-105' : ''}`}>{it.type === 'weapon' ? <Sword size={16}/> : <Shield size={16}/>}</div>
                       <div>
                         <div className="text-skyrim-gold font-serif">{it.name}</div>
                         <div className="text-xs text-skyrim-text">Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</div>
                       </div>
                     </div>
-                    <div className="text-xs text-gray-300">{it.value ?? ''}g</div>
+                    <div className="text-xs text-gray-300 flex items-center gap-2 min-w-[64px] justify-end">
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">{it.value ?? ''}g</div>
+                        {selectedId === it.id && <div className="ml-2 text-xs text-yellow-300 font-semibold z-10">Selected</div>}
+                      </div>
+                    </div>
                   </div>
                 </button>
-              ))}
+              ))} 
               {eligible.length === 0 && <div className="text-gray-500 italic">No weapons or armor available.</div>}
             </div>
           </div>
@@ -298,19 +304,30 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                       <div>
                         <div className="text-xs text-gray-300">Current Stats</div>
                         <div className="mt-1 text-skyrim-gold font-serif">
-                          {selected.damage !== undefined && <div>Damage: {selected.damage}</div>}
-                          {selected.armor !== undefined && <div>Armor: {selected.armor}</div>}
+{(() => {
+
+                              const b = getItemBaseAndBonus(selected as any);
+                              return (
+                                <>
+                                  {typeof b.totalDamage === 'number' && <div>Damage: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</div>}
+                                  {typeof b.totalArmor === 'number' && <div>Armor: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</div>}
+                                </>
+                              );
+                            })()}
                         </div>
                       </div>
-                      <div>
+                      <div className="mt-4">
                         <div className="text-xs text-gray-300">After Upgrade</div>
                         <div className="mt-1 text-skyrim-gold font-serif">
                           {(() => {
                             const preview = previewUpgradeStats(selected);
+                            const b = getItemBaseAndBonus(selected as any);
+                            const previewDamage = typeof preview.damage === 'number' ? preview.damage : undefined;
+                            const previewArmor = typeof preview.armor === 'number' ? preview.armor : undefined;
                             return (
                               <>
-                                {preview.damage !== undefined && <div>Damage: {preview.damage}</div>}
-                                {preview.armor !== undefined && <div>Armor: {preview.armor}</div>}
+                                {typeof previewDamage === 'number' && <div>Damage: {previewDamage}{(b.baseDamage && previewDamage - (b.baseDamage || 0)) ? ` (${b.baseDamage} + ${previewDamage - (b.baseDamage || 0)})` : ''}</div>}
+                                {typeof previewArmor === 'number' && <div>Armor: {previewArmor}{(b.baseArmor && previewArmor - (b.baseArmor || 0)) ? ` (${b.baseArmor} + ${previewArmor - (b.baseArmor || 0)})` : ''}</div>}
                               </>
                             );
                           })()}

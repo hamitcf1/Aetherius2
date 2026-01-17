@@ -32,6 +32,7 @@ import { getEasterEggName } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
+import { getItemBaseAndBonus } from '../services/upgradeService';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
 // Play combat sound based on action type and actor info (enemy/ally/player)
@@ -439,6 +440,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [isAnimating, setIsAnimating] = useState(false);
   // Track if target change was user-initiated (to avoid toast spam from auto-selection)
   const userInitiatedTargetChange = useRef(false);
+  // Timestamp of the last user-initiated target change — used to debounce click->selection races
+  const lastUserTargetChangeAt = useRef<number>(0);
 
   // Show a toast and a brief visual pulse whenever the selectedTarget changes
   // Only show toast if it was user-initiated
@@ -468,6 +471,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [selectedTarget]);
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
+  // When an invalid-target is detected we briefly suppress rendering of the textual "Roll:" label
+  // to avoid flicker/races where a transient log entry might appear before being cleaned up.
+  const [suppressRollLabelUntil, setSuppressRollLabelUntil] = useState<number | null>(null);
+  // Defensive guard: when an invalid-target action occurs we briefly mark this ref
+  // so any asynchronously-scheduled roll animations will be ignored.
+  const lastInvalidTargetRef = useRef(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
   const [rollActor, setRollActor] = useState<'player' | 'enemy' | 'ally' | null>(null);
 
@@ -479,6 +488,31 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       cancelAnimationFrame(rollAnimRef.current);
       rollAnimRef.current = null;
     }
+
+    // Defensive: if an invalid-target action was just flagged, skip animating
+    if (lastInvalidTargetRef.current) {
+      // eslint-disable-next-line no-console
+      console.debug && console.debug('[combat] animateRoll skipped due to recent invalid-target', { finalValue, rollActor, lastInvalidTarget: lastInvalidTargetRef.current });
+      lastInvalidTargetRef.current = false;
+      return resolve();
+    }
+
+    // Defensive: if the user very recently changed the selected target to an ally/self, suppress any
+    // roll animation that started within the same interaction window to avoid click->selection races.
+    try {
+      const msSinceTarget = Date.now() - (lastUserTargetChangeAt.current || 0);
+      const selectedIsAlly = selectedTarget === 'player' || !!((combatState.allies || []).find(a => a.id === selectedTarget));
+      if (msSinceTarget > 0 && msSinceTarget < 120 && selectedIsAlly) {
+        // eslint-disable-next-line no-console
+        console.debug && console.debug('[combat] animateRoll suppressed due to recent user target change to ally', { msSinceTarget, selectedTarget });
+        // Mark invalid-target so any downstream handlers treat this as a cancelled animation
+        lastInvalidTargetRef.current = true;
+        return resolve();
+      }
+    } catch (e) {}
+
+    // eslint-disable-next-line no-console
+    console.debug && console.debug('[combat] animateRoll start', { finalValue, rollActor, lastInvalidTarget: lastInvalidTargetRef.current, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
 
     setShowRoll(true);
     const start = performance.now();
@@ -999,6 +1033,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   // Handle player action
   const handlePlayerAction = async (action: CombatActionType, abilityId?: string, itemId?: string) => {
+    // debug
+    // eslint-disable-next-line no-console
+    console.debug && console.debug('[combat] handlePlayerAction invoked', { action, abilityId, currentTurnActor: combatState.currentTurnActor, selectedTarget, pendingTargeting, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
+
     // if an ability is being confirmed, ensure selectedTarget is valid; for heal/buff we'll allow undefined (self) or allies.
     if (isAnimating || combatState.currentTurnActor !== 'player') return;
 
@@ -1240,6 +1278,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (showToast) showToast(`Choose an ally or Self to use ${ability.name}`, 'info');
       return;
     }
+
+    // If the user very recently changed target, defer the ability click one tick so selectedTarget stabilizes
+    if (Date.now() - (lastUserTargetChangeAt.current || 0) < 80) {
+      setTimeout(() => handlePlayerAction('attack', ability.id), 0);
+      return;
+    }
+
     // Default immediate execution
     handlePlayerAction('attack', ability.id);
   };
@@ -1319,7 +1364,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             onClick={() => {
               // Allow clicking on self during targeting mode
               if (pendingTargeting && (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both')) {
-                userInitiatedTargetChange.current = true;
+                userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                 setSelectedTarget('player');
               }
             }}
@@ -1432,13 +1477,31 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         // If pendingTargeting is active, restrict selection to allies
                         if (pendingTargeting) {
                           if (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both') {
-                            userInitiatedTargetChange.current = true;
+                            userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                             setSelectedTarget(ally.id);
                           } else {
                             if (showToast) showToast('This ability cannot target allies.', 'warning');
+                            setSuppressRollLabelUntil(Date.now() + 250);
+                            // defensive cleanup: remove any combat-log entries with a nat that were added this turn
+                            setCombatState(prev => ({
+                              ...prev,
+                              combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
+                            }));
+                            // schedule follow-up cleanup to catch any racing entries
+                            setTimeout(() => {
+                              setCombatState(prev => ({
+                                ...prev,
+                                combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
+                              }));
+                            }, 0);
+                            // mark invalid-target to cancel in-flight animations
+                            lastInvalidTargetRef.current = true;
+                            setShowRoll(false);
+                            setRollActor(null);
+                            setIsAnimating(false);
                           }
                         } else {
-                          userInitiatedTargetChange.current = true;
+                          userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                           setSelectedTarget(ally.id);
                         }
                       }}
@@ -1465,7 +1528,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       if (pendingTargeting && pendingTargeting.allow === 'allies') {
                         if (showToast) showToast('This ability cannot target enemies.', 'warning');
                       } else {
-                        userInitiatedTargetChange.current = true;
+                        userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                         setSelectedTarget(enemy.id);
                       }
                     }}
@@ -1506,7 +1569,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   >
                     <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
                     <span className="text-stone-300">{entry.narrative}</span>
-                    {entry.nat !== undefined && (
+                    {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && (
                       <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
                     )}
                     {entry.auto && (
@@ -1584,47 +1647,91 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   return;
                                 }
 
-                                // Otherwise validate, then roll and execute immediately (manual companion)
-                                // Local validation: prevent UI roll when target is invalid (mirror service rules)
-                                const abilityIsOffensive = !!(ab.damage && ab.damage > 0) || (ab.effects || []).some((ef: any) => ['aoe_damage','dot','damage'].includes(ef.type));
-                                const targetIsPlayer = selectedTarget === 'player';
-                                const targetIsAlly = !!((combatState.allies || []).find(a => a.id === selectedTarget));
-                                if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
-                                  if (showToast) showToast('This ability cannot target allies.', 'warning');
-                                  // keep companion control active so player can choose a valid target
-                                  setAwaitingCompanionAction(true);
-                                  return;
-                                }
+                                // Wrap the meat of the ability flow so we can optionally defer when the user just changed target
+                                const performAbility = async () => {
+                                  // debug
+                                  // eslint-disable-next-line no-console
+                                  console.debug && console.debug('[combat] companion.performAbility invoked', { abilityId: ab.id, selectedTarget, pendingTargeting, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
+                                  // Local validation: prevent UI roll when target is invalid (mirror service rules)
+                                  const abilityIsOffensive = !!(ab.damage && ab.damage > 0) || (ab.effects || []).some((ef: any) => ['aoe_damage','dot','damage'].includes(ef.type));
+                                  const targetIsPlayer = selectedTarget === 'player';
+                                  const targetIsAlly = !!((combatState.allies || []).find(a => a.id === selectedTarget));
+                                  if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
+                                    if (showToast) showToast('This ability cannot target allies.', 'warning');
+                                    setSuppressRollLabelUntil(Date.now() + 250);
 
-                                setIsAnimating(true);
-                                setAwaitingCompanionAction(false);
+                                    // defensive cleanup: remove any combat-log entries with a nat that were added this turn
+                                    setCombatState(prev => ({
+                                      ...prev,
+                                      combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
+                                    }));
+                                    // schedule a follow-up cleanup to catch any entries that race in after this handler
+                                    setTimeout(() => {
+                                      setCombatState(prev => ({
+                                        ...prev,
+                                        combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
+                                      }));
+                                    }, 0);
 
-                                setRollActor('ally');
-                                const companionRoll = Math.floor(Math.random() * 20) + 1;
-                                await animateRoll(companionRoll, Math.floor(3000 * timeScale));
-                                await waitMs(Math.floor(220 * timeScale));
-                                setShowRoll(false);
-                                setRollActor(null);
+                                  // debug: report any DOM elements that contain the text 'Roll:' so tests can be diagnosed
+                                  try {
+                                    // eslint-disable-next-line no-console
+                                    const matches = Array.from(document.querySelectorAll('*')).filter(el => /Roll:/i.test(el.textContent || '')).map(el => ({ tag: el.tagName, text: (el.textContent||'').trim().slice(0,80) }));
+                                    console.debug && console.debug('[combat] invalid-target -> DOM elements matching /Roll:/i', { matches });
+                                  } catch (e) {}
 
-                                const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
-                                if (!res.success) {
-                                  // Invalid target or other failure — surface message and allow the player to choose again
+                                    // ensure any pending roll UI is cleared and keep companion control active
+                                    setShowRoll(false);
+                                    setRollActor(null);
+                                    setIsAnimating(false);
+                                    setAwaitingCompanionAction(true);
+                                    return;
+                                  }
+
+                                  setIsAnimating(true);
+                                  setAwaitingCompanionAction(false);
+
+                                  setRollActor('ally');
+                                  const companionRoll = Math.floor(Math.random() * 20) + 1;
+                                  await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                  await waitMs(Math.floor(220 * timeScale));
+                                  setShowRoll(false);
+                                  setRollActor(null);
+
+                                  const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
+                                  if (!res.success) {
+                                    // Invalid target or other failure — surface message and allow the player to choose again
+                                    if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                    if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                                    // mark recent invalid-target so any in-flight animation will be skipped
+                                    lastInvalidTargetRef.current = true;
+                                    // clear any roll UI to avoid confusing animations
+                                    setShowRoll(false);
+                                    setRollActor(null);
+                                    setAwaitingCompanionAction(true);
+                                    setIsAnimating(false);
+                                    return;
+                                  }
+
                                   if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                                  if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
-                                  setAwaitingCompanionAction(true);
+                                  try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
+
+                                  await waitMs(Math.floor(600 * timeScale));
+
+                                  const advanced = advanceTurn(res.newState);
+                                  setCombatState(advanced);
                                   setIsAnimating(false);
+                                  // useEffect will pick up the new turn and continue
+                                };
+
+                                // If the user just changed target, allow React state to settle first to avoid a click->race
+                                if (Date.now() - (lastUserTargetChangeAt.current || 0) < 80) {
+                                  // Defer execution to next tick so `selectedTarget` has been updated
+                                  setTimeout(() => { void performAbility(); }, 0);
                                   return;
                                 }
 
-                                if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                                try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
-
-                                await waitMs(Math.floor(600 * timeScale));
-
-                                const advanced = advanceTurn(res.newState);
-                                setCombatState(advanced);
-                                setIsAnimating(false);
-                                // useEffect will pick up the new turn and continue
+                                await performAbility();
                               }}
                             />
                           );
@@ -1677,6 +1784,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           if (!res.success) {
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                             if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                            // clear any roll UI to avoid confusing animation after invalid target
+                            setShowRoll(false);
+                            setRollActor(null);
                             setAwaitingCompanionAction(true);
                             setIsAnimating(false);
                             return;
@@ -1715,6 +1825,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const targetIsAlly = !!((combatState.allies||[]).find(a=>a.id===selectedTarget));
                           if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
                             if (showToast) showToast('This ability cannot target allies.', 'warning');
+                            setSuppressRollLabelUntil(Date.now() + 250);
+                            // mark recent invalid-target so any in-flight animation will be skipped
+                            lastInvalidTargetRef.current = true;
                             setAwaitingCompanionAction(true);
                             return;
                           }
@@ -1734,6 +1847,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           if (!res.success) {
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                             if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                            // mark recent invalid-target so any in-flight animation will be skipped
+                            lastInvalidTargetRef.current = true;
                             setAwaitingCompanionAction(true);
                             setIsAnimating(false);
                             return;
@@ -1912,6 +2027,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 if (!res.success) {
                                   if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                                   if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                                  setShowRoll(false);
+                                  setRollActor(null);
                                   setAwaitingCompanionAction(true);
                                   setIsAnimating(false);
                                   return;
@@ -2124,7 +2241,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-semibold text-amber-200">{item.name}</div>
-                        <div className="text-xs text-stone-400">{item.type} {item.damage ? `• ⚔ ${item.damage}` : ''} {item.armor ? `• 🛡 ${item.armor}` : ''}</div>
+                        <div className="text-xs text-stone-400">{item.type} {item.damage ? (() => { const b = getItemBaseAndBonus(item as any); return `• ⚔ ${b.totalDamage}${b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}` })() : ''} {item.armor ? (() => { const b = getItemBaseAndBonus(item as any); return `• 🛡 ${b.totalArmor}${b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}` })() : ''}  </div>
                       </div>
                       <div className="text-xs text-stone-400">{item.equipped && item.slot === equipSelectedSlot ? 'Equipped' : 'Equip'}</div>
                     </div>

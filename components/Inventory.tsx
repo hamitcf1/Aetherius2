@@ -6,6 +6,7 @@ import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags
 import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './EquipmentHUD';
 import { isTwoHandedWeapon, isShield, canEquipInOffhand, canEquipInMainhand } from '../services/equipment';
 import { ShopModal } from './ShopModal';
+import { getItemBaseAndBonus } from '../services/upgradeService';
 import BlacksmithModal from './BlacksmithModal';
 import { SHOP_INVENTORY } from './ShopModal';
 import { useAppContext } from '../AppContext';
@@ -154,6 +155,12 @@ const InventoryItemCard: React.FC<{
                         {(() => {
                           let displayArmor = item.armor;
                           let displayDamage = item.damage;
+                          // If base/bonus metadata is available, prefer showing breakdowns
+                          try {
+                            const breakdown = getItemBaseAndBonus(item as any);
+                            if (breakdown.totalArmor) displayArmor = breakdown.totalArmor;
+                            if (breakdown.totalDamage) displayDamage = breakdown.totalDamage;
+                          } catch (e) {}
                           let displayValue = item.value;
                           let displayWeight = item.weight;
                           // If item doesn't have stats but should, get from itemStats
@@ -632,8 +639,14 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
                         <div className="text-xs text-skyrim-text">{item.description}</div>
                         {(item.armor || item.damage) && (
                           <div className="flex gap-3 mt-1 text-xs">
-                            {item.armor && <span className="text-blue-400">Armor: {item.armor}</span>}
-                            {item.damage && <span className="text-red-400">Damage: {item.damage}</span>}
+                            {item.armor && (() => {
+                              const b = getItemBaseAndBonus(item as any);
+                              return <span className="text-blue-400">Armor: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</span>; 
+                            })()}
+                            {item.damage && (() => {
+                              const b = getItemBaseAndBonus(item as any);
+                              return <span className="text-red-400">Damage: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</span>; 
+                            })()}
                           </div>
                         )}
                       </div>

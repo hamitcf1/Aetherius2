@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyUpgrade, getMaxUpgradeForItem, canUpgrade } from '../services/upgradeService';
+import { applyUpgrade, getMaxUpgradeForItem, canUpgrade, getUpgradeCost } from '../services/upgradeService';
+
 import type { InventoryItem } from '../types';
 
 describe('upgradeService - rarity upgrade behavior', () => {
@@ -45,7 +46,8 @@ describe('upgradeService - rarity upgrade behavior', () => {
       quantity: 1,
       equipped: false,
       damage: 7,
-      value: 45
+      value: 45,
+      rarity: 'rare'
     } as any;
 
     // By default, without shop context, upgrades remain allowed (backwards compatible)
@@ -56,5 +58,17 @@ describe('upgradeService - rarity upgrade behavior', () => {
 
     // When shop DOES include the required material, canUpgrade should return true
     expect(canUpgrade(item, { shopItemIds: ['steel_ingot', 'iron_ingot'] })).toBe(true);
+  });
+
+  it('does NOT enforce central recipes for uncommon/common items', () => {
+    const item: InventoryItem = { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, rarity: 'uncommon' } as any;
+    // central recipe exists but should be ignored for uncommon rarity
+    expect(canUpgrade(item, { shopItemIds: [] })).toBe(true);
+  });
+
+  it('caps upgrade cost at 10k for very high-value items', () => {
+    const expensive: InventoryItem = { id: 'big_one', name: 'Big Sword', type: 'weapon', damage: 1000, value: 500000 } as any;
+    const cost = getUpgradeCost(expensive);
+    expect(cost).toBeLessThanOrEqual(10000);
   });
 });

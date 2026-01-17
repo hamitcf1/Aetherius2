@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import Inventory from '../components/Inventory';
+import { AppContext } from '../AppContext';
 import { assignItemToCompanion, canAssignItemToCompanion, unassignItemFromCompanion } from '../utils/equipment';
 import { getDefaultSlotForItem } from '../components/EquipmentHUD';
 
