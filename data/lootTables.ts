@@ -18,6 +18,12 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
     { id: 'hum_gold_small', name: 'Copper Coins', type: 'misc', description: 'Small pouch of coins.', weight: 30, minQty: 5, maxQty: 25, rarity: 'common' },
     { id: 'hum_health_potion', name: 'Minor Health Potion', type: 'potion', description: 'Restores a little health.', weight: 8, minQty: 1, maxQty: 1, rarity: 'common' },
     { id: 'hum_leather', name: 'Leather Scraps', type: 'misc', weight: 15, minQty: 1, maxQty: 3, rarity: 'common' },
+    // New mid-tier drops (appear on higher-level humanoids / bandit captains)
+    { id: 'honed_steel_longsword', name: 'Honed Steel Longsword', type: 'weapon', description: 'A serviceable longsword found on veteran fighters.', weight: 2, minQty: 1, maxQty: 1, rarity: 'uncommon' },
+    { id: 'spiked_buckler', name: 'Spiked Buckler', type: 'apparel', description: 'A compact shield used by skirmishers.', weight: 3, minQty: 1, maxQty: 1, rarity: 'uncommon' },
+    { id: 'hunter_cloak', name: "Hunter's Cloak", type: 'apparel', description: 'A rugged cloak dropped by forest hunters.', weight: 4, minQty: 1, maxQty: 1, rarity: 'common' },
+    { id: 'frosted_dagger', name: 'Frosted Dagger', type: 'weapon', description: 'A dagger imbued with cold. Favored by assassins.', weight: 1, minQty: 1, maxQty: 1, rarity: 'rare' },
+
     { id: 'hum_ring', name: 'Silver Ring', type: 'misc', weight: 4, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'hum_iron_dagger', name: 'Iron Dagger', type: 'weapon', weight: 3, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'hum_gold_large', name: 'Small Coin Purse', type: 'misc', weight: 6, minQty: 15, maxQty: 60, rarity: 'uncommon' },
@@ -27,7 +33,10 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
     { id: 'beast_meat', name: 'Raw Meat', type: 'misc', weight: 40, minQty: 1, maxQty: 3, rarity: 'common' },
     { id: 'beast_hide', name: 'Animal Hide', type: 'misc', weight: 25, minQty: 1, maxQty: 2, rarity: 'common' },
     { id: 'beast_trophy', name: 'Monster Fang', type: 'misc', weight: 10, minQty: 1, maxQty: 1, rarity: 'uncommon' },
-    { id: 'beast_gem', name: 'Dull Gem', type: 'misc', weight: 2, minQty: 1, maxQty: 1, rarity: 'rare' }
+    { id: 'beast_gem', name: 'Dull Gem', type: 'misc', weight: 2, minQty: 1, maxQty: 1, rarity: 'rare' },
+    // Small traveler gear that can be scavenged from packs and caravans
+    { id: 'explorers_boots', name: "Explorer's Boots", type: 'apparel', weight: 6, minQty: 1, maxQty: 1, rarity: 'common' },
+    { id: 'hunter_cloak', name: "Hunter's Cloak", type: 'apparel', weight: 5, minQty: 1, maxQty: 1, rarity: 'uncommon' }
   ],
   undead: [
     { id: 'und_bones', name: 'Bone Fragments', type: 'misc', weight: 40, minQty: 1, maxQty: 3, rarity: 'common' },

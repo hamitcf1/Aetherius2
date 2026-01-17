@@ -861,6 +861,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (allyActor) {
         // Auto-control: perform their default attack immediately
         const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
+        // If companion couldn't act (invalid target etc.), surface narrative/toast and skip their turn
+        if (!res.success) {
+          if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+          // Advance turn so the encounter doesn't stall
+          currentState = advanceTurn(currentState);
+          setCombatState(currentState);
+          await waitMs(Math.floor(300 * timeScale));
+          continue;
+        }
+
         currentState = res.newState;
         if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
         // Play companion attack sound for their ability
@@ -1358,6 +1368,48 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 🛡️ Defending (50% damage reduction)
               </div>
             )}
+
+            {/* ACTIONS (moved from right column) */}
+            <div className="mt-4 bg-stone-900/60 rounded-lg p-3 border border-stone-700">
+              <h4 className="text-sm font-semibold text-stone-300 mb-2">ACTIONS</h4>
+              <div className="space-y-2">
+                <button
+                  onClick={() => handlePlayerAction('defend')}
+                  disabled={!isPlayerTurn || isAnimating}
+                  className="w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🛡️ Defend
+                </button>
+
+                {combatState.fleeAllowed && (
+                  <button
+                    onClick={() => handlePlayerAction('flee')}
+                    disabled={!isPlayerTurn || isAnimating}
+                    className="w-full p-2 rounded bg-yellow-900/40 border border-yellow-700/50 text-yellow-200 hover:bg-yellow-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🏃 Flee
+                  </button>
+                )}
+
+                {combatState.surrenderAllowed && (
+                  <button
+                    onClick={() => handlePlayerAction('surrender')}
+                    disabled={!isPlayerTurn || isAnimating}
+                    className="w-full p-2 rounded bg-stone-700/40 border border-stone-600 text-stone-300 hover:bg-stone-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🏳️ Surrender
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handlePlayerAction('skip')}
+                  disabled={!isPlayerTurn || isAnimating}
+                  className="w-full p-2 rounded border border-skyrim-border text-skyrim-text hover:bg-stone-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ⏭️ Skip Turn
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1509,35 +1561,72 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const sub = determineSubcategory(ab);
                           const tab = (ab.type === 'melee' || ab.type === 'ranged') ? 'Physical' : 'Magical';
                           const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
+
+                          // Determine if this ability requires explicit targeting (heals/buffs/etc.)
+                          const companionNeedsTarget = !!(ab.heal || (ab.effects && ab.effects.some((ef: any) => ['heal','buff'].includes(ef.type))));
+
                           return (
-                            <button key={ab.id} disabled={isAnimating} onClick={async () => {
-                              setIsAnimating(true);
-                              setAwaitingCompanionAction(false);
-                              
-                              // Roll dice for the companion action
-                              setRollActor('ally');
-                              const companionRoll = Math.floor(Math.random() * 20) + 1;
-                              await animateRoll(companionRoll, Math.floor(3000 * timeScale));
-                              await waitMs(Math.floor(220 * timeScale));
-                              setShowRoll(false);
-                              setRollActor(null);
-                              
-                              // Execute the companion action with the roll
-                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
-                              if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                              // Play companion-specific attack sound
-                              try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
-                              
-                              await waitMs(Math.floor(600 * timeScale));
-                              
-                              // End companion turn and advance - useEffect will trigger processEnemyTurns
-                              const advancedState = advanceTurn(res.newState);
-                              setCombatState(advancedState);
-                              setIsAnimating(false);
-                              // Don't call processEnemyTurns directly - useEffect handles it
-                            }} className="w-full px-3 py-2 rounded text-left" style={{ background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.5))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` }}>
-                              <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />{ab.name}
-                            </button>
+                            <ActionButton
+                              key={ab.id}
+                              ability={ab}
+                              disabled={isAnimating}
+                              cooldown={combatState.abilityCooldowns[ab.id] || 0}
+                              canAfford={true}
+                              accentColor={accent}
+                              onClick={async () => {
+                                // If ability needs an explicit target, enter pendingTargeting (mirror player behavior)
+                                if (companionNeedsTarget) {
+                                  setPendingTargeting({ abilityId: ab.id, abilityName: ab.name, allow: 'allies' });
+                                  // pre-select the companion for convenience and ensure UI remains in companion-control mode
+                                  setSelectedTarget(allyActor.id);
+                                  setAwaitingCompanionAction(true);
+                                  if (showToast) showToast(`Choose a target for ${ab.name}`, 'info');
+                                  return;
+                                }
+
+                                // Otherwise validate, then roll and execute immediately (manual companion)
+                                // Local validation: prevent UI roll when target is invalid (mirror service rules)
+                                const abilityIsOffensive = !!(ab.damage && ab.damage > 0) || (ab.effects || []).some((ef: any) => ['aoe_damage','dot','damage'].includes(ef.type));
+                                const targetIsPlayer = selectedTarget === 'player';
+                                const targetIsAlly = !!((combatState.allies || []).find(a => a.id === selectedTarget));
+                                if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
+                                  if (showToast) showToast('This ability cannot target allies.', 'warning');
+                                  // keep companion control active so player can choose a valid target
+                                  setAwaitingCompanionAction(true);
+                                  return;
+                                }
+
+                                setIsAnimating(true);
+                                setAwaitingCompanionAction(false);
+
+                                setRollActor('ally');
+                                const companionRoll = Math.floor(Math.random() * 20) + 1;
+                                await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                await waitMs(Math.floor(220 * timeScale));
+                                setShowRoll(false);
+                                setRollActor(null);
+
+                                const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
+                                if (!res.success) {
+                                  // Invalid target or other failure — surface message and allow the player to choose again
+                                  if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                  if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                                  setAwaitingCompanionAction(true);
+                                  setIsAnimating(false);
+                                  return;
+                                }
+
+                                if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
+
+                                await waitMs(Math.floor(600 * timeScale));
+
+                                const advanced = advanceTurn(res.newState);
+                                setCombatState(advanced);
+                                setIsAnimating(false);
+                                // useEffect will pick up the new turn and continue
+                              }}
+                            />
                           );
                         })}
                         <button onClick={() => {
@@ -1559,15 +1648,46 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   <div className="space-y-2">
                     <div className="text-sm font-semibold">Choose target for <span className="text-amber-300">{pendingTargeting.abilityName}</span></div>
                     <div className="flex gap-2">
-                      <button onClick={() => {
+                      <button onClick={async () => {
                         // Apply to self - explicitly set target to 'player'
                         setSelectedTarget('player');
                         const abilityIdToUse = pendingTargeting!.abilityId;
                         setPendingTargeting(null);
-                        // Use setTimeout to ensure state is updated before action
-                        setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
-                      }} disabled={!isPlayerTurn || isAnimating} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
-                      <button onClick={() => {
+
+                        // If this is the player's turn, delegate to existing handler
+                        if (isPlayerTurn) {
+                          // Use setTimeout to ensure state is updated before action
+                          setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
+                          return;
+                        }
+
+                        // Companion confirming "Use on Self" while awaiting companion action
+                        if (awaitingCompanionAction && combatState.currentTurnActor) {
+                          setIsAnimating(true);
+                          setAwaitingCompanionAction(false);
+                          // roll
+                          setRollActor('ally');
+                          const companionRoll = Math.floor(Math.random() * 20) + 1;
+                          await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                          await waitMs(Math.floor(220 * timeScale));
+                          setShowRoll(false);
+                          setRollActor(null);
+
+                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, 'player', companionRoll);
+                          if (!res.success) {
+                            if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                            if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                            setAwaitingCompanionAction(true);
+                            setIsAnimating(false);
+                            return;
+                          }
+                          if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                          const advanced = advanceTurn(res.newState);
+                          setCombatState(advanced);
+                          setIsAnimating(false);
+                        }
+                      }} disabled={!(isPlayerTurn || awaitingCompanionAction) || isAnimating} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-green-700 text-white">Use on Self</button>
+                      <button onClick={async () => {
                         // Confirm selected target (must be self or ally for heals)
                         const currentTarget = selectedTarget;
                         const isValidTarget = currentTarget === 'player' || 
@@ -1580,8 +1700,50 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         
                         const abilityIdToUse = pendingTargeting!.abilityId;
                         setPendingTargeting(null);
-                        handlePlayerAction('attack', abilityIdToUse);
-                      }} disabled={!isPlayerTurn || isAnimating || !selectedTarget} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
+
+                        if (isPlayerTurn) {
+                          handlePlayerAction('attack', abilityIdToUse);
+                          return;
+                        }
+
+                        // Companion confirmation path
+                        if (awaitingCompanionAction && combatState.currentTurnActor) {
+                          // local validation: ensure ability allowed on selected target before rolling
+                          const ability = (combatState.allies||[]).find(a=>a.id===combatState.currentTurnActor)?.abilities.find(x=>x.id===abilityIdToUse);
+                          const abilityIsOffensive = !!(ability && ability.damage && ability.damage > 0) || (ability && (ability.effects||[]).some((ef:any)=>['aoe_damage','dot','damage'].includes(ef.type)));
+                          const targetIsPlayer = selectedTarget === 'player';
+                          const targetIsAlly = !!((combatState.allies||[]).find(a=>a.id===selectedTarget));
+                          if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
+                            if (showToast) showToast('This ability cannot target allies.', 'warning');
+                            setAwaitingCompanionAction(true);
+                            return;
+                          }
+
+                          setIsAnimating(true);
+                          setAwaitingCompanionAction(false);
+
+                          // roll
+                          setRollActor('ally');
+                          const companionRoll = Math.floor(Math.random() * 20) + 1;
+                          await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                          await waitMs(Math.floor(220 * timeScale));
+                          setShowRoll(false);
+                          setRollActor(null);
+
+                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, selectedTarget || undefined, companionRoll);
+                          if (!res.success) {
+                            if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                            if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                            setAwaitingCompanionAction(true);
+                            setIsAnimating(false);
+                            return;
+                          }
+                          if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                          const advancedState = advanceTurn(res.newState);
+                          setCombatState(advancedState);
+                          setIsAnimating(false);
+                        }
+                      }} disabled={!(isPlayerTurn || awaitingCompanionAction) || isAnimating || !selectedTarget} data-sfx="button_click" className="flex-1 px-3 py-2 rounded bg-blue-700 text-white">Confirm Target</button>
                     </div>
                     <button onClick={() => setPendingTargeting(null)} data-sfx="button_click" className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Cancel</button>
                   </div>
@@ -1682,47 +1844,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
           </div>
 
-          {/* Other actions */}
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-stone-700">
-            <h3 className="text-sm font-bold text-stone-400 mb-3">ACTIONS</h3>
-            <div className="space-y-2">
-              <button
-                onClick={() => handlePlayerAction('defend')}
-                disabled={!isPlayerTurn || isAnimating}
-                className="w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                🛡️ Defend
-              </button>
-              
-              {combatState.fleeAllowed && (
-                <button
-                  onClick={() => handlePlayerAction('flee')}
-                  disabled={!isPlayerTurn || isAnimating}
-                  className="w-full p-2 rounded bg-yellow-900/40 border border-yellow-700/50 text-yellow-200 hover:bg-yellow-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  🏃 Flee
-                </button>
-              )}
-              
-              {combatState.surrenderAllowed && (
-                <button
-                  onClick={() => handlePlayerAction('surrender')}
-                  disabled={!isPlayerTurn || isAnimating}
-                  className="w-full p-2 rounded bg-stone-700/40 border border-stone-600 text-stone-300 hover:bg-stone-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  🏳️ Surrender
-                </button>
-              )}
-
-              <button
-                onClick={() => handlePlayerAction('skip')}
-                disabled={!isPlayerTurn || isAnimating}
-                className="w-full p-2 rounded border border-skyrim-border text-skyrim-text hover:bg-stone-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ⏭️ Skip Turn
-              </button>
-            </div>
-          </div>
+          {/* Actions moved to player panel on desktop — preserved here as a placeholder */}
+          <div className="hidden lg:block" aria-hidden="true" />
         </div>
       </div>
 
@@ -1755,40 +1878,53 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const sub = determineSubcategory(ab);
                           const tab = (ab.type === 'melee' || ab.type === 'ranged') ? 'Physical' : 'Magical';
                           const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
+
+                          const companionNeedsTarget = !!(ab.heal || (ab.effects && ab.effects.some((ef: any) => ['heal','buff'].includes(ef.type))));
+
                           return (
-                            <button 
-                              key={ab.id} 
-                              disabled={isAnimating} 
+                            <ActionButton
+                              key={ab.id}
+                              compact
+                              ability={ab}
+                              disabled={isAnimating}
+                              cooldown={combatState.abilityCooldowns[ab.id] || 0}
+                              canAfford={true}
+                              accentColor={accent}
                               onClick={async () => {
+                                if (companionNeedsTarget) {
+                                  setPendingTargeting({ abilityId: ab.id, abilityName: ab.name, allow: 'allies' });
+                                  setSelectedTarget(allyActor.id);
+                                  setAwaitingCompanionAction(true);
+                                  if (showToast) showToast(`Choose a target for ${ab.name}`, 'info');
+                                  return;
+                                }
+
                                 setIsAnimating(true);
                                 setAwaitingCompanionAction(false);
-                                
-                                // Roll dice for the companion action
                                 setRollActor('ally');
                                 const companionRoll = Math.floor(Math.random() * 20) + 1;
                                 await animateRoll(companionRoll, Math.floor(3000 * timeScale));
                                 await waitMs(Math.floor(220 * timeScale));
                                 setShowRoll(false);
                                 setRollActor(null);
-                                
-                                // Execute the companion action with the roll
+
                                 const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
+                                if (!res.success) {
+                                  if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                  if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
+                                  setAwaitingCompanionAction(true);
+                                  setIsAnimating(false);
+                                  return;
+                                }
                                 if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-                                
+
                                 await waitMs(Math.floor(600 * timeScale));
-                                
-                                // End companion turn and advance - useEffect will trigger processEnemyTurns
-                                const advancedState = advanceTurn(res.newState);
-                                setCombatState(advancedState);
+
+                                const advanced = advanceTurn(res.newState);
+                                setCombatState(advanced);
                                 setIsAnimating(false);
-                                // Don't call processEnemyTurns directly - useEffect handles it
-                              }} 
-                              className="px-2 py-2 rounded bg-skyrim-gold text-black text-xs font-bold truncate"
-                              style={{ boxShadow: `inset 4px 0 0 ${accent}` }}
-                            >
-                              <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />
-                              {ab.name}
-                            </button>
+                              }}
+                            />
                           );
                         })}
                       </>

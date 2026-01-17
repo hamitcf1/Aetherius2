@@ -103,7 +103,17 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'steel_warhammer', name: 'Steel Warhammer', type: 'weapon', description: 'Massive steel hammer. Breaks bones.', price: 170, category: 'Weapons', requiredLevel: 5 },
   { id: 'long_bow', name: 'Long Bow', type: 'weapon', description: 'A longer bow with better range.', price: 80, category: 'Weapons', requiredLevel: 5 },
   { id: 'steel_arrows', name: 'Steel Arrows (20)', type: 'weapon', description: 'A bundle of steel-tipped arrows.', price: 20, category: 'Weapons', requiredLevel: 5 },
-  
+
+  // === Curated mid-tier items (new): balanced, level-gated, varied rarities ===
+  { id: 'travelers_shortsword', name: "Traveler's Shortsword", type: 'weapon', description: 'A light, well-balanced shortsword for travelers.', price: 35, category: 'Weapons', requiredLevel: 1, rarity: 'common' },
+  { id: 'explorers_boots', name: "Explorer's Boots", type: 'apparel', description: 'Sturdy boots that aid long journeys. Slightly improves stamina recovery.', price: 45, category: 'Armor', requiredLevel: 2, rarity: 'common' },
+  { id: 'hunter_cloak', name: "Hunter's Cloak", type: 'apparel', description: 'A weatherproof cloak favored by hunters; light and warm.', price: 85, category: 'Armor', requiredLevel: 3, rarity: 'uncommon' },
+  { id: 'spiked_buckler', name: 'Spiked Buckler', type: 'apparel', description: 'A small shield with menacing spikes — good for parry-and-thrust tactics.', price: 120, category: 'Armor', requiredLevel: 4, rarity: 'uncommon' },
+  { id: 'honed_steel_longsword', name: 'Honed Steel Longsword', type: 'weapon', description: 'A well-forged longsword with a keen edge.', price: 135, category: 'Weapons', requiredLevel: 6, rarity: 'uncommon' },
+  { id: 'frosted_dagger', name: 'Frosted Dagger', type: 'weapon', description: 'A dagger etched with frost runes. Better vs. lightly armored foes.', price: 260, category: 'Weapons', requiredLevel: 12, rarity: 'rare' },
+  { id: 'emberbrand_staff', name: 'Emberbrand Staff', type: 'weapon', description: 'A staff that channels fiery bursts. Preferred by battle-mages.', price: 420, category: 'Weapons', requiredLevel: 14, rarity: 'rare' },
+  { id: 'stormcall_bow', name: 'Stormcall Bow', type: 'weapon', description: 'A bow that hums with lightning; excels at mid-range engagements.', price: 680, category: 'Weapons', requiredLevel: 18, rarity: 'rare' },
+
   // Tier 3: Orcish Weapons (Level 10+)
   { id: 'orcish_dagger', name: 'Orcish Dagger', type: 'weapon', description: 'Crude but effective Orcish blade.', price: 120, category: 'Weapons', requiredLevel: 10 },
   { id: 'orcish_sword', name: 'Orcish Sword', type: 'weapon', description: 'Heavy Orcish blade. Strong and brutal.', price: 225, category: 'Weapons', requiredLevel: 10 },

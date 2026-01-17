@@ -90,8 +90,15 @@ const WEAPON_STATS: Record<string, ItemStats> = {
   'steel battleaxe': { damage: 18, value: 160 },
   'steel warhammer': { damage: 21, value: 170 },
   'long bow': { damage: 9, value: 80 },
-  'steel arrows (20)': { damage: 0, value: 20 },
-  
+  'steel arrows (20)': { damage: 0, value: 20 },  // Newly added curated items
+  "traveler's shortsword": { damage: 6, value: 35 },
+  "explorer's boots": { armor: 9, value: 45 },
+  "hunter's cloak": { armor: 6, value: 85 },
+  'spiked buckler': { armor: 18, value: 120 },
+  'honed steel longsword': { damage: 10, value: 135 },
+  'frosted dagger': { damage: 8, value: 260 },
+  'emberbrand staff': { damage: 16, value: 420 },
+  'stormcall bow': { damage: 14, value: 680 },  
   // === ORCISH WEAPONS (Tier 3) ===
   'orcish dagger': { damage: 6, value: 120 },
   'orcish sword': { damage: 9, value: 225 },

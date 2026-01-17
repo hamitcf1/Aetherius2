@@ -28,4 +28,23 @@ describe('executeCompanionAction', () => {
     // Ensure combat log updated
     expect(res.newState.combatLog.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('blocks companion attacking itself and returns failure', () => {
+    const initialState: any = {
+      turn: 1,
+      turnOrder: ['player', 'ally_a1', 'e1'],
+      currentTurnActor: 'ally_a1',
+      enemies: [{ id: 'e1', name: 'Bandit', level: 1, maxHealth: 20, currentHealth: 20, armor: 0, damage: 4 }],
+      allies: [{ id: 'ally_a1', name: 'Buddy', level: 2, maxHealth: 30, currentHealth: 30, armor: 0, damage: 6, abilities: [{ id: 'a1', name: 'Strike', damage: 6 }] }],
+      combatLog: [],
+      abilityCooldowns: {},
+      lastActorActions: {}
+    };
+
+    const res = executeCompanionAction(initialState as any, 'ally_a1', 'a1', 'ally_a1');
+    expect(res.success).toBe(false);
+    expect(res.narrative.toLowerCase()).toContain('cannot target');
+    // Ensure the state was not modified (enemy still full HP)
+    expect(res.newState.enemies[0].currentHealth).toBe(20);
+  });
 });

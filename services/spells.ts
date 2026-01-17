@@ -306,6 +306,24 @@ export const isSpellLearned = (characterId: string, spellId: string) => {
   return getLearnedSpellIds(characterId).includes(spellId);
 };
 
+// Merge learned-spell state from a server-side Character object and local storage.
+// - Returns the merged list (server ∪ local).
+// - Ensures local storage is updated to the merged set so offline flows continue to work.
+// - This is intentionally pure enough to be unit-tested.
+export const mergeLearnedSpellsFromCharacter = (character: { id: string; learnedSpells?: string[] } | null | undefined): string[] => {
+  if (!character || !character.id) return [];
+  const stored = getLearnedSpellIds(character.id) || [];
+  const server = Array.isArray(character.learnedSpells) ? character.learnedSpells.filter(Boolean) : [];
+  const union = Array.from(new Set([...server, ...stored]));
+  try {
+    // Ensure local storage reflects the canonical union so UI/offline flows behave consistently
+    storage.setItem(`${STORAGE_PREFIX}${character.id}`, JSON.stringify(union));
+  } catch (e) {
+    try { require('./logger').log.warn('Failed to sync learned spells to storage', e); } catch (e2) { /* fallback */ }
+  }
+  return union;
+};
+
 export const learnSpell = (characterId: string, spellId: string) => {
   const existing = getLearnedSpellIds(characterId);
   if (existing.includes(spellId)) return false;

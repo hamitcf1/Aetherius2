@@ -38,5 +38,8 @@ describe('Summon type mapping', () => {
     const allies = res.newState.allies || [];
     expect(allies.length).toBeGreaterThan(0);
     expect(allies[0].type).toBe('beast');
+    // Summoned entities must have a valid level so attack resolution can use it
+    expect(typeof allies[0].level).toBe('number');
+    expect(allies[0].level).toBeGreaterThanOrEqual(1);
   });
 });

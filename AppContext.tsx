@@ -24,6 +24,9 @@ export interface AppContextType {
   showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   // Auth
   isAnonymous: boolean;
+  // Cloud save indicator (timestamp + character id)
+  lastCloudSaveAt?: number | null;
+  lastCloudSavedCharacterId?: string | null;
   // Survival (now with modals)
   handleRestWithOptions: (options: RestOptions) => void;
   // Open the Bonfire / Rest menu (optional preview options)

@@ -135,4 +135,19 @@ describe('Shop inventory sanity', () => {
       expect(names[0].textContent).toContain('Leather Armor');
     });
   });
+
+  // --- New tests for curated items & level-gating ---
+  it('shows curated shop items only at appropriate character levels', async () => {
+    const ctx = ({ handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000000 } as any);
+
+    // Level 1: should NOT see mid-tier curated items
+    render(<AppContext.Provider value={ctx}><ShopModal open={true} onClose={() => {}} gold={1000000} onPurchase={() => {}} inventory={[]} characterLevel={1} /></AppContext.Provider>);
+    expect(screen.queryByText(/Spiked Buckler/i)).toBeNull();
+    expect(screen.queryAllByText(/Iron Sword/i).length).toBeGreaterThan(0);
+
+    // Level 6: should see Honed Steel Longsword and Explorer's Boots
+    render(<AppContext.Provider value={ctx}><ShopModal open={true} onClose={() => {}} gold={1000000} onPurchase={() => {}} inventory={[]} characterLevel={6} /></AppContext.Provider>);
+    expect(screen.getByText(/Honed Steel Longsword/i)).toBeTruthy();
+    expect(screen.getByText(/Explorer's Boots/i)).toBeTruthy();
+  });
 });

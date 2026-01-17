@@ -1324,15 +1324,17 @@ export const executePlayerAction = (
             }
           }
 
+          const summonLevel = Math.max(1, Math.floor((playerStats?.maxHealth || 100) / 20));
           const companion: CombatEnemy = {
             id: summonId,
             name: summonName,
+            level: summonLevel,
             type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
             armor: 5,
-            damage: 8 + level,
+            damage: 8 + summonLevel,
             maxHealth,
             currentHealth: maxHealth,
-            abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
+            abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(summonLevel * 2)), cost: 0, description: 'Summoned minion attack' } ],
             behavior: 'support',
             xpReward: 0,
             loot: [],
@@ -1342,7 +1344,7 @@ export const executePlayerAction = (
           } as any;
 
           // Mark as companion and add to allies (not enemies)
-          companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true, isSummon: true };
+          companion.companionMeta = { ...(companion.companionMeta||{}), companionId: companion.id, autoLoot: false, autoControl: companion.companionMeta?.autoControl ?? true, isSummon: true };
           newState.allies = [...(newState.allies || []), companion];
           // Insert into turn order right after player
           const playerIndex = newState.turnOrder.indexOf('player');
@@ -1790,7 +1792,7 @@ export const executePlayerAction = (
               }
 
               // Add companion metadata (useful for UI & auto-control)
-              companion.companionMeta = { companionId: companion.id, autoLoot: false, autoControl: true } as any;
+              companion.companionMeta = { ...(companion.companionMeta||{}), companionId: companion.id, autoLoot: false, autoControl: companion.companionMeta?.autoControl ?? true } as any;
 
               // Track pending summon expiration in turns (use effect.duration as turns if supplied)
               const turns = Math.max(1, (effect as any).duration || 3);
@@ -2135,6 +2137,7 @@ export const executeEnemyTurn = (
         damage: 8 + level,
         maxHealth,
         currentHealth: maxHealth,
+        level,
         abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' } ],
         behavior: actor.isCompanion ? 'support' : 'aggressive',
         xpReward: 0,
@@ -2478,17 +2481,29 @@ export const executeCompanionAction = (
   targetId?: string,
   natRoll?: number,
   isAuto?: boolean
-): { newState: CombatState; narrative: string } => {
+): { newState: CombatState; narrative: string; success: boolean } => {
   let newState = { ...state };
   const ally = (newState.allies || []).find(a => a.id === allyId);
-  if (!ally) return { newState, narrative: 'Companion not found' };
+  if (!ally) return { newState, narrative: 'Companion not found', success: false };
 
   const ability = ally.abilities.find(a => a.id === abilityId) || ally.abilities[0];
-  if (!ability) return { newState, narrative: `${ally.name} has no usable abilities.` };
+  if (!ability) return { newState, narrative: `${ally.name} has no usable abilities.`, success: false };
+
+  // If caller supplied a target that is an ally/player, block offensive abilities early
+  const isOffensive = !!(ability.damage && ability.damage > 0) || (ability.effects || []).some((ef: any) => ['aoe_damage', 'dot', 'damage'].includes(ef.type));
+  if (targetId) {
+    if (targetId === 'player') {
+      if (isOffensive) return { newState, narrative: 'This ability cannot target allies or the player.', success: false };
+    }
+    const allyTarget = (newState.allies || []).find(a => a.id === targetId);
+    if (allyTarget && isOffensive) {
+      return { newState, narrative: 'This ability cannot target allies.', success: false };
+    }
+  }
 
   // Pick target (enemy only)
   const target = targetId ? newState.enemies.find(e => e.id === targetId) : newState.enemies.find(e => e.currentHealth > 0);
-  if (!target) return { newState, narrative: 'No valid target' };
+  if (!target) return { newState, narrative: 'No valid enemy target', success: false };
 
   // Resolve attack
   const attackBonus = Math.max(0, Math.floor((ally.damage || 4) / 8));
@@ -2496,7 +2511,7 @@ export const executeCompanionAction = (
   if (!resolved.hit) {
     const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
-    return { newState, narrative };
+    return { newState, narrative, success: true };
   }
   // Compute damage
   const { damage } = computeDamageFromNat((ability.damage || ally.damage || 4), ally.level, resolved.natRoll, resolved.rollTier, resolved.isCrit);
@@ -2518,7 +2533,7 @@ export const executeCompanionAction = (
     newState.active = false;
   }
 
-  return { newState, narrative };
+  return { newState, narrative, success: true };
 };
 
 // ============================================================================

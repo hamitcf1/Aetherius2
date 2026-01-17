@@ -111,7 +111,8 @@ import { getItemStats, shouldHaveStats, isValidCoreItem, estimateItemValue } fro
 import { updateMusicForContext, AmbientContext, audioService, playMusic } from './services/audioService';
 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
 import { getRateLimitStats, generateAdventureResponse } from './services/geminiService';
-import { learnSpell, getSpellById } from './services/spells';
+import { learnSpell, getSpellById, mergeLearnedSpellsFromCharacter, getLearnedSpellIds } from './services/spells';
+import { storage } from './services/storage';
 import { applyCompanionXp } from './services/companionsService';
 import type { ShopItem } from './components/ShopModal';
 import { getDefaultSlotForItem } from './components/EquipmentHUD';
@@ -369,6 +370,8 @@ const App: React.FC = () => {
 
   // Dirty state tracking for debounced saves
   const [dirtyEntities, setDirtyEntities] = useState<Set<string>>(new Set());
+  const [lastCloudSaveAt, setLastCloudSaveAt] = useState<number | null>(null);
+  const [lastCloudSavedCharacterId, setLastCloudSavedCharacterId] = useState<string | null>(null);
 
   // Session State
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
@@ -1161,6 +1164,24 @@ const App: React.FC = () => {
                 fatigue: clamp(Number(needs?.fatigue ?? 0), 0, 100),
               },
             };
+
+            // Ensure learned spells are synchronized between server and localStorage so
+            // learned spells survive dev-server restarts and cross-device logins.
+            try {
+              const merged = mergeLearnedSpellsFromCharacter(next);
+              if (merged.length > 0) {
+                // Attach to the in-memory character so UI/readers can access learned spells
+                (next as any).learnedSpells = merged;
+                // If the server-side document didn't include learnedSpells, mark for save so
+                // the server is updated with the union of local+server learned spells.
+                if (!Array.isArray(c.learnedSpells) || c.learnedSpells.length !== merged.length || merged.some(s => !(c.learnedSpells || []).includes(s))) {
+                  setDirtyEntities(prev => new Set([...prev, next.id]));
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to merge learned spells for character', next.id, e);
+            }
+
             if (!c?.time || !c?.needs || xpWasNormalized || mergedSkills.length !== (c.skills || []).length) {
               setDirtyEntities(prev => new Set([...prev, next.id]));
             }
@@ -1409,6 +1430,8 @@ const App: React.FC = () => {
           const char = characters.find(c => c.id === entityId);
           if (char) {
             await saveCharacter(currentUser.uid, char);
+            // record last cloud save for UI feedback
+            try { setLastCloudSaveAt(Date.now()); setLastCloudSavedCharacterId(entityId); } catch (e) {}
             continue;
           }
 
@@ -2063,6 +2086,19 @@ const App: React.FC = () => {
         setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
       }
 
+      // If we're updating learnedSpells, ensure the local storage copy is kept in sync so
+      // learned spells survive reloads even before a cloud save occurs.
+      try {
+        if (field === 'learnedSpells' && currentCharacterId && Array.isArray(value)) {
+          const existing = getLearnedSpellIds(currentCharacterId);
+          const union = Array.from(new Set([...(existing || []), ...value]));
+          // Persist to local storage (silent on failure)
+          try { storage.setItem(`aetherius:spells:${currentCharacterId}`, JSON.stringify(union)); } catch (e) { /* ignore */ }
+        }
+      } catch (e) {
+        // ignore storage sync failures
+      }
+
       if (currentCharacterId) {
         setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
       }
@@ -2413,6 +2449,15 @@ const App: React.FC = () => {
         if (spell) {
           const learned = learnSpell(currentCharacterId!, spell.id);
           if (learned) {
+            // Update in-memory character and schedule a cloud save so learned spells
+            // survive dev-server restarts and cross-device logins.
+            if (currentCharacterId && activeCharacter) {
+              const existing = Array.isArray(activeCharacter.learnedSpells) ? activeCharacter.learnedSpells : [];
+              if (!existing.includes(spell.id)) {
+                updateCharacter('learnedSpells', [...existing, spell.id]);
+              }
+            }
+
             handleGameUpdate({ removedItems: [{ name: item.name, quantity: 1 }] });
             showToast(`Learned spell: ${spell.name}`, 'success');
           } else {
@@ -4151,7 +4196,10 @@ const App: React.FC = () => {
           await navigator.clipboard.writeText(prompt);
           showToast('Image prompt copied to clipboard.', 'success');
         } catch (e) {
-          showToast('Failed to copy prompt to clipboard.', 'warning');
+        
+      // Expose last cloud-save metadata for UI indicators
+      lastCloudSaveAt: lastCloudSaveAt,
+      lastCloudSavedCharacterId: lastCloudSavedCharacterId,  showToast('Failed to copy prompt to clipboard.', 'warning');
         }
       },
       handleUploadPhoto: () => {}, // TODO: Implement upload

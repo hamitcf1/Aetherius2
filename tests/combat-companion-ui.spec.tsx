@@ -79,4 +79,43 @@ describe('CombatModal companion turn UI', () => {
     // Control panel should disappear after skipping
     await waitFor(() => expect(screen.queryByText(/Control Buddy/i)).toBeNull(), { timeout: 3000 });
   });
+
+  it('does NOT animate a dice roll when player/companion attempts to use an offensive ability on an ally (shows toast instead)', async () => {
+    // create a state where the companion has an offensive ability
+    const offensiveState = makeCombatState();
+    offensiveState.allies[0].abilities = [{ id: 'a_off', name: 'Rend', type: 'melee', damage: 12 } as any];
+
+    const mockShowToast = vi.fn();
+    render(<CombatModal character={character} inventory={[]} initialCombatState={offensiveState as any} onCombatEnd={() => {}} onNarrativeUpdate={() => {}} onInventoryUpdate={() => {}} showToast={mockShowToast} />);
+
+    // Wait for control UI
+    await screen.findByText(/Control Buddy/i);
+
+    // --- CASE A: user selects target first, then clicks offensive ability ---
+    const alliesHeader = screen.getByText('ALLIES');
+    const { within } = require('@testing-library/dom');
+    const alliesPanel = alliesHeader.closest('div') as HTMLElement;
+    const allyInPanel = within(alliesPanel).getAllByText('Buddy').find(n => n.tagName !== 'BUTTON') as HTMLElement;
+
+    // Select companion as target first
+    fireEvent.click(allyInPanel);
+
+    // Then click the offensive ability
+    const rendButtons = screen.getAllByText('Rend');
+    const btn = rendButtons.find(n => n.tagName === 'BUTTON') as HTMLElement || rendButtons[0] as HTMLElement;
+    fireEvent.click(btn);
+
+    // Expect toast invoked with invalid-target message and no roll
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('cannot target'), 'warning'));
+    expect(screen.queryByText(/Roll:/i)).toBeNull();
+
+    // --- CASE B: (sanity) clicking ability then clicking ally should still NOT produce a roll ---
+    mockShowToast.mockClear();
+    const rendBtn2 = screen.getAllByText('Rend').find(n => n.tagName === 'BUTTON') as HTMLElement;
+    fireEvent.click(rendBtn2);
+    // clicking the ally card when no pendingTargeting currently set should only select target (info toast)
+    fireEvent.click(allyInPanel);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Target selected'), 'info'));
+    expect(screen.queryByText(/Roll:/i)).toBeNull();
+  });
 });

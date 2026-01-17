@@ -726,7 +726,21 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             )}
             <div className="relative z-10">
                 <h1 className="text-4xl font-serif text-skyrim-gold mb-2">{getEasterEggName(character.name)}</h1>
-                <p className="text-gray-500 font-sans text-sm uppercase tracking-widest">{character.gender} {character.race} {character.archetype} - Level {character.level}</p>
+                <div className="flex items-center justify-center gap-3">
+                  <p className="text-gray-500 font-sans text-sm uppercase tracking-widest">{character.gender} {character.race} {character.archetype} - Level {character.level}</p>
+                  {/* Saved to cloud indicator (transient) */}
+                  {(() => {
+                    const lastAt = appCtx?.lastCloudSaveAt || null;
+                    const lastId = appCtx?.lastCloudSavedCharacterId || null;
+                    const recent = lastAt && lastId === character.id && (Date.now() - lastAt) < 6000;
+                    return recent ? (
+                      <div className="text-xs text-green-300 bg-green-900/20 px-2 py-0.5 rounded flex items-center gap-2" role="status" aria-live="polite">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="opacity-90"><path d="M20 6L9 17l-5-5" stroke="#7ee787" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Saved to cloud
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
             </div>
           </div>
 
@@ -1123,6 +1137,10 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                 const s = getSpellById(id);
                 const cost = s?.perkCost || 1;
                 updateCharacter('perkPoints', Math.max(0, (character.perkPoints || 0) - cost));
+
+                // Persist learned spell on the character object so it survives reloads
+                const existing = Array.isArray(character.learnedSpells) ? character.learnedSpells : [];
+                if (!existing.includes(id)) updateCharacter('learnedSpells', [...existing, id]);
             }} onRefund={(pointsRefunded: number) => {
                 // Add refunded points back to character
                 updateCharacter('perkPoints', (character.perkPoints || 0) + pointsRefunded);

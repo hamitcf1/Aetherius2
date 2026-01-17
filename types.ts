@@ -133,6 +133,8 @@ export interface Character {
   // Narrative
   backstory: string;
   lastPlayed: number;
+  // List of spell ids the character has learned. Stored on the Character for cross-device persistence.
+  learnedSpells?: string[];
   // Completed combat IDs (persisted) for deduplication and replay prevention
   completedCombats?: string[];
   // Cleared dungeon IDs with clearance count (for tracking re-entries with scaling enemies)
