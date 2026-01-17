@@ -96,5 +96,53 @@ describe('Blacksmith modal upgrade flow', () => {
     // Verify item was upgraded immediately and button is locked while the visual runs
     expect(currentItems[0].upgradeLevel && currentItems[0].upgradeLevel > 0).toBeTruthy();
     expect(confirm).toBeDisabled();
+
+  });
+
+  it('disables upgrade when required materials are not present in shop and shows requirement text', () => {
+    const items = [
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1 } as any
+    ];
+    let currentItems = [...items];
+    const setItems = (next: any) => { currentItems = next; };
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
+
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
+      </AppContext.Provider>
+    );
+
+    fireEvent.click(screen.getByText(/Iron Sword/i));
+
+    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
+    expect(screen.getByText(/steel ingot/i)).toBeTruthy();
+    const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn).toBeDisabled();
+  });
+
+  it('allows upgrade when required materials are available in the shop', () => {
+    const items = [
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1 } as any
+    ];
+    let currentItems = [...items];
+    const setItems = (next: any) => { currentItems = next; };
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
+
+    // Provide shopItems that include the required steel_ingot
+    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
+
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
+      </AppContext.Provider>
+    );
+
+    fireEvent.click(screen.getByText(/Iron Sword/i));
+
+    const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn).not.toBeDisabled();
   });
 });

@@ -70,17 +70,64 @@ export function getUpgradeCost(item: InventoryItem): number {
   return Math.max(1, cost);
 }
 
-export function canUpgrade(item: InventoryItem): boolean {
+// Optional upgrade recipes keyed by stable item id or normalized name.
+// Each entry can target a specific nextUpgradeLevel (or apply to any next level when omitted).
+const UPGRADE_RECIPES: Record<string, Array<{ nextUpgradeLevel?: number; requirements: Array<{ itemId: string; quantity?: number }> }>> = {
+  // Example: Iron Sword upgrades require an iron/steel ingot to be available in shop
+  'iron_sword': [ { nextUpgradeLevel: 1, requirements: [{ itemId: 'steel_ingot', quantity: 2 }] } ],
+  // Curated example: Honed steel longswod needs steel_ingot for a higher-tier upgrade
+  'honed_steel_longsword': [ { requirements: [{ itemId: 'steel_ingot', quantity: 3 }] } ]
+};
+
+/**
+ * Returns material requirements for the *next* upgrade of `item`, if any.
+ * Prefers an explicit `item.upgradeRequirements` on the InventoryItem, then
+ * falls back to named entries in UPGRADE_RECIPES.
+ */
+export function getRequirementsForNextUpgrade(item: InventoryItem) {
+  if (!item) return undefined;
+  const explicit = (item as any).upgradeRequirements as Array<{ itemId: string; quantity?: number }> | undefined;
+  if (explicit && explicit.length > 0) return explicit;
+
+  const key = item.id || (item.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const recipes = UPGRADE_RECIPES[key];
+  if (!recipes || recipes.length === 0) return undefined;
+  const nextLevel = (item.upgradeLevel || 0) + 1;
+  // pick recipe that matches nextUpgradeLevel or the first if none match
+  const match = recipes.find(r => typeof r.nextUpgradeLevel === 'number' ? r.nextUpgradeLevel === nextLevel : true) || recipes[0];
+  return match.requirements;
+}
+
+/**
+ * Determine whether an item can be upgraded.
+ * If `opts.shopItemIds` is provided, any material requirements will be validated
+ * against that set (useful for UI that wants to require materials to be present in the shop).
+ */
+export function canUpgrade(item: InventoryItem, opts?: { shopItemIds?: string[] }): boolean {
   const max = getMaxUpgradeForItem(item);
   if (max <= 0) return false;
   // Allow upgrade either when under max OR when at max but a higher rarity is available
   const currentLevel = item.upgradeLevel || 0;
-  if (currentLevel < max) return true;
+  if (currentLevel < max) {
+    // If there are material requirements and a shop context was provided, ensure they exist in shop
+    const reqs = getRequirementsForNextUpgrade(item);
+    if (reqs && opts?.shopItemIds) {
+      return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
+    }
+    return true;
+  }
   // If at max, allow a rarity-upgrade if not already at highest rarity
   const curR = (item.rarity || 'common') as string;
   const idx = RARITY_ORDER.indexOf(curR as any);
-  return idx >= 0 && idx < RARITY_ORDER.length - 1;
-}
+  const rarityUpgradable = idx >= 0 && idx < RARITY_ORDER.length - 1;
+  if (!rarityUpgradable) return false;
+  // For rarity-upgrades also validate material requirements if provided
+  const reqs = getRequirementsForNextUpgrade(item);
+  if (reqs && opts?.shopItemIds) {
+    return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
+  }
+  return true;
+} 
 
 // Player level gating: require higher player levels for high-tier upgrades.
 // Returns required player level for the *next* upgrade (0 = no requirement).

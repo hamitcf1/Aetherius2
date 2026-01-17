@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
-import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade } from '../services/upgradeService';
+import type { ShopItem } from './ShopModal';
+import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade } from '../services/upgradeService';
 import { Sword, Shield, Coins } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
@@ -133,9 +134,12 @@ interface Props {
   setItems: (items: InventoryItem[]) => void;
   gold: number;
   setGold: (g: number) => void;
-}
+  // Current shop stock (optional). When provided, certain upgrades will require materials
+  // to be present in the shop before the upgrade is allowed.
+  shopItems?: ShopItem[];
+} 
 
-export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold }: Props) {
+export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold, shopItems }: Props) {
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSparks, setShowSparks] = useState(false);
@@ -145,6 +149,13 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
+
+  // Material requirements for the *next* upgrade (if any) and whether the current
+  // shop stock satisfies them. When `shopItems` is not provided we do not block
+  // upgrades here (keeps behavior backwards-compatible) but the UI will still
+  // surface explicit requirements when present on the item.
+  const nextUpgradeRequirements = selected ? getRequirementsForNextUpgrade(selected) : undefined;
+  const shopRequirementsMet = !nextUpgradeRequirements || nextUpgradeRequirements.every(r => (shopItems || []).some(si => si.id === r.itemId));
 
   const startSpark = () => {
     // Clear any existing timeout so repeated starts reset the timer cleanly
@@ -184,10 +195,17 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
       return;
     }
 
-    if (!upgradeSvc.canUpgrade(selected)) {
-      showToast?.('Item cannot be upgraded further', 'warning');
+    // Respect shop-material requirements when a shop context is provided.
+    if (!upgradeSvc.canUpgrade(selected, { shopItemIds: shopItems?.map(s => s.id) })) {
+      const reqs = getRequirementsForNextUpgrade(selected);
+      if (reqs && reqs.length > 0 && !(shopItems && shopItems.length > 0)) {
+        showToast?.('This upgrade requires specific materials that are not available in the current shop', 'warning');
+      } else {
+        showToast?.('Item cannot be upgraded further', 'warning');
+      }
       return;
     }
+
     const requiredLevel = getRequiredPlayerLevelForNextUpgrade(selected);
     if (requiredLevel > 0 && (characterLevel || 0) < requiredLevel) {
       showToast?.(`Requires player level ${requiredLevel} to perform this upgrade`, 'warning');
@@ -304,6 +322,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                       <div className="text-xs text-gray-300">Upgrade Cost</div>
                       <div className="mt-1 text-yellow-400 font-serif text-lg">{getUpgradeCost(selected)}g</div>
                       <div className="text-xs mt-1 text-skyrim-text">Max Level: {getMaxUpgradeForItem(selected)}</div>
+
                       {(() => {
                         const req = getRequiredPlayerLevelForNextUpgrade(selected);
                         if (req > 0) {
@@ -316,6 +335,27 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                         }
                         return null;
                       })()}
+
+                      {nextUpgradeRequirements && nextUpgradeRequirements.length > 0 && (
+                        <div className="mt-3 text-xs">
+                          <div className="text-gray-300">Material requirements</div>
+                          <ul className="mt-1 space-y-1">
+                            {nextUpgradeRequirements.map(r => {
+                              const present = (shopItems || []).some(s => s.id === r.itemId);
+                              return (
+                                <li key={r.itemId} className={`flex items-center gap-2 ${present ? 'text-green-400' : 'text-red-400'}`}>
+                                  <span className="font-mono text-[13px]">{r.quantity ?? 1}×</span>
+                                  <span className="truncate">{(r.itemId || '').replace(/_/g, ' ')}</span>
+                                  <span className="ml-2 text-xs text-gray-400">{present ? 'available in shop' : 'not available in shop'}</span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          {!shopRequirementsMet && (
+                            <div className="text-xs mt-2 text-red-400">Upgrade requires materials to be present in the shop</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -325,8 +365,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold 
                     ref={upgradeButtonRef}
                     onClick={handleConfirm}
                     data-sfx="button_click"
-                    disabled={isUpgrading}
-                    className={`px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 ${isUpgrading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    disabled={isUpgrading || !shopRequirementsMet}
+                    className={`px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 ${(isUpgrading || !shopRequirementsMet) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     Confirm Upgrade
                   </button>

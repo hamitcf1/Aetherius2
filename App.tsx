@@ -4196,12 +4196,10 @@ const App: React.FC = () => {
           await navigator.clipboard.writeText(prompt);
           showToast('Image prompt copied to clipboard.', 'success');
         } catch (e) {
-        
-      // Expose last cloud-save metadata for UI indicators
-      lastCloudSaveAt: lastCloudSaveAt,
-      lastCloudSavedCharacterId: lastCloudSavedCharacterId,  showToast('Failed to copy prompt to clipboard.', 'warning');
+          showToast('Failed to copy prompt to clipboard.', 'warning');
         }
       },
+
       handleUploadPhoto: () => {}, // TODO: Implement upload
       // New survival & shop handlers
       handleRestWithOptions,

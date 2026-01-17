@@ -312,6 +312,9 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'nightshade', name: 'Nightshade', type: 'ingredient', description: 'Deadly purple flowers.', price: 10, category: 'Ingredients' },
   { id: 'giants_toe', name: 'Giant\'s Toe', type: 'ingredient', description: 'Rare and valuable. Powerful alchemy.', price: 50, category: 'Ingredients' },
   { id: 'moon_sugar', name: 'Moon Sugar', type: 'ingredient', description: 'Illegal sweetener. Skooma base.', price: 30, category: 'Ingredients' },
+  // Blacksmith materials (available at general stores / smiths)
+  { id: 'iron_ingot', name: 'Iron Ingot', type: 'misc', description: 'Smelted iron bar — used for basic smithing and repairs.', price: 8, category: 'Ingredients' },
+  { id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: 'Refined steel bar used for stronger weapon and armor work.', price: 18, category: 'Ingredients' },
   
   // === JEWELRY ===
   { id: 'gold_ring', name: 'Gold Ring', type: 'apparel', description: 'A simple gold ring. Elegant and valuable.', price: 75, category: 'Jewelry' },

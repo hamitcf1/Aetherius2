@@ -7,6 +7,7 @@ import { EquipmentHUD, getDefaultSlotForItem, SLOT_CONFIGS_EXPORT } from './Equi
 import { isTwoHandedWeapon, isShield, canEquipInOffhand, canEquipInMainhand } from '../services/equipment';
 import { ShopModal } from './ShopModal';
 import BlacksmithModal from './BlacksmithModal';
+import { SHOP_INVENTORY } from './ShopModal';
 import { useAppContext } from '../AppContext';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { EncumbranceIndicator } from './StatusIndicators';
@@ -859,6 +860,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
       setItems={setItems}
       gold={gold}
       setGold={setGold}
+      shopItems={SHOP_INVENTORY}
     />
     </div>
   );

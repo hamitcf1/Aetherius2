@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { assignItemToCompanion, canAssignItemToCompanion, unassignItemFromCompanion } from '../utils/equipment';
+import { getDefaultSlotForItem } from '../components/EquipmentHUD';
 
 const mk = (over: any = {}) => ({ id: 'i1', name: 'Sword', type: 'weapon', equipped: false, slot: 'weapon', quantity: 1, ...over });
 
@@ -81,6 +82,16 @@ describe('equipment utilities', () => {
   it('assign throws when item is equipped by player', () => {
     const item = mk({ equippedBy: 'player' });
     expect(() => assignItemToCompanion(item, 'c1')).toThrow('equipped-by-player');
+  });
+
+  it('treats shields as offhand (prevents being inferred as chest)', () => {
+    const shieldLike = { id: 'sh1', name: 'Daedric Shield', type: 'apparel', equipped: false, equippedBy: null } as any;
+    const slot = getDefaultSlotForItem(shieldLike as any);
+    expect(slot).toBe('offhand');
+
+    // Guard: apparel branch should not return 'chest' for shield names
+    const wrong = getDefaultSlotForItem({ ...shieldLike, type: 'apparel' } as any);
+    expect(wrong).not.toBe('chest');
   });
 
 });

@@ -168,6 +168,10 @@ export interface InventoryItem {
   // Upgrade fields for blacksmith system
   upgradeLevel?: number; // current upgrade tier (0 = base)
   maxUpgradeLevel?: number; // optional per-item override for max upgrades
+  // Optional per-item material requirements for upgrades. When present, the blacksmith
+  // will require these materials to be available in the shop (or provided via the
+  // upgradeService context) before allowing the upgrade.
+  upgradeRequirements?: Array<{ itemId: string; quantity?: number }>;
   // Optional explicit hints
   handedness?: 'one-handed' | 'two-handed' | 'off-hand-only';
   // If this item represents a spell tome or teaches a spell, set the spell id here

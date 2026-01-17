@@ -236,12 +236,16 @@ export const getDefaultSlotForItem = (item: InventoryItem): EquipmentSlot | null
     return null;
   }
   
+  // Shields are conceptually off-hand regardless of being typed as 'apparel' in some data sources.
+  // Handle shields first so mis-typed shield items don't fall through to 'chest'.
+  if (nameLower.includes('shield')) return 'offhand';
+
   if (item.type === 'weapon') {
     // Honor explicit handedness when present
     if (item.handedness === 'off-hand-only') return 'offhand';
     if (item.handedness === 'two-handed') return 'weapon';
     if (item.handedness === 'one-handed') return 'weapon';
-    if (nameLower.includes('shield') || nameLower.includes('torch')) return 'offhand';
+    if (nameLower.includes('torch')) return 'offhand';
     return 'weapon';
   }
   
