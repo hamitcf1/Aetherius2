@@ -1873,7 +1873,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       {/* Defeat overlay */}
       {showDefeat && (
         <div className="absolute inset-0 bg-skyrim-dark/90 flex items-center justify-center z-60">
-          <div className="bg-gradient-to-b from-red-900/90 to-stone-900/95 rounded-xl p-8 max-w-md text-center border-2 border-red-500 shadow-2xl">
+          <div className="bg-gradient-to-b from-red-900/90 to-stone-900/95 rounded-xl p-8 max-w-md text-center border-2 border-red-500 shadow-cheap">
             <div className="text-6xl mb-4">💀</div>
             <h2 className="text-3xl font-bold text-red-100 mb-2">DEFEATED</h2>
             <p className="text-stone-300 mb-6">You have fallen in battle...</p>

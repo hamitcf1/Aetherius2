@@ -417,6 +417,47 @@ const App: React.FC = () => {
     } catch (e) {}
     return 'snow';
   });
+
+  // Effects enabled toggle (read from localStorage, respects prefers-reduced-motion)
+  const [effectsEnabled, setEffectsEnabled] = useState<boolean>(() => {
+    try {
+      if (typeof window === 'undefined') return true;
+      const prefReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const saved = localStorage.getItem('aetherius:effectsEnabled');
+      if (saved === 'false') return false;
+      return !prefReduced;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  // Defer mounting large visual effects until after first paint / idle to improve LCP
+  const [mountWeather, setMountWeather] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handle = (window as any).requestIdleCallback
+      ? (window as any).requestIdleCallback(() => setMountWeather(true), { timeout: 1000 })
+      : window.setTimeout(() => setMountWeather(true), 650);
+    return () => {
+      try {
+        if ((window as any).cancelIdleCallback && handle) (window as any).cancelIdleCallback(handle);
+        else clearTimeout(handle as number);
+      } catch {}
+    };
+  }, []);
+
+  // Keep localStorage in sync if user toggles elsewhere (storage event)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'aetherius:effectsEnabled') {
+        try {
+          setEffectsEnabled(e.newValue !== 'false');
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   
   const [weatherIntensity, setWeatherIntensity] = useState<'light' | 'normal' | 'heavy' | 'blizzard'>(() => {
     try {
@@ -1276,13 +1317,30 @@ const App: React.FC = () => {
   }, [currentCharacterId, characters]);
 
   // Load inventory items for the currently selected character (or none if no character selected)
+  // Also performs cleanup of zero-quantity items to fix corrupted data
   useEffect(() => {
     if (!currentUser?.uid) return;
     let cancelled = false;
     (async () => {
       try {
         const itemsForChar = await loadInventoryItems(currentUser.uid, currentCharacterId || undefined);
-        if (!cancelled) setItems(itemsForChar);
+        if (!cancelled) {
+          // Clean up any items with zero or negative quantity (data integrity fix)
+          const validItems = itemsForChar.filter(item => (item.quantity || 0) > 0);
+          const invalidItems = itemsForChar.filter(item => (item.quantity || 0) <= 0);
+          
+          if (invalidItems.length > 0) {
+            console.warn(`🧹 Cleaning up ${invalidItems.length} zero-quantity ghost item(s) from inventory:`, invalidItems.map(i => `${i.name} x${i.quantity}`));
+            // Delete the invalid items from Firestore in the background
+            for (const item of invalidItems) {
+              void deleteInventoryItem(currentUser.uid, item.id).catch(err => {
+                console.warn('Failed to delete zero-quantity item:', item.name, err);
+              });
+            }
+          }
+          
+          setItems(validItems);
+        }
       } catch (e) {
         console.warn('Failed to load inventory items for character:', e);
       }
@@ -3214,6 +3272,7 @@ const App: React.FC = () => {
       }
 
       // 4a. Updated items by id (preserve id and replace matching entries)
+      // Items with quantity <= 0 are treated as deletions to prevent "x0" ghost items
       if ((updates as any).updatedItems) {
         setItems(prev => {
           const next = [...prev];
@@ -3222,6 +3281,20 @@ const App: React.FC = () => {
             if (!id) continue;
             const idx = next.findIndex(it => it.id === id && it.characterId === currentCharacterId);
             const sanitized = sanitizeInventoryItem(u as Partial<InventoryItem>) as InventoryItem;
+            
+            // Treat zero or negative quantity as deletion
+            if ((sanitized.quantity || 0) <= 0) {
+              if (idx >= 0) {
+                const [removed] = next.splice(idx, 1);
+                if (currentUser?.uid) {
+                  void deleteInventoryItem(currentUser.uid, removed.id).catch(err => {
+                    console.warn('Failed to delete zero-quantity inventory item from Firestore:', err);
+                  });
+                }
+              }
+              continue;
+            }
+            
             if (idx >= 0) {
               next[idx] = { ...next[idx], ...sanitized } as InventoryItem;
               setDirtyEntities(d => new Set([...d, next[idx].id]));
@@ -4026,10 +4099,10 @@ const App: React.FC = () => {
               colorTheme={colorTheme}
               onThemeChange={setColorTheme}
               weatherEffect={weatherEffect}
-              onWeatherChange={setWeatherEffect}
+              onWeatherChange={(w) => React.startTransition(() => setWeatherEffect(w))}
           />
-          {/* Global Weather Effect on login page */}
-          {weatherEffect !== 'none' && (
+          {/* Global Weather Effect on login page (can be disabled via localStorage or prefers-reduced-motion) */}
+          {mountWeather && weatherEffect !== 'none' && effectsEnabled && (
             <SnowEffect 
               settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
               theme={colorTheme} 
@@ -4112,6 +4185,8 @@ const App: React.FC = () => {
       setWeatherEffect,
       weatherIntensity,
       setWeatherIntensity,
+      effectsEnabled,
+      setEffectsEnabled,
       userSettings,
       updateUserSettings,
     }}>
@@ -4259,7 +4334,7 @@ const App: React.FC = () => {
           <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
         )}
         {/* Navigation Header */}
-        <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-2xl">
+        <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-cheap">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
@@ -4762,7 +4837,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         />
 
         {/* Global Weather Effect */}
-        {weatherEffect !== 'none' && (
+        {weatherEffect !== 'none' && effectsEnabled && (
           <SnowEffect 
             settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
             theme={colorTheme} 

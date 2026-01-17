@@ -2447,8 +2447,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
       {/* Equipment Modal */}
       {showEquipment && (
-        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl p-6 w-full max-w-4xl">
+        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-lite flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-cheap p-6 w-full max-w-4xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-serif text-skyrim-gold">Equipment</h3>
               <div className="flex items-center gap-2">
@@ -2974,7 +2974,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                               )}
                             </button>
                             {/* Hover tooltip showing what will be typed */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900/95 border border-skyrim-gold/50 rounded shadow-lg text-xs text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 max-w-[250px]">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900/95 border border-skyrim-gold/50 rounded shadow-cheap text-xs text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 max-w-[250px]">
                               <div className="text-skyrim-text text-[10px] mb-1">You will say:</div>
                               <div className="text-skyrim-gold italic truncate">"{playerText}"</div>
                               {/* Tooltip arrow */}

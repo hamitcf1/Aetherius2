@@ -843,8 +843,8 @@ Chapter 9: Legacy of ${sourceMaterial.character.name}
 
       {/* Finalize Modal */}
       {showFinalizeModal && (
-        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-lite flex items-center justify-center z-50 p-4">
+          <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-cheap p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-serif text-skyrim-gold flex items-center gap-2">
                 <BookOpen size={24} /> {generatedBook.length > 0 ? 'Your Chronicle' : 'Finalizing Your Chronicle'}

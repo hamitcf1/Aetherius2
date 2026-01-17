@@ -34,7 +34,7 @@ const RING_KEYWORDS = ['ring', 'band', 'signet'];
 const NECKLACE_KEYWORDS = ['necklace', 'amulet', 'pendant', 'torc', 'chain'];
 
 export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, onEquipFromSlot }) => {
-  // Get equipped items by slot
+  // Get equipped items by slot (filter out zero-quantity items to prevent "x0" display bugs)
   const equippedBySlot = useMemo(() => {
     const map: Record<EquipmentSlot, InventoryItem | null> = {
       head: null,
@@ -47,7 +47,8 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
       necklace: null,
     };
     
-    items.filter(i => i.equipped && i.slot).forEach(item => {
+    // Only consider items with positive quantity to prevent zero-qty/equipped state bugs
+    items.filter(i => i.equipped && i.slot && (i.quantity || 0) > 0).forEach(item => {
       if (item.slot) {
         map[item.slot] = item;
       }
@@ -56,9 +57,9 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
     return map;
   }, [items]);
 
-  // Determine if offhand should be disabled due to a two-handed main weapon
+  // Determine if offhand should be disabled due to a two-handed main weapon (ignore zero-qty items)
   const offhandDisabled = useMemo(() => {
-    const main = items.find(i => i.equipped && i.slot === 'weapon');
+    const main = items.find(i => i.equipped && i.slot === 'weapon' && (i.quantity || 0) > 0);
     return !!(main && main.type === 'weapon' && shouldHaveStats(main.type) && main && main.name && main && (main.name && (() => {
       // Use existing helper via import to determine two-handedness by name
       // But avoid circular imports - simple name-based check similar to isTwoHandedWeapon
@@ -68,12 +69,12 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
     })()));
   }, [items]);
 
-  // Calculate total stats
+  // Calculate total stats (only for items with positive quantity)
   const totalStats = useMemo(() => {
     let armor = 0;
     let damage = 0;
     
-    items.filter(i => i.equipped).forEach(item => {
+    items.filter(i => i.equipped && (i.quantity || 0) > 0).forEach(item => {
       // Get stats from item, or fall back to itemStats service
       let itemArmor = item.armor;
       let itemDamage = item.damage;

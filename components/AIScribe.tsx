@@ -272,7 +272,7 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
               setIsDragging(true);
             }}
             onClick={() => setShowConsultButton(true)}
-            className="fixed z-50 bg-skyrim-gold text-skyrim-dark rounded-l-lg shadow-lg border-2 border-skyrim-dark font-serif font-bold opacity-80 hover:opacity-100 gm-toggle-btn"
+            className="fixed z-50 bg-skyrim-gold text-skyrim-dark rounded-l-lg shadow-cheap border-2 border-skyrim-dark font-serif font-bold opacity-80 hover:opacity-100 gm-toggle-btn"
             style={{
               top: `${buttonPos.y}px`,
               right: 0,

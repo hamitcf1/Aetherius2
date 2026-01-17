@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings, Globe, SlidersHorizontal, Bot } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
@@ -88,6 +88,8 @@ const ActionBar: React.FC = () => {
     setWeatherEffect,
     weatherIntensity,
     setWeatherIntensity,
+    effectsEnabled,
+    setEffectsEnabled,
     userSettings,
     updateUserSettings,
     showQuantityControls,
@@ -100,6 +102,10 @@ const ActionBar: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  // Defer/hydrate heavy settings content to improve INP when opening modal
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const settingsHydrateRef = useRef<number | null>(null);
+
   
   // ESC key handler for settings modal
   useEffect(() => {
@@ -110,7 +116,28 @@ const ActionBar: React.FC = () => {
       }
     };
     document.addEventListener('keydown', handleEsc);
-    return () => document.removeEventListener('keydown', handleEsc);
+
+    // hydrate heavy settings sections during idle to avoid blocking the opening interaction
+    if (settingsHydrateRef.current) {
+      try { clearTimeout(settingsHydrateRef.current); } catch {}
+    }
+    if ((window as any).requestIdleCallback) {
+      settingsHydrateRef.current = (window as any).requestIdleCallback(() => setSettingsHydrated(true));
+    } else {
+      settingsHydrateRef.current = window.setTimeout(() => setSettingsHydrated(true), 220) as any;
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      setSettingsHydrated(false);
+      if (settingsHydrateRef.current) {
+        try {
+          if ((window as any).cancelIdleCallback) (window as any).cancelIdleCallback(settingsHydrateRef.current);
+          else clearTimeout(settingsHydrateRef.current as number);
+        } catch {}
+        settingsHydrateRef.current = null;
+      }
+    };
   }, [showSettingsModal]);
   
   // Music volume state
@@ -205,6 +232,8 @@ const ActionBar: React.FC = () => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{left: number, top: number, width: number}>({left: 0, top: 0, width: 220});
+  // debounce ref for weather intensity to avoid repeated heavy renders
+  const intensityTimerRef = useRef<number | null>(null);
 
   const updateDropdownPos = () => {
     if (buttonRef.current) {
@@ -313,7 +342,7 @@ const ActionBar: React.FC = () => {
       {open && createPortal(
         <div
           ref={dropdownRef}
-          className="bg-skyrim-paper border border-skyrim-gold rounded-lg shadow-2xl p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2"
+          className="bg-skyrim-paper border border-skyrim-gold rounded-lg shadow-cheap p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2"
           style={{
             position: 'fixed',
             left: dropdownPos.left,
@@ -537,10 +566,16 @@ const ActionBar: React.FC = () => {
                   <Bot size={16} className="text-skyrim-gold" />
                   <span className="text-sm font-bold text-skyrim-gold uppercase">AI Model</span>
                 </div>
-                <AIModelSelector currentModel={aiModel || 'gemma-3-27b-it'} onSelect={setAiModel} />
-                <p className="text-[10px] text-gray-500 mt-2 italic">
-                  Choose the AI model powering your adventure
-                </p>
+                {settingsHydrated ? (
+                  <>
+                    <AIModelSelector currentModel={aiModel || 'gemma-3-27b-it'} onSelect={setAiModel} />
+                    <p className="text-[10px] text-gray-500 mt-2 italic">
+                      Choose the AI model powering your adventure
+                    </p>
+                  </>
+                ) : (
+                  <div className="p-3 text-sm text-gray-400">Loading…</div>
+                )}
               </div>
             )}
 
@@ -614,48 +649,54 @@ const ActionBar: React.FC = () => {
                 <Mic size={16} className="text-skyrim-gold" />
                 <span className="text-sm font-bold text-skyrim-gold uppercase">Voice (TTS)</span>
               </div>
-              
-              {/* Voice Gender */}
-              <div className="mb-3">
-                <label className="text-xs text-skyrim-text block mb-2">Voice Gender</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleVoiceGenderChange('male')}
-                    className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                      voiceGender === 'male'
-                        ? 'bg-blue-700 text-white border-blue-600'
-                        : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-blue-600'
-                    }`}
-                  >
-                    Male
-                  </button>
-                  <button
-                    onClick={() => handleVoiceGenderChange('female')}
-                    className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                      voiceGender === 'female'
-                        ? 'bg-pink-700 text-white border-pink-600'
-                        : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-pink-600'
-                    }`}
-                  >
-                    Female
-                  </button>
-                </div>
-              </div>
-              
-              {/* Voice Style */}
-              <div className="mb-3">
-                <label className="text-xs text-skyrim-text block mb-2">Voice Style</label>
-                <VoiceStyleDropdown
-                  gender={voiceGender}
-                  currentVoice={voiceName}
-                  onSelect={handleVoiceNameChange}
-                  language={language}
-                />
-              </div>
-              
-              <p className="text-[10px] text-gray-500 mt-2 italic">
-                Voice language will match your selected language ({AVAILABLE_LANGUAGES.find(l => l.code === language)?.nativeName})
-              </p>
+
+              {settingsHydrated ? (
+                <>
+                  {/* Voice Gender */}
+                  <div className="mb-3">
+                    <label className="text-xs text-skyrim-text block mb-2">Voice Gender</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleVoiceGenderChange('male')}
+                        className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                          voiceGender === 'male'
+                            ? 'bg-blue-700 text-white border-blue-600'
+                            : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-blue-600'
+                        }`}
+                      >
+                        Male
+                      </button>
+                      <button
+                        onClick={() => handleVoiceGenderChange('female')}
+                        className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                          voiceGender === 'female'
+                            ? 'bg-pink-700 text-white border-pink-600'
+                            : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-pink-600'
+                        }`}
+                      >
+                        Female
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Voice Style */}
+                  <div className="mb-3">
+                    <label className="text-xs text-skyrim-text block mb-2">Voice Style</label>
+                    <VoiceStyleDropdown
+                      gender={voiceGender}
+                      currentVoice={voiceName}
+                      onSelect={handleVoiceNameChange}
+                      language={language}
+                    />
+                  </div>
+                  
+                  <p className="text-[10px] text-gray-500 mt-2 italic">
+                    Voice language will match your selected language ({AVAILABLE_LANGUAGES.find(l => l.code === language)?.nativeName})
+                  </p>
+                </>
+              ) : (
+                <div className="p-3 text-sm text-gray-400">Loading…</div>
+              )}
             </div>
 
             {/* Inventory Settings */}
@@ -682,62 +723,93 @@ const ActionBar: React.FC = () => {
                   <Snowflake size={16} className="text-skyrim-gold" />
                   <span className="text-sm font-bold text-skyrim-gold uppercase">{t('settings.weather')}</span>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { value: 'snow', icon: <Snowflake size={14} />, label: t('settings.weatherSnow') },
-                    { value: 'rain', icon: <CloudRain size={14} />, label: t('settings.weatherRain') },
-                    { value: 'sandstorm', icon: <Wind size={14} />, label: 'Sandstorm' },
-                    { value: 'none', icon: <CloudOff size={14} />, label: t('settings.weatherClear') },
-                  ].map(w => (
-                    <button
-                      key={w.value}
-                      onClick={() => setWeatherEffect(w.value as WeatherEffectType)}
-                      className={`flex flex-col items-center gap-1 px-2 py-2 rounded border text-xs transition-colors ${
-                        weatherEffect === w.value
-                          ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
-                          : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
-                      }`}
-                    >
-                      {w.icon}
-                      <span>{w.label}</span>
-                    </button>
-                  ))}
-                </div>
-                {/* Weather Intensity (when weather is active) */}
-                {weatherEffect !== 'none' && (
-                  <div className="mt-3">
-                    <label className="text-xs text-skyrim-text block mb-2">Intensity</label>
+
+                {settingsHydrated ? (
+                  <>
                     <div className="grid grid-cols-4 gap-2">
-                      {SNOW_INTENSITY_OPTIONS.map(opt => (
+                      {[
+                        { value: 'snow', icon: <Snowflake size={14} />, label: t('settings.weatherSnow') },
+                        { value: 'rain', icon: <CloudRain size={14} />, label: t('settings.weatherRain') },
+                        { value: 'sandstorm', icon: <Wind size={14} />, label: 'Sandstorm' },
+                        { value: 'none', icon: <CloudOff size={14} />, label: t('settings.weatherClear') },
+                      ].map(w => (
                         <button
-                          key={opt.value}
-                          onClick={() => setWeatherIntensity(opt.value)}
-                          className={`px-2 py-1.5 text-xs rounded border transition-colors ${
-                            weatherIntensity === opt.value
+                          key={w.value}
+                          onClick={() => startTransition(() => setWeatherEffect(w.value as WeatherEffectType))}
+                          className={`flex flex-col items-center gap-1 px-2 py-2 rounded border text-xs transition-colors ${
+                            weatherEffect === w.value
                               ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
                               : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
                           }`}
                         >
-                          {opt.label}
+                          {w.icon}
+                          <span>{w.label}</span>
                         </button>
                       ))}
                     </div>
 
-                    {/* Mouse Interaction Toggle */}
-                    <div className="mt-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={weatherMouseInteractionEnabled}
-                          onChange={handleToggleWeatherMouseInteraction}
-                          className="accent-skyrim-gold w-4 h-4"
-                        />
-                        <span className="text-sm text-skyrim-text">Enable mouse interaction (repel particles)</span>
-                      </label>
-                    </div>
+                    {/* Weather Intensity (when weather is active) */}
+                    {weatherEffect !== 'none' && (
+                      <div className="mt-3">
+                        <label className="text-xs text-skyrim-text block mb-2">Intensity</label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {SNOW_INTENSITY_OPTIONS.map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => {
+                                if (intensityTimerRef.current) clearTimeout(intensityTimerRef.current);
+                                intensityTimerRef.current = window.setTimeout(() => {
+                                  startTransition(() => setWeatherIntensity(opt.value));
+                                  intensityTimerRef.current = null;
+                                }, 80) as any;
+                              }}
+                              className={`px-2 py-1.5 text-xs rounded border transition-colors ${
+                                weatherIntensity === opt.value
+                                  ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
+                                  : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
 
-                  </div>
-                )} 
+                        {/* Mouse Interaction Toggle */}
+                        <div className="mt-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={weatherMouseInteractionEnabled}
+                              onChange={handleToggleWeatherMouseInteraction}
+                              className="accent-skyrim-gold w-4 h-4"
+                            />
+                            <span className="text-sm text-skyrim-text">Enable mouse interaction (repel particles)</span>
+                          </label>
+                        </div>
+
+                        {/* Effects Enabled Toggle */}
+                        <div className="mt-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(effectsEnabled)}
+                              onChange={() => {
+                                const newState = !Boolean(effectsEnabled);
+                                try { localStorage.setItem('aetherius:effectsEnabled', newState ? 'true' : 'false'); } catch {}
+                                setEffectsEnabled(newState);
+                              }}
+                              className="accent-skyrim-gold w-4 h-4"
+                            />
+                            <span className="text-sm text-skyrim-text">Enable weather & particle effects</span>
+                          </label>
+                        </div>
+
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-3 text-sm text-gray-400">Loading weather settings…</div>
+                )}
               </div>
             )}
 

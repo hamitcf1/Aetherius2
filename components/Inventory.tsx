@@ -332,7 +332,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
         }
       });
     
-    let uniqueItems = Array.from(nameMap.values());
+    // Filter out items with zero or negative quantity (prevents "x0" display bugs)
+    let uniqueItems = Array.from(nameMap.values()).filter(item => (item.quantity || 0) > 0);
     
     // Filter by category tab (including favorites)
     if (activeTab === 'favorites') {
@@ -598,8 +599,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
 
     {/* Equip Modal */}
     {equipModalOpen && selectedSlot && (
-      <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-lite flex items-center justify-center z-50 p-4">
+        <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-cheap p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
           <h3 className="text-xl font-serif text-skyrim-gold mb-4">
             Select item for {selectedSlot.charAt(0).toUpperCase() + selectedSlot.slice(1)}
           </h3>

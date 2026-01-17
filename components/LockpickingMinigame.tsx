@@ -229,7 +229,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
   } : {};
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/90 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-skyrim-dark/90 backdrop-lite flex items-center justify-center z-50">
       <div 
         ref={containerRef}
         className="bg-skyrim-paper border-2 border-skyrim-gold/50 rounded-lg p-6 max-w-lg w-full mx-4"
@@ -284,7 +284,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
                 transform: `translate(-50%, -100%) rotate(${pickAngle - 90}deg)`,
               }}
             >
-              <div className="w-full h-full bg-gradient-to-t from-gray-400 to-gray-300 rounded-full shadow-lg">
+              <div className="w-full h-full bg-gradient-to-t from-gray-400 to-gray-300 rounded-full shadow-cheap">
                 {/* Pick tip */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-4 bg-gray-300 rounded-t-full"></div>
               </div>

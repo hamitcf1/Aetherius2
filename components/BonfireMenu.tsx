@@ -286,8 +286,8 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-4xl md:max-w-3xl lg:max-w-4xl h-[min(95vh,calc(100vh-2rem))] overflow-auto bg-skyrim-paper border border-skyrim-gold rounded-lg shadow-2xl">
+    <div className="fixed inset-0 z-[80] bg-skyrim-dark/60 backdrop-lite flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-4xl md:max-w-3xl lg:max-w-4xl h-[min(95vh,calc(100vh-2rem))] overflow-auto bg-skyrim-paper border border-skyrim-gold rounded-lg shadow-cheap">
         <div className="p-4 border-b border-skyrim-border flex items-center justify-between bg-skyrim-dark/50">
           <div className="flex items-center gap-3">
             <Moon className="text-skyrim-gold" size={20} />

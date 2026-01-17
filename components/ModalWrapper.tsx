@@ -78,7 +78,7 @@ export function ModalWrapper({
   return (
     <div
       data-sfx="button_click"
-      className={`fixed inset-0 ${zIndex} bg-skyrim-dark/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto ${className}`}
+      className={`fixed inset-0 ${zIndex} bg-skyrim-dark/60 backdrop-lite flex items-center justify-center p-2 sm:p-4 overflow-y-auto ${className}`}
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"

@@ -153,6 +153,24 @@
       }
       textarea { resize: vertical; }
       input[disabled], textarea[disabled], [contenteditable="false"] { opacity: 0.6; }
+
+      /* Performance-first UI utilities: cheaper backdrop and shadow for low-end devices */
+      .backdrop-lite {
+        background-color: rgba(10,10,10,0.55);
+        /* tiny blur for a subtle depth effect; inexpensive compared to large blurs */
+        -webkit-backdrop-filter: blur(2px);
+        backdrop-filter: blur(2px);
+      }
+
+      .shadow-cheap {
+        /* smaller spread, lower alpha */
+        box-shadow: 0 6px 18px rgba(2,6,23,0.12), 0 2px 6px rgba(2,6,23,0.04) inset;
+      }
+
+      @media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
+        .backdrop-lite { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+        .shadow-cheap { box-shadow: none !important; }
+      }
     </style>
   <script type="importmap">
 {

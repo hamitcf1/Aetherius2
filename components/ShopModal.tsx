@@ -616,7 +616,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
 
   return (
     <div 
-      className="fixed inset-0 z-[70] bg-skyrim-dark/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[70] bg-skyrim-dark/70 backdrop-lite flex items-center justify-center p-4 sm:p-6"
       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >

@@ -188,7 +188,7 @@ export const Journal: React.FC<JournalProps> = ({ entries, setEntries, onDeleteE
           {filteredEntries.map(entry => (
               <div key={entry.id} className="relative md:pl-12 group">
                    <div className="hidden md:block absolute left-[11px] top-6 w-3 h-3 bg-skyrim-gold rounded-full border-2 border-skyrim-dark z-10"></div>
-                   <div className="bg-skyrim-paper p-6 rounded border border-skyrim-border shadow-lg hover:border-skyrim-gold transition-colors">
+                   <div className="bg-skyrim-paper p-6 rounded border border-skyrim-border shadow-cheap hover:border-skyrim-gold transition-colors">
                        <div className="flex justify-between items-start mb-4 border-b border-skyrim-border pb-2">
                            <div>
                                <h3 className="text-xl font-serif text-gray-200">{entry.title}</h3>

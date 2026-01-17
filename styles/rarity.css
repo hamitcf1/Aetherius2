@@ -26,27 +26,36 @@
 /* Legendary special effects */
 .legendary-glow {
   position: relative;
-  box-shadow: 0 6px 18px rgba(250, 204, 21, 0.12), 0 2px 6px rgba(245, 158, 11, 0.06) inset;
+  /* reduced static shadow to lower paint cost; overlay provides glow */
+  box-shadow: 0 4px 10px rgba(250, 204, 21, 0.08);
 }
 .legendary-glow::after {
   content: '';
   position: absolute;
-  left: -10px;
-  right: -10px;
-  top: -10px;
-  bottom: -10px;
+  left: -6px;
+  right: -6px;
+  top: -6px;
+  bottom: -6px;
   border-radius: 10px;
   pointer-events: none;
-  background: radial-gradient(closest-side, rgba(255, 239, 165, 0.18), rgba(245, 158, 11, 0));
-  filter: blur(6px);
+  background: radial-gradient(closest-side, rgba(255, 239, 165, 0.12), rgba(245, 158, 11, 0));
+  /* much smaller blur to reduce expensive paint */
+  filter: blur(2px);
+  will-change: opacity, transform;
+  transform: translateZ(0);
 }
 
 @keyframes legendary-pulse {
-  0% { transform: scale(0.96); opacity: 0.9; }
-  50% { transform: scale(1.04); opacity: 1; }
-  100% { transform: scale(0.96); opacity: 0.9; }
+  0% { transform: scale(0.985); opacity: 0.92; }
+  50% { transform: scale(1.01); opacity: 1; }
+  100% { transform: scale(0.985); opacity: 0.92; }
 }
 .legendary-pulse {
   animation: legendary-pulse 2.8s ease-in-out infinite;
   transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legendary-pulse { animation: none !important; }
+  .legendary-glow::after { filter: none !important; opacity: 0.6 !important; }
 }

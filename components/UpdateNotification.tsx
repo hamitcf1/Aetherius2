@@ -59,7 +59,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ position = 'bot
       }}
     >
       <div className="max-w-2xl mx-auto">
-        <div className="bg-gradient-to-r from-skyrim-accent to-blue-900 border border-skyrim-gold/50 rounded-lg shadow-lg shadow-black/50 p-4">
+        <div className="bg-gradient-to-r from-skyrim-accent to-blue-900 border border-skyrim-gold/50 rounded-lg shadow-cheap p-4">
           <div className="flex items-center gap-4">
             {/* Icon */}
             <div className="flex-shrink-0">

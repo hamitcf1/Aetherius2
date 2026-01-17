@@ -55,6 +55,9 @@ export interface AppContextType {
   setWeatherEffect: (effect: WeatherEffectType) => void;
   weatherIntensity: WeatherIntensity;
   setWeatherIntensity: (intensity: WeatherIntensity) => void;
+  // Effects toggle (allow disabling heavy visual effects)
+  effectsEnabled: boolean;
+  setEffectsEnabled: (v: boolean) => void;
   // Companions management
   openCompanions: () => void;
   // User settings (Firebase persistent)

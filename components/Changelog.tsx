@@ -270,11 +270,11 @@ export const Changelog: React.FC = () => {
       {/* Changelog Modal */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-skyrim-dark/60 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-skyrim-dark/60 backdrop-lite animate-in fade-in duration-200"
           onClick={() => setIsOpen(false)}
         >
           <div 
-            className="relative w-full max-w-lg max-h-[80vh] bg-skyrim-paper border border-skyrim-border rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+            className="relative w-full max-w-lg max-h-[80vh] bg-skyrim-paper border border-skyrim-border rounded-lg shadow-cheap overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}

@@ -26,6 +26,8 @@ const INTENSITY_MAP = {
   blizzard: 180,
 };
 
+// Safety cap to avoid creating too many DOM/canvas particles
+const MAX_PARTICLES = 200;
 interface Particle {
   id: number;
   size: number;
@@ -150,6 +152,16 @@ const injectStyles = (particleType: ParticleType) => {
         pointer-events: none;
         z-index: 9999;
       }
+
+      /* subtle low-cost overlay so rain is perceptible even if particles are missing */
+      .rain-container::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(180deg, rgba(200,215,230,0.03), rgba(200,215,230,0.01));
+        pointer-events: none;
+        z-index: 9998;
+      }
     `;
   } else if (particleType === 'sand') {
     style.textContent = `
@@ -258,12 +270,23 @@ const injectStyles = (particleType: ParticleType) => {
         background: radial-gradient(circle, #fff 0%, rgba(255,255,255,0.8) 40%, transparent 70%);
         border-radius: 50%;
         pointer-events: none;
+        /* keep will-change minimal */
         will-change: transform;
         animation: 
-          snowfall var(--duration) linear infinite,
-          snowflake-shimmer 3s ease-in-out infinite;
+          snowfall var(--duration) linear infinite;
+        /* shimmer reduced frequency to lower paint pressure */
         animation-delay: var(--delay);
         z-index: 9999;
+      }
+
+      /* subtle, low-cost shimmer applied to a single pseudo-element on the container */
+      .snow-container::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        pointer-events: none;
+        z-index: 9998;
       }
 
       .snow-container {
@@ -302,6 +325,7 @@ const ParticleElement: React.FC<{ particle: Particle; particleType: ParticleType
   // Sand particles start from random vertical positions
   const top = particleType === 'sand' ? `${Math.random() * 70}%` : undefined;
   
+  // Note: avoid per-particle box-shadow to reduce paint cost on low-end devices
   return (
     <div
       className={className}
@@ -314,7 +338,6 @@ const ParticleElement: React.FC<{ particle: Particle; particleType: ParticleType
         '--delay': `${-particle.delay}s`,
         '--drift': `${particle.drift}px`,
         '--base-opacity': particle.opacity,
-        boxShadow: particleType !== 'rain' ? `0 0 ${particle.size * 2}px ${particle.size / 2}px ${glowColor}` : undefined
       } as React.CSSProperties}
     />
   );
@@ -333,6 +356,8 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<InteractiveParticle[]>([]);
   const mouseRef = useRef({ x: -1000, y: -1000 });
+  // raw mouse updated by mouse events; we sample into mouseRef from RAF to avoid per-event physics
+  const mouseRawRef = useRef({ x: -1000, y: -1000 });
   const animationRef = useRef<number | null>(null);
   
   const MOUSE_RADIUS = 100;
@@ -345,22 +370,31 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // Set canvas size
+    // Set canvas size (debounced resize will be added)
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.round(window.innerWidth * dpr);
+      canvas.height = Math.round(window.innerHeight * dpr);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-    window.addEventListener('resize', resize);
+    let resizeTimer: any = null;
+    const onResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => resize(), 120);
+    };
+    window.addEventListener('resize', onResize);
     
     // Initialize particles (rain falls faster)
     particlesRef.current = generateInteractiveParticles(particleCount, particleType === 'rain');
     
-    // Mouse tracking
+    // Mouse tracking: update raw ref only
     const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
+      mouseRawRef.current = { x: e.clientX, y: e.clientY };
     };
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     
     // Get particle color based on type
     const getParticleColor = (opacity: number) => {
@@ -376,8 +410,18 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
       }
     };
     
-    // Animation loop
+    // Animation loop (pauses when document hidden)
     const animate = () => {
+      // Sample raw mouse position into the mouse used for physics
+      mouseRef.current.x = mouseRawRef.current.x;
+      mouseRef.current.y = mouseRawRef.current.y;
+
+      if (document.hidden) {
+        // Stop animating while not visible to save CPU; will be resumed on visibilitychange
+        animationRef.current = null;
+        return;
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       particlesRef.current.forEach(p => {
@@ -413,7 +457,6 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
         
         // Draw particle (rain is elongated, others are round)
         if (particleType === 'rain') {
-          // Rain drops are elongated streaks
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(p.x, p.y + p.size * 8);
@@ -426,26 +469,40 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
           ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
           ctx.fillStyle = getParticleColor(p.opacity);
           ctx.fill();
-          
-          // Add glow effect
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fillStyle = getParticleColor(p.opacity * 0.3);
-          ctx.fill();
         }
       });
       
       animationRef.current = requestAnimationFrame(animate);
     };
-    
-    animate();
+
+    const startAnimation = () => {
+      if (!animationRef.current && !document.hidden) {
+        animationRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
+        }
+      } else {
+        startAnimation();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+
+    startAnimation();
     
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', onResize);
       window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [particleCount, particleType]);
   
@@ -471,7 +528,7 @@ InteractiveSnowEffect.displayName = 'InteractiveSnowEffect';
 const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherType = 'snow' }) => {
   const intensity = settings?.intensity || 'normal';
   const enableMouseInteraction = settings?.enableMouseInteraction ?? false;
-  const baseParticleCount = INTENSITY_MAP[intensity];
+  const baseParticleCount = INTENSITY_MAP[intensity] ?? INTENSITY_MAP['normal'];
   const isBloodEffect = theme === 'dark_brotherhood';
   
   // Determine actual particle type
@@ -486,22 +543,52 @@ const SnowEffect: React.FC<SnowEffectProps> = memo(({ settings, theme, weatherTy
     : particleType === 'sand'
       ? Math.floor(baseParticleCount * 2)
       : baseParticleCount;
+
+  // Apply a hard cap to avoid creating too many particles on low-end devices
+  const cappedParticleCount = Math.min(particleCount, MAX_PARTICLES);
   
   // Use interactive canvas-based effect if mouse interaction is enabled (not for sandstorm)
   if (enableMouseInteraction && particleType !== 'sand') {
-    return <InteractiveSnowEffect particleCount={particleCount} particleType={particleType} />;
+    return <InteractiveSnowEffect particleCount={cappedParticleCount} particleType={particleType} />;
   }
   
   // Generate particles based on type and intensity (CSS-based)
   const particles = useMemo(() => {
-    if (particleType === 'rain') return generateRaindrops(particleCount);
-    if (particleType === 'sand') return generateSandParticles(particleCount);
-    return generateParticles(particleCount);
-  }, [particleCount, particleType]);
+    if (particleType === 'rain') {
+      const arr = generateRaindrops(cappedParticleCount);
+      return (cappedParticleCount > 0 && arr.length === 0) ? generateRaindrops(1) : arr;
+    }
+    if (particleType === 'sand') {
+      const arr = generateSandParticles(cappedParticleCount);
+      return (cappedParticleCount > 0 && arr.length === 0) ? generateSandParticles(1) : arr;
+    }
+    const arr = generateParticles(cappedParticleCount);
+    return (cappedParticleCount > 0 && arr.length === 0) ? generateParticles(1) : arr;
+  }, [cappedParticleCount, particleType]);
+
+  // Dev-only diagnostics for easier bug reports
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        // eslint-disable-next-line no-console
+        console.debug('[SnowEffect] mount', { particleType, intensity, particleCount, cappedParticleCount });
+      } catch (e) { /* ignore */ }
+    }
+  }, [particleType, intensity, particleCount, cappedParticleCount]);
 
   useEffect(() => {
     injectStyles(particleType);
   }, [particleType]);
+
+  // Log actual produced particle count (dev only)
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        // eslint-disable-next-line no-console
+        console.debug('[SnowEffect] particles produced:', { particleType, particlesLength: particles.length });
+      } catch {}
+    }
+  }, [particleType, particles.length]);
 
   const containerClass = particleType === 'rain' ? 'rain-container' 
     : particleType === 'blood' ? 'blood-container' 

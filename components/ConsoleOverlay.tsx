@@ -179,7 +179,7 @@ export const ConsoleOverlay: React.FC<ConsoleOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-skyrim-paper border border-skyrim-border rounded-lg shadow-2xl w-full max-w-4xl h-3/4 flex flex-col">
+      <div className="bg-skyrim-paper border border-skyrim-border rounded-lg shadow-cheap w-full max-w-4xl h-3/4 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-skyrim-border">
           <div className="flex items-center gap-2">

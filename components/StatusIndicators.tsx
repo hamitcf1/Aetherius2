@@ -128,7 +128,7 @@ export const AutoSaveIndicator: React.FC<AutoSaveIndicatorProps> = ({
   if (!visible && status === 'idle') return null;
 
   return (
-    <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg border shadow-lg transition-all duration-300 ${
+    <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg border shadow-cheap transition-all duration-300 ${
       status === 'saving' ? 'bg-blue-900/90 border-blue-700 text-blue-200' :
       status === 'saved' ? 'bg-green-900/90 border-green-700 text-green-200' :
       status === 'error' ? 'bg-red-900/90 border-red-700 text-red-200' :

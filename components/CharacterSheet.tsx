@@ -150,26 +150,51 @@ const StatBar: React.FC<{
                     window.addEventListener('mouseup', onUp);
                 }}
                 style={{
+                    // reduced static shadow (cheaper paint); animated glow moved to composited overlay
                     boxShadow: `${
-                        color === 'bg-red-700' ? '0 0 48px 16px rgba(255,40,40,0.7), 0 0 96px 32px rgba(255,40,40,0.25)' :
-                        color === 'bg-blue-600' ? '0 0 48px 16px rgba(80,180,255,0.7), 0 0 96px 32px rgba(80,180,255,0.25)' :
-                        color === 'bg-green-600' ? '0 0 48px 16px rgba(80,255,120,0.7), 0 0 96px 32px rgba(80,255,120,0.25)' :
-                        '0 0 48px 16px rgba(255,255,255,0.3), 0 0 96px 32px rgba(255,255,255,0.1)'
+                        color === 'bg-red-700' ? '0 0 24px 8px rgba(255,40,40,0.45)' :
+                        color === 'bg-blue-600' ? '0 0 24px 8px rgba(80,180,255,0.45)' :
+                        color === 'bg-green-600' ? '0 0 24px 8px rgba(80,255,120,0.45)' :
+                        '0 0 24px 8px rgba(255,255,255,0.18)'
                     }`,
-                    position: 'relative',
-                    animation: 'skyrim-bar-glow-anim 2.5s ease-in-out infinite',
+                    position: 'relative'
                 }}
             >
                 <div 
                     className={`absolute top-0 left-0 h-full ${color} transition-all duration-700 ease-out group-hover:brightness-125`} 
                     style={{ width: `${Math.max(0, Math.min(value / 6, 100))}%` }}
                 ></div>
-                <style>{`
-                    @keyframes skyrim-bar-glow-anim {
-                        0% { box-shadow: none; }
-                        50% { box-shadow: 0 0 12px 6px rgba(192, 160, 98, 0.3); }
-                        100% { box-shadow: none; }
-                    }
+
+                {/* composited overlay for glow — transforms & opacity only (GPU-composited) */}
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-end">
+                  <div className="bar-glow-overlay" aria-hidden="true" />
+                </div>
+
+                <style>{` 
+                  .bar-glow-overlay {
+                    width: 56px;
+                    height: 28px;
+                    margin-right: 6px;
+                    border-radius: 999px;
+                    background: radial-gradient(closest-side, rgba(255,255,255,0.12), rgba(255,255,255,0));
+                    transform: translateZ(0) scale(0.98);
+                    opacity: 0.0;
+                    will-change: transform, opacity;
+                    box-shadow: none;
+                    pointer-events: none;
+                    mix-blend-mode: screen;
+                    animation: skyrim-bar-glow-fade 2200ms ease-in-out infinite;
+                  }
+
+                  @keyframes skyrim-bar-glow-fade {
+                    0% { transform: translateY(0) scale(0.92); opacity: 0; }
+                    50% { transform: translateY(-2px) scale(1); opacity: 0.9; }
+                    100% { transform: translateY(0) scale(0.92); opacity: 0; }
+                  }
+
+                  @media (prefers-reduced-motion: reduce) {
+                    .bar-glow-overlay { animation: none !important; opacity: 0.6; }
+                  }
                 `}</style>
             </div>
         </div>

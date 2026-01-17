@@ -234,7 +234,7 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete,
       </div>
 
       {isAdding && (
-            <div className="mb-6 bg-skyrim-paper border border-skyrim-gold p-6 rounded shadow-lg animate-in fade-in zoom-in-95 duration-200">
+            <div className="mb-6 bg-skyrim-paper border border-skyrim-gold p-6 rounded shadow-cheap animate-in fade-in zoom-in-95 duration-200">
                 <div className="grid gap-4">
                     <input 
                         className="border border-skyrim-border p-2 rounded text-lg font-serif text-skyrim-gold focus:outline-none focus:border-skyrim-gold"

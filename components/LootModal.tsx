@@ -49,7 +49,7 @@ export const LootModal: React.FC<LootModalProps> = ({ combatState, onCancel, onC
 
   return (
     <div 
-      className="fixed inset-0 z-60 flex items-center justify-center bg-skyrim-dark/60 backdrop-blur-sm"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-skyrim-dark/60 backdrop-lite"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div className="bg-stone-900 rounded-lg p-4 w-full max-w-xl border border-skyrim-border" onClick={(e) => e.stopPropagation()}>
