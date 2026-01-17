@@ -140,7 +140,9 @@ const EnemyCard: React.FC<{
   onClick: () => void;
   containerRef?: (el: HTMLDivElement | null) => void;
   isHighlighted?: boolean;
-}> = ({ enemy, isTarget, onClick, containerRef, isHighlighted }) => {
+  isCurrentTurn?: boolean;
+  onToggleAutoControl?: () => void;
+}> = ({ enemy, isTarget, onClick, containerRef, isHighlighted, isCurrentTurn, onToggleAutoControl }) => {
   const healthPercent = (enemy.currentHealth / enemy.maxHealth) * 100;
   const isDead = enemy.currentHealth <= 0;
   
@@ -157,6 +159,7 @@ const EnemyCard: React.FC<{
             : 'bg-stone-800/60 border-stone-600 cursor-pointer hover:border-amber-500/50'
         }
         ${isHighlighted ? 'ring-4 ring-amber-300/40 animate-pulse' : ''}
+        ${isCurrentTurn ? 'ring-2 ring-amber-400 shadow-lg shadow-amber-400/30' : ''}
       `}
     >
       {/* Boss indicator */}
@@ -166,15 +169,35 @@ const EnemyCard: React.FC<{
         </div>
       )}
       
+      {/* Turn indicator arrow (SKY-55) */}
+      {isCurrentTurn && !isDead && (
+        <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-400 animate-pulse text-lg">
+          ▶
+        </div>
+      )}
+      
       {/* Enemy name and type */}
       <div className="mb-2">
         <div className="flex items-center gap-2">
           <h4 className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
             {enemy.name}
           </h4>
-          {/* Companion auto-control badge */}
-          {enemy.isCompanion && (enemy as any).companionMeta?.autoControl && (
-            <span className="text-xs bg-sky-600 text-black px-2 py-0.5 rounded">Auto</span>
+          {/* Companion auto-control badge - clickable to toggle (SKY-55) */}
+          {enemy.isCompanion && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleAutoControl?.();
+              }}
+              className={`text-xs px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                (enemy as any).companionMeta?.autoControl !== false
+                  ? 'bg-sky-600 text-white hover:bg-sky-500' 
+                  : 'bg-amber-600 text-white hover:bg-amber-500'
+              }`}
+              title={`Click to ${(enemy as any).companionMeta?.autoControl !== false ? 'enable manual control' : 'enable auto control'}`}
+            >
+              {(enemy as any).companionMeta?.autoControl !== false ? 'Auto' : 'Manual'}
+            </button>
           )}
         </div>
         <span className="text-xs text-stone-400 capitalize">{enemy.type} • Lv.{enemy.level}</span>
@@ -587,6 +610,38 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return { ...recalculated, currentHealth: prev.currentHealth, currentMagicka: prev.currentMagicka, currentStamina: prev.currentStamina };
     });
   };
+
+  // Toggle ally auto/manual control mode
+  const toggleAllyAutoControl = (allyId: string) => {
+    setCombatState(prev => {
+      if (!prev.allies) return prev;
+      const updatedAllies = prev.allies.map(ally => {
+        if (ally.id === allyId) {
+          // Default is true (auto), so undefined means auto
+          const currentAutoControl = ally.companionMeta?.autoControl !== false;
+          const newAutoControl = !currentAutoControl;
+          return {
+            ...ally,
+            companionMeta: {
+              ...ally.companionMeta,
+              autoControl: newAutoControl
+            }
+          } as typeof ally;
+        }
+        return ally;
+      });
+      return { ...prev, allies: updatedAllies };
+    });
+    // Show feedback to user
+    if (showToast) {
+      const ally = combatState.allies?.find(a => a.id === allyId);
+      if (ally) {
+        const wasAuto = ally.companionMeta?.autoControl !== false;
+        showToast(`${ally.name} set to ${wasAuto ? 'Manual' : 'Auto'} control`, 'info');
+      }
+    }
+  };
+
   // Auto-select first alive enemy
   // BUT only if we're not in pendingTargeting mode for heals/buffs
   useEffect(() => {
@@ -777,11 +832,23 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     let currentPlayerStats = playerStats;
     
     while (currentState.active && currentState.currentTurnActor !== 'player') {
-      setIsAnimating(true);
-      
-      // Animate actor d20 roll then execute turn with deterministic nat roll
       const actorId = currentState.currentTurnActor;
       const actorIsAlly = !!(currentState.allies || []).find(a => a.id === actorId);
+      
+      // Check if this is a manually-controlled ally BEFORE rolling dice
+      const allyActor = (currentState.allies || []).find(a => a.id === actorId);
+      if (allyActor && allyActor.companionMeta?.autoControl === false) {
+        // Manual control: pause processing and let the UI await player input
+        // Do NOT roll dice yet - player needs to choose action first
+        setIsAnimating(false);
+        setAwaitingCompanionAction(true);
+        setCombatState(currentState);
+        setPlayerStats(currentPlayerStats);
+        return; // pause the processing loop until player selects an action
+      }
+      
+      // For auto-controlled allies and enemies, proceed with dice animation
+      setIsAnimating(true);
       setRollActor(actorIsAlly ? 'ally' : 'enemy');
       const finalEnemyRoll = Math.floor(Math.random() * 20) + 1;
       // animate wheel-style roll with ease-out for smooth stop
@@ -790,52 +857,42 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setShowRoll(false);
       setRollActor(null);
 
-      // If current actor is an ally, either auto-execute their action or pause for player input
-      const allyActor = (currentState.allies || []).find(a => a.id === actorId);
+      // If current actor is an auto-controlled ally, execute their action
       if (allyActor) {
-        // If companion is set to auto-control, perform their default attack immediately
-        if (allyActor.companionMeta?.autoControl !== false) {
-          const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
-          currentState = res.newState;
-          if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
-          // Play companion attack sound for their ability
-          try { playCombatSound(allyActor.abilities[0].type as any, allyActor, allyActor.abilities[0]); } catch (e) {}
-          // Update UI and play companion animation
+        // Auto-control: perform their default attack immediately
+        const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
+        currentState = res.newState;
+        if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+        // Play companion attack sound for their ability
+        try { playCombatSound(allyActor.abilities[0].type as any, allyActor, allyActor.abilities[0]); } catch (e) {}
+        // Update UI and play companion animation
+        setCombatState(currentState);
+        await waitMs(Math.floor(600 * timeScale));
+
+        // Check for combat end
+        currentState = checkCombatEnd(currentState, currentPlayerStats);
+        if (!currentState.active) {
           setCombatState(currentState);
-          await waitMs(Math.floor(600 * timeScale));
-
-          // Check for combat end
-          currentState = checkCombatEnd(currentState, currentPlayerStats);
-          if (!currentState.active) {
-            setCombatState(currentState);
-            break;
-          }
-
-          // Advance to next turn and apply regen for the turn
-          currentState = advanceTurn(currentState);
-          // Only apply regen when the turn advanced to the player
-          if (currentState.currentTurnActor === 'player') {
-            const regenResAlly = applyTurnRegen(currentState, currentPlayerStats);
-            currentState = regenResAlly.newState;
-            currentPlayerStats = regenResAlly.newPlayerStats;
-            setCombatState(currentState);
-            setPlayerStats(currentPlayerStats);
-          } else {
-            setCombatState(currentState);
-            setPlayerStats(currentPlayerStats);
-          }
-
-          // brief pause before next actor
-          await waitMs(Math.floor(400 * timeScale));
-          continue; // proceed to next turn
+          break;
         }
 
-        // Otherwise, pause processing and let the UI await player input for companion control
-        setIsAnimating(false);
-        setAwaitingCompanionAction(true);
-        setCombatState(currentState);
-        setPlayerStats(currentPlayerStats);
-        return; // pause the processing loop
+        // Advance to next turn and apply regen for the turn
+        currentState = advanceTurn(currentState);
+        // Only apply regen when the turn advanced to the player
+        if (currentState.currentTurnActor === 'player') {
+          const regenResAlly = applyTurnRegen(currentState, currentPlayerStats);
+          currentState = regenResAlly.newState;
+          currentPlayerStats = regenResAlly.newPlayerStats;
+          setCombatState(currentState);
+          setPlayerStats(currentPlayerStats);
+        } else {
+          setCombatState(currentState);
+          setPlayerStats(currentPlayerStats);
+        }
+
+        // brief pause before next actor
+        await waitMs(Math.floor(400 * timeScale));
+        continue; // proceed to next turn
       }
 
       const { newState, newPlayerStats, narrative } = executeEnemyTurn(
@@ -923,12 +980,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     setIsAnimating(false);
   }, [combatState, playerStats, onNarrativeUpdate]);
 
-  // Trigger enemy turns when it's not player's turn
+  // Trigger enemy turns when it's not player's turn and not awaiting manual companion input
   useEffect(() => {
-    if (combatState.active && combatState.currentTurnActor !== 'player' && !isAnimating) {
+    if (combatState.active && combatState.currentTurnActor !== 'player' && !isAnimating && !awaitingCompanionAction) {
       processEnemyTurns();
     }
-  }, [combatState.currentTurnActor, combatState.active, isAnimating]);
+  }, [combatState.currentTurnActor, combatState.active, isAnimating, awaitingCompanionAction]);
 
   // Handle player action
   const handlePlayerAction = async (action: CombatActionType, abilityId?: string, itemId?: string) => {
@@ -1317,6 +1374,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       enemy={ally}
                       isTarget={selectedTarget === ally.id}
                       isHighlighted={recentlyHighlighted === ally.id}
+                      isCurrentTurn={combatState.currentTurnActor === ally.id}
+                      onToggleAutoControl={() => toggleAllyAutoControl(ally.id)}
                       onClick={() => {
                         // If pendingTargeting is active, restrict selection to allies
                         if (pendingTargeting) {
@@ -1453,16 +1512,29 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           return (
                             <button key={ab.id} disabled={isAnimating} onClick={async () => {
                               setIsAnimating(true);
-                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
-                              setCombatState(res.newState);
+                              setAwaitingCompanionAction(false);
+                              
+                              // Roll dice for the companion action
+                              setRollActor('ally');
+                              const companionRoll = Math.floor(Math.random() * 20) + 1;
+                              await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                              await waitMs(Math.floor(220 * timeScale));
+                              setShowRoll(false);
+                              setRollActor(null);
+                              
+                              // Execute the companion action with the roll
+                              const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
                               if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                               // Play companion-specific attack sound
                               try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
-                              // End companion turn and advance
-                              setAwaitingCompanionAction(false);
+                              
+                              await waitMs(Math.floor(600 * timeScale));
+                              
+                              // End companion turn and advance - useEffect will trigger processEnemyTurns
+                              const advancedState = advanceTurn(res.newState);
+                              setCombatState(advancedState);
                               setIsAnimating(false);
-                              setCombatState(prev => advanceTurn(prev));
-                              setTimeout(() => processEnemyTurns(), 200);
+                              // Don't call processEnemyTurns directly - useEffect handles it
                             }} className="w-full px-3 py-2 rounded text-left" style={{ background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.5))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` }}>
                               <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />{ab.name}
                             </button>
@@ -1475,7 +1547,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             const skipped = skipActorTurn(prev, allyActor.id);
                             return advanceTurn(skipped);
                           });
-                          setTimeout(() => processEnemyTurns(), 200);
+                          // Don't call processEnemyTurns directly - useEffect handles it
                         }} className="w-full px-3 py-2 rounded border border-skyrim-border text-skyrim-text">Skip Companion Turn</button>
                       </div>
                     </div>
@@ -1689,13 +1761,27 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                               disabled={isAnimating} 
                               onClick={async () => {
                                 setIsAnimating(true);
-                                const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined);
-                                setCombatState(res.newState);
-                                if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                                 setAwaitingCompanionAction(false);
+                                
+                                // Roll dice for the companion action
+                                setRollActor('ally');
+                                const companionRoll = Math.floor(Math.random() * 20) + 1;
+                                await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                await waitMs(Math.floor(220 * timeScale));
+                                setShowRoll(false);
+                                setRollActor(null);
+                                
+                                // Execute the companion action with the roll
+                                const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
+                                if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+                                
+                                await waitMs(Math.floor(600 * timeScale));
+                                
+                                // End companion turn and advance - useEffect will trigger processEnemyTurns
+                                const advancedState = advanceTurn(res.newState);
+                                setCombatState(advancedState);
                                 setIsAnimating(false);
-                                setCombatState(prev => advanceTurn(prev));
-                                setTimeout(() => processEnemyTurns(), 200);
+                                // Don't call processEnemyTurns directly - useEffect handles it
                               }} 
                               className="px-2 py-2 rounded bg-skyrim-gold text-black text-xs font-bold truncate"
                               style={{ boxShadow: `inset 4px 0 0 ${accent}` }}

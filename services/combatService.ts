@@ -626,6 +626,50 @@ const generatePlayerAbilities = (
       effects: [{ type: 'drain', stat: 'magicka', value: 15 }]
     });
   }
+  
+  // AoE Destruction Spells (higher skill requirements)
+  if (destructionSkill >= 65) {
+    abilities.push({
+      id: 'chain_lightning',
+      name: 'Chain Lightning',
+      type: 'magic',
+      damage: 30 + Math.floor(destructionSkill * 0.4),
+      cost: 50,
+      cooldown: 3,
+      description: 'Lightning arcs between all enemies, shocking them all.',
+      effects: [{ type: 'aoe_damage', value: 30 + Math.floor(destructionSkill * 0.4), aoeTarget: 'all_enemies' }]
+    });
+  }
+  if (destructionSkill >= 75) {
+    abilities.push({
+      id: 'fireball',
+      name: 'Fireball',
+      type: 'magic',
+      damage: 40 + Math.floor(destructionSkill * 0.5),
+      cost: 60,
+      cooldown: 3,
+      description: 'A massive ball of fire that explodes on impact, burning all enemies.',
+      effects: [
+        { type: 'aoe_damage', value: 40 + Math.floor(destructionSkill * 0.5), aoeTarget: 'all_enemies' },
+        { type: 'dot', stat: 'health', value: 5, duration: 3, chance: 50 }
+      ]
+    });
+  }
+  if (destructionSkill >= 85) {
+    abilities.push({
+      id: 'blizzard',
+      name: 'Blizzard',
+      type: 'magic',
+      damage: 25 + Math.floor(destructionSkill * 0.3),
+      cost: 70,
+      cooldown: 4,
+      description: 'A devastating ice storm that freezes all enemies, dealing damage over time.',
+      effects: [
+        { type: 'aoe_damage', value: 25 + Math.floor(destructionSkill * 0.3), aoeTarget: 'all_enemies' },
+        { type: 'debuff', stat: 'stamina', value: -30, duration: 3 }
+      ]
+    });
+  }
 
   // Restoration spells
   const restorationSkill = getSkillLevel('Restoration');
@@ -638,6 +682,37 @@ const generatePlayerAbilities = (
       cost: 20,
       description: 'Restore your health.',
       effects: [{ type: 'heal', stat: 'health', value: 25 + Math.floor(restorationSkill * 0.5) }]
+    });
+  }
+  
+  // AoE Restoration Spells (higher skill requirements)
+  if (restorationSkill >= 50) {
+    abilities.push({
+      id: 'healing_circle',
+      name: 'Healing Circle',
+      type: 'magic',
+      damage: 0,
+      cost: 45,
+      cooldown: 3,
+      description: 'A circle of healing light that restores health to you and all allies.',
+      effects: [{ type: 'aoe_heal', value: 30 + Math.floor(restorationSkill * 0.4), aoeTarget: 'all_allies' }],
+      heal: 30 + Math.floor(restorationSkill * 0.4)
+    });
+  }
+  if (restorationSkill >= 70) {
+    abilities.push({
+      id: 'guardian_circle',
+      name: 'Guardian Circle',
+      type: 'magic',
+      damage: 0,
+      cost: 65,
+      cooldown: 4,
+      description: 'A powerful ward that heals and buffs all allies with increased armor.',
+      effects: [
+        { type: 'aoe_heal', value: 40 + Math.floor(restorationSkill * 0.5), aoeTarget: 'all_allies' },
+        { type: 'buff', stat: 'armor', value: 25, duration: 3 }
+      ],
+      heal: 40 + Math.floor(restorationSkill * 0.5)
     });
   }
 
@@ -696,6 +771,122 @@ export const grantAbilityToPlayer = (playerStats: PlayerCombatStats, ability: Co
 };
 
 // ============================================================================
+// ENEMY SCALING & MINION GENERATION (SKY-51)
+// ============================================================================
+
+/**
+ * Calculate enemy count based on player level.
+ * Returns 1-5 enemies depending on level.
+ */
+export const getEnemyCountForLevel = (playerLevel: number): number => {
+  // Level 1-5: 1-2 enemies
+  // Level 6-10: 1-3 enemies
+  // Level 11-15: 2-4 enemies
+  // Level 16+: 2-5 enemies
+  if (playerLevel <= 5) return randomRange(1, 2);
+  if (playerLevel <= 10) return randomRange(1, 3);
+  if (playerLevel <= 15) return randomRange(2, 4);
+  return randomRange(2, 5);
+};
+
+/**
+ * Add minions to boss enemies.
+ * Bosses always spawn with 1-3 minions of appropriate type.
+ */
+export const addMinionsToEnemies = (enemies: CombatEnemy[], playerLevel: number): CombatEnemy[] => {
+  const result: CombatEnemy[] = [...enemies];
+  
+  // Find bosses and add minions
+  for (const enemy of enemies) {
+    if (enemy.isBoss) {
+      // Determine minion count (1-3 based on player level)
+      const minionCount = Math.min(3, Math.max(1, Math.floor(playerLevel / 5)));
+      
+      // Determine minion type based on boss type
+      let minionTemplateId = 'bandit';
+      if (enemy.type === 'undead') minionTemplateId = enemy.name.toLowerCase().includes('draugr') ? 'draugr' : 'skeleton';
+      else if (enemy.type === 'beast') minionTemplateId = 'wolf';
+      else if (enemy.type === 'daedra') minionTemplateId = 'skeleton'; // fallback
+      else if (enemy.name.toLowerCase().includes('vampire')) minionTemplateId = 'skeleton';
+      else if (enemy.name.toLowerCase().includes('mage') || enemy.name.toLowerCase().includes('necromancer')) minionTemplateId = 'skeleton';
+      else if (enemy.name.toLowerCase().includes('bandit')) minionTemplateId = 'bandit';
+      else if (enemy.name.toLowerCase().includes('troll')) minionTemplateId = 'wolf';
+      
+      // Generate minions
+      try {
+        for (let i = 0; i < minionCount; i++) {
+          const minion = createEnemyFromTemplate(minionTemplateId, {
+            targetLevel: Math.max(1, playerLevel - 2),
+            levelModifier: randomRange(-2, 0),
+            isElite: false,
+            forceUnique: true
+          });
+          result.push(minion);
+        }
+      } catch (e) {
+        console.warn('Failed to add minions:', e);
+      }
+    }
+  }
+  
+  return result;
+};
+
+/**
+ * Ensure enemy encounters have appropriate variety.
+ * Single-enemy encounters get additional enemies based on player level.
+ */
+export const scaleEnemyEncounter = (enemies: CombatEnemy[], playerLevel: number): CombatEnemy[] => {
+  // If we already have 2+ enemies, just add boss minions
+  if (enemies.length >= 2) {
+    return addMinionsToEnemies(enemies, playerLevel);
+  }
+  
+  // Single enemy: add more based on player level
+  const baseEnemy = enemies[0];
+  if (!baseEnemy) return enemies;
+  
+  // If it's a boss, definitely add minions
+  if (baseEnemy.isBoss) {
+    return addMinionsToEnemies(enemies, playerLevel);
+  }
+  
+  // For non-boss single enemies, add 0-3 more based on level
+  const additionalCount = Math.min(3, Math.max(0, Math.floor((playerLevel - 1) / 4)));
+  if (additionalCount === 0) return enemies;
+  
+  const result = [...enemies];
+  
+  // Determine template from enemy type
+  let templateId = 'bandit';
+  if (baseEnemy.type === 'beast') {
+    if (baseEnemy.name.toLowerCase().includes('wolf')) templateId = 'wolf';
+    else if (baseEnemy.name.toLowerCase().includes('bear')) templateId = 'bear';
+    else if (baseEnemy.name.toLowerCase().includes('spider')) templateId = 'frost_spider';
+    else templateId = 'wolf';
+  } else if (baseEnemy.type === 'undead') {
+    if (baseEnemy.name.toLowerCase().includes('draugr')) templateId = 'draugr';
+    else templateId = 'skeleton';
+  }
+  
+  try {
+    for (let i = 0; i < additionalCount; i++) {
+      const additional = createEnemyFromTemplate(templateId, {
+        targetLevel: Math.max(1, baseEnemy.level - 1),
+        levelModifier: randomRange(-1, 1),
+        isElite: false,
+        forceUnique: true
+      });
+      result.push(additional);
+    }
+  } catch (e) {
+    console.warn('Failed to scale enemy encounter:', e);
+  }
+  
+  return result;
+};
+
+// ============================================================================
 // COMBAT STATE MANAGEMENT
 // ============================================================================
 
@@ -705,10 +896,17 @@ export const initializeCombat = (
   ambush: boolean = false,
   fleeAllowed: boolean = true,
   surrenderAllowed: boolean = false,
-  companions?: any[]
+  companions?: any[],
+  playerLevel?: number
 ): CombatState => {
+  // Scale enemy encounter based on player level (SKY-51)
+  let scaledEnemies = enemies;
+  if (playerLevel && playerLevel > 0) {
+    scaledEnemies = scaleEnemyEncounter(enemies, playerLevel);
+  }
+  
   // Initialize enemies with IDs and full health
-  const initializedEnemies = enemies.map((enemy, index) => ({
+  const initializedEnemies = scaledEnemies.map((enemy, index) => ({
     ...enemy,
     id: enemy.id || `enemy_${index}_${Date.now()}`,
     currentHealth: enemy.maxHealth,
@@ -725,6 +923,7 @@ export const initializeCombat = (
     loot: Array.isArray(enemy.loot) && enemy.loot.length ? enemy.loot : (BASE_ENEMY_TEMPLATES[(enemy.type || '').toLowerCase()]?.possibleLoot || enemy.loot || [])
   }));
 
+
   // If companions are provided, include companions as allied combatants when their behavior indicates participation
   // Filter out invalid companions (must have id, name, and be active - behavior of 'follow' or 'guard')
   const validCompanions = (companions || []).filter(c => 
@@ -735,31 +934,129 @@ export const initializeCombat = (
     (c.health > 0 || c.maxHealth > 0) // must be alive
   );
   
-  const companionAllies: CombatEnemy[] = validCompanions.map((c, idx) => ({
-    id: `ally_${c.id}_${Date.now()}_${idx}`,
-    name: c.name,
-    // Derive combat type from companion data: animals are 'beast', humanoid companions remain 'humanoid'
-    type: c.isAnimal ? 'beast' : 'humanoid',
-    level: c.level || 1,
-    maxHealth: c.maxHealth || c.health || 50,
-    currentHealth: c.maxHealth || c.health || 50,
-    armor: c.armor || 0,
-    damage: c.damage || 4,
-    // Use animal-appropriate ability names when it's an animal companion
-    abilities: [{
-      id: `comp_attack_${c.id}`,
-      name: c.isAnimal ? `${(c.species ? (c.species[0]?.toUpperCase() + c.species.slice(1)) : 'Bite')} (${c.name})` : `Strike (${c.name})`,
-      type: 'melee',
-      damage: c.damage || 4,
-      cost: 0,
-      description: c.isAnimal ? `${c.name} the ${c.species || 'creature'} attacks with a natural attack.` : 'Companion attack'
-    }],
-    behavior: 'support',
-    isCompanion: true,
-    xpReward: 0,
-    // Keep a reference to original companion so we can access autoLoot later
-    companionMeta: { companionId: c.id, autoLoot: !!c.autoLoot, autoControl: c.autoControl !== false }
-  }));
+  const companionAllies: CombatEnemy[] = validCompanions.map((c, idx) => {
+    const level = c.level || 1;
+    const baseDamage = c.damage || 4;
+    const isAnimal = !!c.isAnimal;
+    
+    // SKY-55: Generate diverse abilities for companions based on type
+    const abilities: CombatAbility[] = [];
+    
+    if (isAnimal) {
+      // Animal companions get bite, claw, and special abilities
+      abilities.push({
+        id: `comp_bite_${c.id}`,
+        name: `Bite (${c.name})`,
+        type: 'melee',
+        damage: baseDamage,
+        cost: 0,
+        description: `${c.name} bites the enemy with sharp fangs.`
+      });
+      abilities.push({
+        id: `comp_claw_${c.id}`,
+        name: `Claw Swipe (${c.name})`,
+        type: 'melee',
+        damage: Math.floor(baseDamage * 0.8),
+        cost: 5,
+        description: `${c.name} swipes with sharp claws.`,
+        effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30 }]
+      });
+      abilities.push({
+        id: `comp_pounce_${c.id}`,
+        name: `Pounce (${c.name})`,
+        type: 'melee',
+        damage: Math.floor(baseDamage * 1.3),
+        cost: 12,
+        description: `${c.name} leaps at the enemy.`,
+        effects: [{ type: 'stun', value: 1, duration: 1, chance: 20 }]
+      });
+      // Heal ability for animals (lick wounds)
+      abilities.push({
+        id: `comp_rest_${c.id}`,
+        name: `Rest (${c.name})`,
+        type: 'utility',
+        damage: 0,
+        cost: 8,
+        description: `${c.name} rests briefly to recover.`,
+        heal: Math.floor(10 + level * 2)
+      });
+    } else {
+      // Humanoid companions get weapon attacks and possibly magic
+      abilities.push({
+        id: `comp_strike_${c.id}`,
+        name: `Strike (${c.name})`,
+        type: 'melee',
+        damage: baseDamage,
+        cost: 0,
+        description: `${c.name} attacks with their weapon.`
+      });
+      abilities.push({
+        id: `comp_power_${c.id}`,
+        name: `Power Attack (${c.name})`,
+        type: 'melee',
+        damage: Math.floor(baseDamage * 1.5),
+        cost: 15,
+        description: `${c.name} delivers a powerful strike.`
+      });
+      abilities.push({
+        id: `comp_defend_${c.id}`,
+        name: `Defensive Stance (${c.name})`,
+        type: 'utility',
+        damage: 0,
+        cost: 10,
+        description: `${c.name} raises their guard.`,
+        effects: [{ type: 'buff', stat: 'armor', value: 15, duration: 2 }]
+      });
+      // Check if companion might be a mage type
+      const isMageType = (c.name || '').toLowerCase().includes('mage') || 
+                        (c.species || '').toLowerCase().includes('mage') ||
+                        (c.description || '').toLowerCase().includes('magic');
+      if (isMageType || level >= 5) {
+        abilities.push({
+          id: `comp_heal_${c.id}`,
+          name: `Healing Hands (${c.name})`,
+          type: 'magic',
+          damage: 0,
+          cost: 20,
+          description: `${c.name} channels healing magic.`,
+          heal: Math.floor(15 + level * 3),
+          effects: [{ type: 'aoe_heal', value: Math.floor(10 + level * 2), aoeTarget: 'all_allies' }]
+        });
+      }
+      // Add a rally/taunt ability
+      abilities.push({
+        id: `comp_taunt_${c.id}`,
+        name: `Battle Cry (${c.name})`,
+        type: 'utility',
+        damage: 0,
+        cost: 12,
+        description: `${c.name} lets out a battle cry, boosting morale.`,
+        effects: [{ type: 'buff', stat: 'damage', value: 5, duration: 2 }]
+      });
+    }
+    
+    return {
+      id: `ally_${c.id}_${Date.now()}_${idx}`,
+      name: c.name,
+      // Derive combat type from companion data: animals are 'beast', humanoid companions remain 'humanoid'
+      type: isAnimal ? 'beast' : 'humanoid',
+      level,
+      maxHealth: c.maxHealth || c.health || 50,
+      currentHealth: c.maxHealth || c.health || 50,
+      maxMagicka: isAnimal ? undefined : 50 + level * 5,
+      currentMagicka: isAnimal ? undefined : 50 + level * 5,
+      maxStamina: 50 + level * 3,
+      currentStamina: 50 + level * 3,
+      armor: c.armor || 0,
+      damage: baseDamage,
+      abilities,
+      behavior: 'support' as const,
+      isCompanion: true,
+      xpReward: 0,
+      // Keep a reference to original companion so we can access autoLoot later
+      companionMeta: { companionId: c.id, autoLoot: !!c.autoLoot, autoControl: c.autoControl !== false }
+    } as CombatEnemy;
+  });
 
   // Calculate turn order (player first unless ambushed)
   const turnOrder = ambush 
@@ -1410,6 +1707,50 @@ export const executePlayerAction = (
                 newPlayerStats.currentHealth + healAmount
               );
               narrative += ` You recover ${healAmount} health.`;
+            } else if (effect.type === 'aoe_damage') {
+              // AoE damage - hit all enemies
+              const aoeDamage = effect.value || 0;
+              let totalAoeDamage = 0;
+              let hitCount = 0;
+              newState.enemies = newState.enemies.map(enemy => {
+                if (enemy.currentHealth > 0 && enemy.id !== target?.id) {
+                  // Apply armor reduction to AoE damage
+                  const armorReduction = enemy.armor / (enemy.armor + 100);
+                  const actualDamage = Math.max(1, Math.floor(aoeDamage * (1 - armorReduction)));
+                  totalAoeDamage += actualDamage;
+                  hitCount++;
+                  return { ...enemy, currentHealth: Math.max(0, enemy.currentHealth - actualDamage) };
+                }
+                return enemy;
+              });
+              if (hitCount > 0) {
+                narrative += ` The attack chains to ${hitCount} other ${hitCount === 1 ? 'enemy' : 'enemies'} for ${totalAoeDamage} total damage!`;
+              }
+            } else if (effect.type === 'aoe_heal') {
+              // AoE heal - heal self and all allies
+              const aoeHeal = effect.value || 0;
+              let totalHealed = 0;
+              
+              // Heal the player
+              const playerHealAmount = Math.min(aoeHeal, newPlayerStats.maxHealth - newPlayerStats.currentHealth);
+              newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + aoeHeal);
+              totalHealed += playerHealAmount;
+              
+              // Heal all allies
+              if (newState.allies && newState.allies.length > 0) {
+                newState.allies = newState.allies.map(ally => {
+                  if (ally.currentHealth > 0 && ally.currentHealth < ally.maxHealth) {
+                    const allyHeal = Math.min(aoeHeal, ally.maxHealth - ally.currentHealth);
+                    totalHealed += allyHeal;
+                    return { ...ally, currentHealth: Math.min(ally.maxHealth, ally.currentHealth + aoeHeal) };
+                  }
+                  return ally;
+                });
+              }
+              
+              if (totalHealed > 0) {
+                narrative += ` The healing aura restores ${totalHealed} total health to you and your allies!`;
+              }
             } else if ((effect as any).type === 'summon') {
               // Create a summoned companion (ally)
               const summonName = (effect as any).name || 'Summoned Ally';
@@ -1699,13 +2040,29 @@ export const executeEnemyTurn = (
     return true;
   });
 
+  // SKY-52: Prefer spells for certain enemy types (undead, mage-types, vampires)
+  const shouldPreferSpells = actor.type === 'undead' || actor.type === 'daedra' ||
+    actor.name.toLowerCase().includes('mage') ||
+    actor.name.toLowerCase().includes('vampire') ||
+    actor.name.toLowerCase().includes('necromancer') ||
+    actor.name.toLowerCase().includes('warlock') ||
+    actor.name.toLowerCase().includes('lich');
+  
+  const magicAbilities = availableAbilities.filter(a => a.type === 'magic');
+  const meleeAbilities = availableAbilities.filter(a => a.type === 'melee' || a.type === 'ranged');
+
   const behaviorSource = actor.behavior || 'tactical';
   switch (behaviorSource) {
     case 'aggressive':
     case 'berserker':
-      // Pick highest damage ability
-      chosenAbility = availableAbilities.reduce((best, curr) => 
-        curr.damage > best.damage ? curr : best, availableAbilities[0]);
+      // Pick highest damage ability, but prefer magic for spell-casters
+      if (shouldPreferSpells && magicAbilities.length > 0 && Math.random() < 0.7) {
+        chosenAbility = magicAbilities.reduce((best, curr) => 
+          curr.damage > best.damage ? curr : best, magicAbilities[0]);
+      } else {
+        chosenAbility = availableAbilities.reduce((best, curr) => 
+          curr.damage > best.damage ? curr : best, availableAbilities[0]);
+      }
       break;
     case 'defensive':
       // Pick lower cost abilities
@@ -1713,14 +2070,27 @@ export const executeEnemyTurn = (
         curr.cost < best.cost ? curr : best, availableAbilities[0]);
       break;
     case 'tactical':
-      // Use abilities with effects more often
+      // Use abilities with effects more often, prefer magic for spell-casters
       const withEffects = availableAbilities.filter(a => a.effects && a.effects.length > 0);
-      chosenAbility = withEffects.length > 0 && Math.random() > 0.5 
-        ? withEffects[Math.floor(Math.random() * withEffects.length)]
-        : availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
+      if (shouldPreferSpells && magicAbilities.length > 0 && Math.random() < 0.65) {
+        // For spell-casters, bias heavily toward magic abilities
+        const magicWithEffects = magicAbilities.filter(a => a.effects && a.effects.length > 0);
+        chosenAbility = magicWithEffects.length > 0 && Math.random() > 0.4
+          ? magicWithEffects[Math.floor(Math.random() * magicWithEffects.length)]
+          : magicAbilities[Math.floor(Math.random() * magicAbilities.length)];
+      } else {
+        chosenAbility = withEffects.length > 0 && Math.random() > 0.5 
+          ? withEffects[Math.floor(Math.random() * withEffects.length)]
+          : availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
+      }
       break;
     default:
-      chosenAbility = availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
+      // For spell-casters, 50% chance to use magic even with random selection
+      if (shouldPreferSpells && magicAbilities.length > 0 && Math.random() < 0.5) {
+        chosenAbility = magicAbilities[Math.floor(Math.random() * magicAbilities.length)];
+      } else {
+        chosenAbility = availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
+      }
   }
 
   if (!chosenAbility) {
@@ -1980,6 +2350,12 @@ export const executeEnemyTurn = (
     if (allyIndex >= 0) {
       newState.allies = [ ...(newState.allies || []) ];
       newState.allies[allyIndex] = { ...targetedAlly, currentHealth: Math.max(0, (targetedAlly.currentHealth || 0) - appliedDamage) } as any;
+      
+      // SKY-53: Critical hit has 50% chance to stun allies
+      if (resolved.isCrit && Math.random() < 0.5) {
+        const stunEffect = { effect: { type: 'stun' as const, value: 1, duration: 1 }, turnsRemaining: 1 };
+        newState.allies[allyIndex].activeEffects = [...(newState.allies[allyIndex].activeEffects || []), stunEffect];
+      }
     }
 
     if (!resolved.hit) {
@@ -1988,7 +2364,13 @@ export const executeEnemyTurn = (
       narrative = `${actor.name} attacks ${targetedAlly.name} but deals no damage.`;
     } else {
       narrative = `${actor.name} uses ${chosenAbility.name} and deals ${appliedDamage} damage to ${targetedAlly.name}!`;
-      if (resolved.isCrit) narrative = `${actor.name} lands a CRITICAL HIT on ${targetedAlly.name} with ${chosenAbility.name} for ${appliedDamage} damage!`;
+      if (resolved.isCrit) {
+        narrative = `${actor.name} lands a CRITICAL HIT on ${targetedAlly.name} with ${chosenAbility.name} for ${appliedDamage} damage!`;
+        // Check if stun was applied
+        if ((newState.allies || [])[allyIndex]?.activeEffects?.some((e: any) => e.effect.type === 'stun' && e.turnsRemaining > 0)) {
+          narrative += ` ${targetedAlly.name} is STUNNED!`;
+        }
+      }
     }
 
     // Log and return
@@ -2012,6 +2394,14 @@ export const executeEnemyTurn = (
   // Apply damage to player
   newPlayerStats.currentHealth = Math.max(0, newPlayerStats.currentHealth - appliedDamage);
 
+  // SKY-53: Critical hit has 50% chance to stun player
+  let playerStunned = false;
+  if (resolved.isCrit && appliedDamage > 0 && Math.random() < 0.5) {
+    const stunEffect = { effect: { type: 'stun' as const, value: 1, duration: 1 }, turnsRemaining: 1 };
+    newState.playerActiveEffects = [...(newState.playerActiveEffects || []), stunEffect];
+    playerStunned = true;
+  }
+
   // === AVOID DEATH PERK - Once per combat, auto-heal when health drops below 10% ===
   const avoidDeathHeal = getCombatPerkBonus(character, 'avoidDeath');
   const avoidDeathUsed = (newState as any).avoidDeathUsed || false;
@@ -2030,7 +2420,10 @@ export const executeEnemyTurn = (
     narrative += ` but you avoid the attack!`;
   } else {
     narrative += ` and deals ${appliedDamage} damage to your ${hitLocation}!`;
-    if (resolved.isCrit) narrative = `${actor.name} lands a CRITICAL HIT with ${chosenAbility.name} for ${appliedDamage} damage!`;
+    if (resolved.isCrit) {
+      narrative = `${actor.name} lands a CRITICAL HIT with ${chosenAbility.name} for ${appliedDamage} damage!`;
+      if (playerStunned) narrative += ` You are STUNNED!`;
+    }
   }
 
   if (newPlayerStats.currentHealth <= 0) {
@@ -2504,7 +2897,11 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'frost_breath', name: 'Frost Breath', type: 'magic', damage: 20, cost: 20, description: 'Breathe frost', effects: [{ type: 'debuff', stat: 'stamina', value: -15, duration: 2 }] },
       { id: 'disarm_shout', name: 'Disarm Shout', type: 'magic', damage: 5, cost: 25, description: 'A thu\'um that weakens', effects: [{ type: 'debuff', stat: 'damage', value: -8, duration: 2, chance: 50 }] },
       { id: 'shield_wall', name: 'Shield Wall', type: 'melee', damage: 0, cost: 15, description: 'Raise ancient shield', effects: [{ type: 'buff', stat: 'armor', value: 15, duration: 2 }] },
-      { id: 'cleave', name: 'Cleave', type: 'melee', damage: 22, cost: 18, description: 'A sweeping axe strike' }
+      { id: 'cleave', name: 'Cleave', type: 'melee', damage: 22, cost: 18, description: 'A sweeping axe strike' },
+      // SKY-52: Additional spell abilities for variety
+      { id: 'ice_spike', name: 'Ice Spike', type: 'magic', damage: 16, cost: 18, description: 'A shard of ice pierces through' },
+      { id: 'frostcloak', name: 'Frost Cloak', type: 'magic', damage: 8, cost: 25, description: 'Surrounds self with frost, damaging nearby foes', effects: [{ type: 'aoe_damage', value: 8, duration: 2, aoeTarget: 'all_enemies' }] },
+      { id: 'unrelenting_force', name: 'Unrelenting Force', type: 'magic', damage: 12, cost: 30, description: 'A powerful shout that staggers', effects: [{ type: 'stun', value: 1, duration: 1, chance: 40 }] }
     ],
     baseXP: 50,
     baseGold: 25,
@@ -2617,7 +3014,11 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'vampiric_claw', name: 'Vampiric Claw', type: 'melee', damage: 22, cost: 12, description: 'A clawed strike' },
       { id: 'ice_spike', name: 'Ice Spike', type: 'magic', damage: 28, cost: 25, description: 'A spike of ice', effects: [{ type: 'debuff', stat: 'stamina', value: -10, duration: 2 }] },
       { id: 'invisibility', name: 'Cloak of Shadows', type: 'magic', damage: 0, cost: 30, description: 'Become harder to hit', effects: [{ type: 'buff', stat: 'armor', value: 25, duration: 2 }] },
-      { id: 'raise_zombie', name: 'Raise Zombie', type: 'magic', damage: 0, cost: 35, description: 'Summon undead aid', effects: [{ type: 'buff', stat: 'damage', value: 10, duration: 3 }] }
+      { id: 'raise_zombie', name: 'Raise Zombie', type: 'magic', damage: 0, cost: 35, description: 'Summon undead aid', effects: [{ type: 'summon', name: 'Thrall', value: 1, duration: 3 }] },
+      // SKY-52: Additional spell abilities for variety
+      { id: 'vampiric_grip', name: 'Vampiric Grip', type: 'magic', damage: 20, cost: 28, description: 'Telekinetically grasp and drain the target', effects: [{ type: 'stun', value: 1, duration: 1, chance: 30 }] },
+      { id: 'life_drain_aoe', name: 'Mass Drain', type: 'magic', damage: 15, cost: 40, description: 'Drains life from all nearby foes', effects: [{ type: 'aoe_damage', value: 15, aoeTarget: 'all_enemies' }, { type: 'heal', stat: 'health', value: 20 }] },
+      { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100 }] }
     ],
     baseXP: 120,
     baseGold: 50,
@@ -2642,7 +3043,12 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'ice_spike', name: 'Ice Spike', type: 'magic', damage: 22, cost: 18, description: 'A spike of ice' },
       { id: 'lightning', name: 'Lightning Bolt', type: 'magic', damage: 28, cost: 25, description: 'A bolt of lightning', effects: [{ type: 'drain', stat: 'magicka', value: 10 }] },
       { id: 'ward', name: 'Lesser Ward', type: 'magic', damage: 0, cost: 15, description: 'A protective ward', effects: [{ type: 'buff', stat: 'armor', value: 20, duration: 2 }] },
-      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40 }] }
+      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40 }] },
+      // SKY-52: Additional AoE and spell abilities
+      { id: 'fireball', name: 'Fireball', type: 'magic', damage: 30, cost: 35, description: 'An explosive ball of fire that damages all foes', effects: [{ type: 'aoe_damage', value: 20, aoeTarget: 'all_enemies' }] },
+      { id: 'chain_lightning', name: 'Chain Lightning', type: 'magic', damage: 25, cost: 30, description: 'Lightning that arcs to nearby foes', effects: [{ type: 'aoe_damage', value: 12, aoeTarget: 'all_enemies' }, { type: 'drain', stat: 'magicka', value: 8 }] },
+      { id: 'heal_other', name: 'Heal Other', type: 'magic', damage: 0, cost: 25, description: 'Heals an ally', heal: 25 },
+      { id: 'paralyze', name: 'Paralyze', type: 'magic', damage: 5, cost: 40, description: 'Paralyzes the target', effects: [{ type: 'stun', value: 1, duration: 2, chance: 60 }] }
     ],
     baseXP: 60,
     baseGold: 30,

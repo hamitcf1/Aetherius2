@@ -511,7 +511,7 @@ export interface CombatAbility {
 }
 
 export interface CombatEffect {
-  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility';
+  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility' | 'aoe_damage' | 'aoe_heal';
   stat?: 'health' | 'magicka' | 'stamina' | 'armor' | 'damage';
   value: number;
   duration?: number; // turns
@@ -519,6 +519,8 @@ export interface CombatEffect {
   // Optional fields used by summon/utility effects
   name?: string;
   playerTurns?: number;
+  // AoE targeting: 'all_enemies' | 'all_allies' | 'all' (both sides)
+  aoeTarget?: 'all_enemies' | 'all_allies' | 'all';
 }
 
 // LootRarity is defined once at line 169 - do not duplicate
@@ -800,6 +802,7 @@ export interface DungeonDefinition {
   location: string; // Map location name
   difficulty: 'easy' | 'medium' | 'hard' | 'legendary';
   recommendedLevel: number;
+  minimumLevel?: number; // Minimum level required to enter (for dangerous dungeons)
   nodes: DungeonNode[];
   startNodeId: string;
   bossNodeId: string;

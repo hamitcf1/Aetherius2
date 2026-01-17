@@ -103,6 +103,7 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
     location: 'Labyrinthian',
     difficulty: 'hard',
     recommendedLevel: 8,
+    minimumLevel: 5,
     theme: 'dwemer_ruin',
     ambientDescription: 'Echoing halls and rune-carved stone.',
     startNodeId: 'lab_start',
@@ -135,7 +136,7 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
   },
 
   {
-    id: 'blackreach_dg', name: 'Blackreach Depths', description: 'A cavern of bioluminescent fungi and Falmer hunters.', location: 'Blackreach', difficulty: 'hard', recommendedLevel: 7, theme: 'ice_cave', ambientDescription: 'A cold vast cavern with glows on the stone.', startNodeId: 'br_start', bossNodeId: 'br_boss', completionRewards: { gold: 340, xp: 900, items: [{ name: 'Crimson Nirnroot', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
+    id: 'blackreach_dg', name: 'Blackreach Depths', description: 'A cavern of bioluminescent fungi and Falmer hunters.', location: 'Blackreach', difficulty: 'hard', recommendedLevel: 7, minimumLevel: 4, theme: 'ice_cave', ambientDescription: 'A cold vast cavern with glows on the stone.', startNodeId: 'br_start', bossNodeId: 'br_boss', completionRewards: { gold: 340, xp: 900, items: [{ name: 'Crimson Nirnroot', type: 'misc', quantity: 1, rarity: 'rare' as LootRarity }] },
     nodes: [
       { id: 'br_start', type: 'start', name: 'Sunken Entry', x: 5, y: 50, connections: ['br_combat1', 'br_event1', 'br_empty1'] },
       { id: 'br_combat1', type: 'combat', name: 'Falmer Patrol', x: 20, y: 20, connections: ['br_rest1', 'br_combat2'], enemies: [simpleEnemy('f1','Falmer Scout','humanoid',6,140,18,260,40)] },
@@ -201,7 +202,7 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
   },
 
   {
-    id: 'daedric_shrine_dg', name: 'Daedric Shrine', description: 'A warped shrine with daedric guardians and bargains.', location: 'Winterhold', difficulty: 'legendary', recommendedLevel: 15, theme: 'daedric_shrine', ambientDescription: 'Whispers in a language you do not know.', startNodeId: 'ds_start', bossNodeId: 'ds_boss', completionRewards: { gold: 1200, xp: 5000, items: [{ name: 'Daedric Relic', type: 'misc', quantity: 1, rarity: 'legendary' as LootRarity }] },
+    id: 'daedric_shrine_dg', name: 'Daedric Shrine', description: 'A warped shrine with daedric guardians and bargains.', location: 'Winterhold', difficulty: 'legendary', recommendedLevel: 15, minimumLevel: 10, theme: 'daedric_shrine', ambientDescription: 'Whispers in a language you do not know.', startNodeId: 'ds_start', bossNodeId: 'ds_boss', completionRewards: { gold: 1200, xp: 5000, items: [{ name: 'Daedric Relic', type: 'misc', quantity: 1, rarity: 'legendary' as LootRarity }] },
     nodes: [
       { id: 'ds_start', type: 'start', name: 'Ritual Gate', x: 5, y: 50, connections: ['ds_event1', 'ds_combat1', 'ds_empty1'] },
       { id: 'ds_event1', type: 'event', name: 'Unholy Pact', x: 20, y: 20, connections: ['ds_rest1', 'ds_combat2'], eventText: 'A voice offers power for a price.', eventChoices: [{ label: 'Accept', outcome: 'reward', value: 400 }, { label: 'Decline', outcome: 'damage', value: 100 }] },

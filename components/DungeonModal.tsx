@@ -121,6 +121,20 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
   useEffect(() => {
     if (!open || !dungeon) return;
+    
+    // Check minimum level requirement
+    const playerLevel = character?.level || 1;
+    if (dungeon.minimumLevel && playerLevel < dungeon.minimumLevel) {
+      showToast?.(`You must be at least level ${dungeon.minimumLevel} to enter ${dungeon.name}. You are level ${playerLevel}.`, 'error');
+      onClose();
+      return;
+    }
+    
+    // Warn about recommended level (but don't block)
+    if (playerLevel < dungeon.recommendedLevel) {
+      showToast?.(`Warning: ${dungeon.name} is recommended for level ${dungeon.recommendedLevel}+. You are level ${playerLevel}.`, 'warning');
+    }
+    
     const startNode = dungeon.nodes.find(n => n.id === dungeon.startNodeId) || dungeon.nodes[0];
     // Use character's actual current vitals, or max stats if no current vitals
     const maxHealth = character?.stats?.health || 100;
@@ -510,6 +524,20 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           <div>
             <h2 className="text-2xl font-serif text-skyrim-gold">{dungeon.name}</h2>
             <p className="text-xs text-skyrim-text/70 mt-1">{dungeon.ambientDescription}</p>
+            <div className="flex items-center gap-3 mt-1">
+              <span className={`text-xs px-2 py-0.5 rounded ${
+                dungeon.difficulty === 'easy' ? 'bg-green-900/50 text-green-300' :
+                dungeon.difficulty === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
+                dungeon.difficulty === 'hard' ? 'bg-orange-900/50 text-orange-300' :
+                'bg-red-900/50 text-red-300'
+              }`}>
+                {dungeon.difficulty.toUpperCase()}
+              </span>
+              <span className="text-xs text-skyrim-text/70">
+                Recommended: Lv.{dungeon.recommendedLevel}
+                {dungeon.minimumLevel && <span className="text-red-400"> (Min: Lv.{dungeon.minimumLevel})</span>}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-sm text-skyrim-gold">Gold: {state.collectedRewards.gold}</div>

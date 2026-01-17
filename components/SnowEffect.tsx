@@ -492,7 +492,19 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
       }
     };
 
+    // Handle window focus/blur for alt-tab scenarios
+    const onWindowFocus = () => {
+      startAnimation();
+    };
+    
+    const onWindowBlur = () => {
+      // Keep animation running but at reduced rate, or stop entirely
+      // We'll restart when focused again
+    };
+
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onWindowFocus);
+    window.addEventListener('blur', onWindowBlur);
 
     startAnimation();
     
@@ -503,6 +515,8 @@ const InteractiveSnowEffect: React.FC<{ particleCount: number; particleType: Par
       window.removeEventListener('resize', onResize);
       window.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onWindowFocus);
+      window.removeEventListener('blur', onWindowBlur);
     };
   }, [particleCount, particleType]);
   
