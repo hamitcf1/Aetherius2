@@ -335,6 +335,9 @@ export interface GameStateUpdate {
     goldAwarded?: number;
   }>;
   newItems?: Array<{ name: string; type: string; description: string; quantity: number }>;
+  // Partial, id-aware inventory updates (used for optimistic in-combat updates and AI patches).
+  // Each entry may be an id-based partial merge (preferred) or a name/quantity pair for legacy flows.
+  updatedItems?: Array<Partial<import('./types').InventoryItem> & ({ id?: string } | { name?: string })>;
   removedItems?: Array<{ name: string; quantity: number }>;
   statUpdates?: Partial<Stats>;
   goldChange?: number;

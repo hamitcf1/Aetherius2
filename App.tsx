@@ -1483,18 +1483,28 @@ const App: React.FC = () => {
       // Could store titles in character or achievements state
     }
     if (reward.item) {
+      // Normalize free-form achievement item to a valid InventoryItem shape
+      const ALLOWED_TYPES: InventoryItem['type'][] = ['weapon','apparel','potion','ingredient','misc','key','food','drink','camping'];
+      const ALLOWED_RARITIES: NonNullable<InventoryItem['rarity']>[] = ['common','uncommon','rare','mythic','epic','legendary'];
+      const rawType = (reward.item.type || '').toString().toLowerCase();
+      const rawRarity = (reward.item.rarity || '').toString().toLowerCase();
+      const itemType = (ALLOWED_TYPES.includes(rawType as any) ? rawType : 'misc') as InventoryItem['type'];
+      const itemRarity = (ALLOWED_RARITIES.includes(rawRarity as any) ? rawRarity as any : 'rare');
+
       const newItem: InventoryItem = {
         id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         characterId: currentCharacterId || '',
-        name: reward.item.name,
-        type: reward.item.type,
-        rarity: reward.item.rarity || 'rare',
+        name: reward.item.name || 'Mysterious Item',
+        type: itemType,
+        rarity: itemRarity,
         quantity: 1,
-        description: `Achievement reward: ${achievement.name}`,
-        createdAt: Date.now()
+        description: (reward.item as any).description || `Achievement reward: ${achievement.name}`,
+        createdAt: Date.now(),
+        equipped: false
       };
       setItems(prev => [...prev, newItem]);
-      showToast(`Received: ${reward.item.name}`, 'success');
+      setDirtyEntities(prev => new Set([...prev, newItem.id]));
+      showToast(`Received: ${newItem.name}`, 'success');
     }
   }, [activeCharacter, currentCharacterId, updateCharacter, showToast]);
 

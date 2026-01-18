@@ -1354,8 +1354,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if ((execRes as any).aoeSummary) {
         try {
           // Layered SFX: an impact then a gentle heal chime
-          playSoundEffect('aeo_burst');
-          playSoundEffect('spell_impact');
+          audioService.playSoundEffect('aeo_burst');
+          audioService.playSoundEffect('spell_impact');
           // Show summary toast and per-target floating numbers
           const summary = (execRes as any).aoeSummary as { damaged?: any[]; healed?: any[] };
           const dmgCount = (summary.damaged || []).length;
