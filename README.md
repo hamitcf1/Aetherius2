@@ -4,7 +4,7 @@
 
 # Skyrim Aetherius
 
-**Version 1.0.0** | [Changelog](components/Changelog.tsx)
+**Version 1.0.1** | [Changelog](components/Changelog.tsx)
 
 Skyrim Aetherius is a web app for running a Skyrim-flavored roleplay campaign like a game: you create characters, track inventory and quests, write story/journal entries, and use an AI GM to generate narrative + structured game-state updates.
 

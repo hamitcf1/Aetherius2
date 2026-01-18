@@ -16,6 +16,7 @@ import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
+import MapPage from './components/MapPage';
 import { listDungeons } from './data/dungeonDefinitions';
 import dungeonService from './services/dungeonService';
 import { ConsoleOverlay } from './components/ConsoleOverlay';
@@ -50,7 +51,7 @@ import {
   DifficultySelector,
   ThemeSelector,
 } from './components/GameFeatures';
-import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords } from 'lucide-react';
+import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords, Compass } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { setCurrentUser as setFeatureFlagUser, isFeatureEnabled, isFeatureWIP } from './featureFlags';
 import { 
@@ -341,10 +342,11 @@ const formatTime = (time: { day: number; hour: number; minute: number }) => {
 const TABS = {
   CHARACTER: 'character',
   INVENTORY: 'inventory',
+  ADVENTURE: 'adventure',
+  MAP: 'map',
   QUESTS: 'quests',
   STORY: 'story',
-  JOURNAL: 'journal',
-  ADVENTURE: 'adventure'
+  JOURNAL: 'journal'
 };
 
 interface AppGameState {
@@ -4630,6 +4632,7 @@ const App: React.FC = () => {
                         { id: TABS.CHARACTER, icon: User, label: t('nav.hero') },
                     { id: TABS.INVENTORY, icon: Package, label: t('nav.equipment') },
                     { id: TABS.ADVENTURE, icon: Swords, label: t('nav.adventure') },
+                    { id: TABS.MAP, icon: Compass, label: 'Map' },
                     { id: TABS.QUESTS, icon: Scroll, label: t('nav.quests') },
                     { id: TABS.STORY, icon: Feather, label: t('nav.story') },
                     { id: TABS.JOURNAL, icon: BookOpen, label: t('nav.journal') },
@@ -4674,8 +4677,8 @@ const App: React.FC = () => {
         )}
 
         {/* Main Content Area */}
-        <main className={`pt-24 px-2 sm:px-4 ${activeTab === TABS.ADVENTURE ? 'h-screen overflow-hidden' : 'min-h-screen pb-20'}`}>
-          <div className={`max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+        <main className={`pt-24 ${activeTab === TABS.MAP ? 'px-0' : 'px-2 sm:px-4'} ${(activeTab === TABS.ADVENTURE || activeTab === TABS.MAP) ? 'h-screen overflow-hidden' : 'min-h-screen pb-20'}`}>
+          <div className={`${activeTab === TABS.MAP ? 'w-full h-full' : 'max-w-6xl mx-auto'} animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
             {activeTab === TABS.CHARACTER && activeCharacter && (
               <CharacterSheet 
                 character={activeCharacter} 
@@ -4758,6 +4761,26 @@ const App: React.FC = () => {
                     }
                   }
                 }}
+              />
+            )}
+            {activeTab === TABS.MAP && activeCharacter && (
+              <MapPage
+                character={activeCharacter}
+                currentLocation={activeCharacter.currentLocation}
+                visitedLocations={activeCharacter.visitedLocations || []}
+                questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.name }))}
+                discoveredLocations={activeCharacter.discoveredLocations || []}
+                clearedDungeons={activeCharacter.clearedDungeons || []}
+                onEnterDungeon={handleEnterDungeonFromMap}
+                onStartEvent={(eventId) => {
+                  showToast(`Event started: ${eventId}`, 'info');
+                  // TODO: Implement event handling
+                }}
+                onStartMission={(missionId) => {
+                  showToast(`Mission accepted: ${missionId}`, 'success');
+                  // TODO: Implement mission handling
+                }}
+                showToast={showToast}
               />
             )}
           </div>

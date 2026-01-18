@@ -18,6 +18,22 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.1',
+    date: '2026-01-18',
+    title: 'World Map Expansion - Full Map Page',
+    changes: [
+      { type: 'feature', text: 'Dedicated Map Tab: New full-page map experience accessible from main navigation' },
+      { type: 'feature', text: 'Level-Gated Dungeons: 30+ dungeons with level requirements from 1-50' },
+      { type: 'feature', text: 'Map Events: Dynamic events spawn on map (Dragon sightings, Bandit ambushes, Merchant caravans, Shrines)' },
+      { type: 'feature', text: 'Mission System: Accept bounties and objectives with rewards from the map' },
+      { type: 'feature', text: 'Danger Levels: New "Legendary" tier for endgame dungeons like Soul Cairn and Forgotten Vale' },
+      { type: 'improvement', text: 'Map Side Panel: Legend, Location details, Events, and Missions in organized tabs' },
+      { type: 'improvement', text: 'Reward Preview: See potential gold, XP, and item rewards before entering dungeons' },
+      { type: 'improvement', text: 'Level Lock Indicator: Locked dungeons show required level and levels needed' },
+      { type: 'improvement', text: 'Cleared Dungeon Counter: Track how many times you\'ve cleared each dungeon' },
+    ]
+  },
+  {
     version: '1.0.0',
     date: '2026-01-15',
     title: '🎉 Official Release - Combat Overhaul & Economy Balance',
