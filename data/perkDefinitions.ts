@@ -57,6 +57,9 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'power_bash', name: 'Power Bash', skill: 'Block', description: 'Shield bash can be held to deliver a more powerful strike with 20% stun chance per rank.', requires: ['shield_wall:2'], maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'bashStun', amount: 20 } },
   { id: 'deadly_bash', name: 'Deadly Bash', skill: 'Block', description: 'Shield bashing does 5x more damage per rank.', requires: ['power_bash:2'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'bashDamage', amount: 500 } },
   { id: 'disarming_bash', name: 'Disarming Bash', skill: 'Block', description: 'Shield bash has 15% chance per rank to disarm opponents.', requires: ['power_bash:2'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'bashDisarm', amount: 15 } },
+
+  // Defensive guard mastery: increases Defensive/Guard duration up to 3 rounds
+  { id: 'tactical_guard_mastery', name: 'Tactical Guard Mastery', skill: 'Block', description: 'Increases the duration of Tactical Guard by +1 round per rank (max +2), allowing Guard to last up to 3 rounds.', requires: ['shield_wall:1'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'defendDuration', amount: 1 } },
   
   // === COMBAT PERKS - ARCHERY ===
   { id: 'overdraw', name: 'Overdraw', skill: 'Archery', description: 'Increases bow damage by 12% per rank.', maxRank: 5, masteryCost: 2, effect: { type: 'combat', key: 'bowDamage', amount: 12 } },

@@ -1502,9 +1502,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           </div>
           <span className="text-[10px] text-red-300">{playerStats.currentHealth}/{playerStats.maxHealth}</span>
         </div>
-        {combatState.playerDefending && (
-          <div className="mt-1 text-[10px] text-blue-300">🛡️ Defending</div>
-        )}
+        {
+          // Show shielded status with remaining rounds when Tactical Guard is active
+          (() => {
+            const guard = (combatState.playerActiveEffects || []).find(pe => pe.effect && pe.effect.stat === 'guard' && pe.turnsRemaining > 0);
+            if (guard) return <div className="mt-1 text-[10px] text-blue-300">🛡️ Shielded ({guard.turnsRemaining})</div>;
+            if (combatState.playerDefending) return <div className="mt-1 text-[10px] text-blue-300">🛡️ Defending</div>;
+            return null;
+          })()
+        }
       </div>
 
       {/* Main combat area - reorganized for mobile */}
@@ -1562,11 +1568,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 ⚠️ Critical Health!
               </div>
             )}
-            {combatState.playerDefending && (
-              <div className="mt-2 px-2 py-1 bg-blue-900/40 rounded text-xs text-blue-300">
-                🛡️ Defending (50% damage reduction)
-              </div>
-            )}
+            {(() => {
+              const guard = (combatState.playerActiveEffects || []).find(pe => pe.effect && pe.effect.stat === 'guard' && pe.turnsRemaining > 0);
+              if (guard) return (
+                <div className="mt-2 px-2 py-1 bg-blue-900/40 rounded text-xs text-blue-300">🛡️ Shielded ({guard.turnsRemaining} round{guard.turnsRemaining > 1 ? 's' : ''}) — 40% DR</div>
+              );
+              if (combatState.playerDefending) return (
+                <div className="mt-2 px-2 py-1 bg-blue-900/40 rounded text-xs text-blue-300">🛡️ Defending</div>
+              );
+              return null;
+            })()}
 
             {/* ACTIONS (moved from right column) */}
             <div className="mt-4 bg-stone-900/60 rounded-lg p-3 border border-stone-700">
@@ -1574,10 +1585,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               <div className="space-y-2">
                 <button
                   onClick={() => handlePlayerAction('defend')}
-                  disabled={!isPlayerTurn || isAnimating}
+                  disabled={!isPlayerTurn || isAnimating || !!(combatState as any).playerGuardUsed}
+                  title={(combatState as any).playerGuardUsed ? 'Guard used this combat' : `Tactical Guard — 40% DR for ${Math.min(3, 1 + (getCombatPerkBonus(character, 'defendDuration') || 0))} round(s) (once per combat)`}
                   className="w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  🛡️ Defend
+                  {(() => {
+                    const perkBonus = character ? getCombatPerkBonus(character, 'defendDuration') : 0;
+                    const predicted = Math.min(3, 1 + (perkBonus || 0));
+                    return `🛡️ Defend${(combatState as any).playerGuardUsed ? ' (used)' : ''} — ${predicted}r`;
+                  })()}
                 </button>
 
                 {combatState.fleeAllowed && (

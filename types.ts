@@ -585,6 +585,8 @@ export interface CombatState {
   surrenderAllowed: boolean;
   combatLog: CombatLogEntry[];
   playerDefending: boolean;
+  /** Tactical Guard: once-per-combat usage flag */
+  playerGuardUsed?: boolean;
   playerActiveEffects: Array<{ effect: CombatEffect; turnsRemaining: number }>;
   // Cooldowns for player abilities
   abilityCooldowns: Record<string, number>;

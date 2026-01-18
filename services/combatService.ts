@@ -862,8 +862,8 @@ export const addMinionsToEnemies = (enemies: CombatEnemy[], playerLevel: number)
   // Find bosses and add minions
   for (const enemy of enemies) {
     if (enemy.isBoss) {
-      // Determine minion count (1-3 based on player level)
-      const minionCount = Math.min(3, Math.max(1, Math.floor(playerLevel / 5)));
+      // Determine minion count (scale up with level, allow up to 5)
+      const minionCount = randomRange(1, Math.min(5, Math.max(1, Math.ceil(playerLevel / 3))));
       
       // Determine minion type based on boss type
       let minionTemplateId = 'bandit';
@@ -905,7 +905,7 @@ export const scaleEnemyEncounter = (enemies: CombatEnemy[], playerLevel: number)
     return addMinionsToEnemies(enemies, playerLevel);
   }
   
-  // Single enemy: add more based on player level
+  // Single enemy: add more based on player level (use getEnemyCountForLevel to decide total)
   const baseEnemy = enemies[0];
   if (!baseEnemy) return enemies;
   
@@ -913,39 +913,27 @@ export const scaleEnemyEncounter = (enemies: CombatEnemy[], playerLevel: number)
   if (baseEnemy.isBoss) {
     return addMinionsToEnemies(enemies, playerLevel);
   }
-  
-  // For non-boss single enemies, add 0-3 more based on level
-  const additionalCount = Math.min(3, Math.max(0, Math.floor((playerLevel - 1) / 4)));
+
+  // Determine desired total enemies (1-5) and create additional lesser minions if needed
+  const desiredTotal = getEnemyCountForLevel(playerLevel);
+  const additionalCount = Math.max(0, desiredTotal - 1);
   if (additionalCount === 0) return enemies;
-  
-  const result = [...enemies];
-  
-  // Determine template from enemy type
-  let templateId = 'bandit';
-  if (baseEnemy.type === 'beast') {
-    if (baseEnemy.name.toLowerCase().includes('wolf')) templateId = 'wolf';
-    else if (baseEnemy.name.toLowerCase().includes('bear')) templateId = 'bear';
-    else if (baseEnemy.name.toLowerCase().includes('spider')) templateId = 'frost_spider';
-    else templateId = 'wolf';
-  } else if (baseEnemy.type === 'undead') {
-    if (baseEnemy.name.toLowerCase().includes('draugr')) templateId = 'draugr';
-    else templateId = 'skeleton';
-  }
-  
-  try {
-    for (let i = 0; i < additionalCount; i++) {
-      const additional = createEnemyFromTemplate(templateId, {
-        targetLevel: Math.max(1, baseEnemy.level - 1),
-        levelModifier: randomRange(-1, 1),
+
+  const result: CombatEnemy[] = [ baseEnemy ];
+  for (let i = 0; i < additionalCount; i++) {
+    try {
+      const minion = createEnemyFromTemplate(baseEnemy.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').split('_')[0] || 'bandit', {
+        targetLevel: Math.max(1, playerLevel - 2),
+        levelModifier: -1 - Math.floor(i / 2),
         isElite: false,
-        forceUnique: true
+        forceUnique: false
       });
-      result.push(additional);
+      result.push(minion);
+    } catch (e) {
+      // fallback: duplicate a weakened copy
+      result.push({ ...baseEnemy, id: `${baseEnemy.id}_minion_${i}`, level: Math.max(1, (baseEnemy.level || 1) - 2), maxHealth: Math.max(1, (baseEnemy.maxHealth || 10) - 8), currentHealth: Math.max(1, (baseEnemy.maxHealth || 10) - 8), xpReward: 0 } as any);
     }
-  } catch (e) {
-    console.warn('Failed to scale enemy encounter:', e);
   }
-  
   return result;
 };
 
@@ -1155,6 +1143,7 @@ export const initializeCombat = (
       timestamp: Date.now()
     }],
     playerDefending: false,
+    playerGuardUsed: false,
     playerActiveEffects: [],
     abilityCooldowns: {},
     lastActorActions: {}
@@ -2003,15 +1992,28 @@ export const executePlayerAction = (
     }
 
     case 'defend': {
+        // Once-per-combat Tactical Guard (duration is perk-upgradeable; base = 1 round, cap = 3)
+      if ((newState as any).playerGuardUsed) {
+        const msg = 'You have already used Guard in this combat.';
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'defend', target: 'self', damage: 0, narrative: msg, timestamp: Date.now() });
+        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+      }
+
+      (newState as any).playerGuardUsed = true;
+      // Perk-driven duration: base 1 round, each rank of `defendDuration` adds +1 round, cap at 3
+      const perkBonus = character ? getCombatPerkBonus(character, 'defendDuration') : 0;
+      const duration = Math.min(3, Math.max(1, 1 + (perkBonus || 0)));
+      const guardEffect = { effect: { type: 'buff' as const, stat: 'guard', value: 40, name: 'Tactical Guard', description: `40% damage reduction for ${duration} round${duration>1? 's': ''}`, duration }, turnsRemaining: duration };
+      newState.playerActiveEffects = [...(newState.playerActiveEffects || []), guardEffect];
+      // Immediate UI flag (kept for short-term compatibility)
       newState.playerDefending = true;
-      narrative = 'You raise your guard, reducing incoming damage by 50% this turn.';
       newState.playerActionCounts = newState.playerActionCounts || {};
       newState.playerActionCounts['defend'] = (newState.playerActionCounts['defend'] || 0) + 1;
       pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: 'defend',
-        narrative,
+        narrative: `You assume a guarded stance — Tactical Guard active for ${duration} round${duration>1? 's': ''} (40% DR).`,
         timestamp: Date.now()
       });
       break;
@@ -2448,8 +2450,13 @@ export const executeEnemyTurn = (
     appliedDamage = 0;
   }
 
-  // Defending reduces damage
-  if (newState.playerDefending && appliedDamage > 0) {
+  // Tactical Guard (playerActiveEffects) — multiplicative with armor/perks/potions
+  const guard = (newState.playerActiveEffects || []).find((pe: any) => pe.effect && ((pe.effect.type === 'buff' && pe.effect.stat === 'guard') || pe.effect.type === 'guard') && pe.turnsRemaining > 0);
+  if (guard && appliedDamage > 0) {
+    const dr = typeof guard.effect.value === 'number' ? guard.effect.value : 40; // percent
+    appliedDamage = Math.floor(appliedDamage * (1 - dr / 100));
+  } else if (newState.playerDefending && appliedDamage > 0) {
+    // Legacy one-turn defend (back-compat): preserve behavior if present
     appliedDamage = Math.floor(appliedDamage * 0.5);
   }
 
@@ -2836,23 +2843,7 @@ export const advanceTurn = (state: CombatState): CombatState => {
         newState.abilityCooldowns[key]--;
       }
     });
-    // Reset defending
-    newState.playerDefending = false;
-
-    // NOTE: pendingSummons are now tracked by player-turns; expiration and decay are handled on player-turn starts (below).
-  }
-
-  // === PLAYER TURN START EFFECTS ===
-  // Apply decays and decrement player-turn counters when the actor to move is the player
-  if (newState.currentTurnActor === 'player') {
-    // Apply decay damage to companions already flagged as decaying
-    (newState.allies || []).forEach(ally => {
-      if ((ally as any).companionMeta && (ally as any).companionMeta.decayActive) {
-        const damage = Math.max(1, Math.floor((ally.currentHealth || 0) * 0.5));
-        ally.currentHealth = Math.max(0, (ally.currentHealth || 0) - damage);
-        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_decay', target: ally.name, damage, narrative: `${ally.name} is decaying and loses ${damage} health.`, timestamp: Date.now() });
-      }
-    });
+    // NOTE: Do NOT unconditionally reset `playerDefending` here — Tactical Guard is round-based and is tracked in playerActiveEffects.
 
     // Decrement playerTurnsRemaining for pending summons and flag newly expired summons to start decaying
     if (newState.pendingSummons && newState.pendingSummons.length) {
