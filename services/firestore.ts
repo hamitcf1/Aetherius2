@@ -796,6 +796,19 @@ export const deleteUserCompanions = async (uid: string, characterId: string): Pr
   }
 };
 
+// Delete a single companion document by id
+export const deleteUserCompanion = async (uid: string, companionId: string): Promise<void> => {
+  if (!uid || !companionId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'companions', companionId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('Failed to delete companion from Firestore:', err);
+    throw err;
+  }
+};
+
 export const saveUserLoadout = async (uid: string, loadout: any): Promise<void> => {
   if (!uid) return;
   try {

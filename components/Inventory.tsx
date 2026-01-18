@@ -10,6 +10,7 @@ import { getItemBaseAndBonus } from '../services/upgradeService';
 import BlacksmithModal from './BlacksmithModal';
 import { SHOP_INVENTORY } from './ShopModal';
 import { useAppContext } from '../AppContext';
+import ConfirmModal from './ConfirmModal';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { EncumbranceIndicator } from './StatusIndicators';
 import { DropdownSelector, SortSelector } from './GameFeatures';
@@ -270,6 +271,9 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
   const [showDebugIds, setShowDebugIds] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
+  // Confirm delete flow for inventory items
+  const [confirmRemoveItemId, setConfirmRemoveItemId] = useState<string | null>(null);
+  const [confirmRemoveItemName, setConfirmRemoveItemName] = useState<string | null>(null);
   const [newType, setNewType] = useState<InventoryItem['type']>('misc');
   const [newDesc, setNewDesc] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | InventoryItem['type'] | 'favorites'>('all');
@@ -838,13 +842,26 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
           getIcon={getIcon}
           onUpdate={updateItem}
           onDeltaQuantity={(delta) => deltaItemQuantity(item.id, delta)}
-          onRemove={() => removeItem(item.id)}
+          onRemove={() => { setConfirmRemoveItemId(item.id); setConfirmRemoveItemName(item.name); }}
           onEquip={(item) => equipItem(item)}
           onUnequip={unequipItem}
           onUse={onUseItem}
           showDebug={showDebugIds}
         />
       ))}
+        {confirmRemoveItemId && (
+          <ConfirmModal
+            open={!!confirmRemoveItemId}
+            danger
+            title="Delete Item"
+            description={<span>Permanently delete <strong>{confirmRemoveItemName}</strong> from your inventory?</span>}
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => { setConfirmRemoveItemId(null); setConfirmRemoveItemName(null); }}
+            onConfirm={() => { if (confirmRemoveItemId) removeItem(confirmRemoveItemId); setConfirmRemoveItemId(null); setConfirmRemoveItemName(null); }}
+          />
+        )}
+
         {sortedItems.length === 0 && (
             <div className="col-span-full text-center py-12 text-gray-600 italic font-serif">
                 {activeTab === 'all' ? 'Your pockets are empty.' : `No ${CATEGORY_TABS.find(t => t.key === activeTab)?.label.toLowerCase()} in your inventory.`}

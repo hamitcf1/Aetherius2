@@ -102,17 +102,41 @@ export function getRequirementsForNextUpgrade(item: InventoryItem) {
   const explicit = (item as any).upgradeRequirements as Array<{ itemId: string; quantity?: number }> | undefined;
   if (explicit && explicit.length > 0) return explicit;
 
-  // Only enforce central recipes for items of rarity `rare` or higher
+  // Enforce central recipes for items of rarity `uncommon` or higher.
+  // (Feature change: recipe-based material requirements begin at `uncommon`.)
   const itemRarity = (item.rarity || 'common') as string;
-  if (!isRarityAtLeast(itemRarity, 'rare')) return undefined;
+  if (!isRarityAtLeast(itemRarity, 'uncommon')) return undefined;
 
   const key = item.id || (item.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
   const recipes = UPGRADE_RECIPES[key];
-  if (!recipes || recipes.length === 0) return undefined;
   const nextLevel = (item.upgradeLevel || 0) + 1;
-  // pick recipe that matches nextUpgradeLevel or the first if none match
-  const match = recipes.find(r => typeof r.nextUpgradeLevel === 'number' ? r.nextUpgradeLevel === nextLevel : true) || recipes[0];
-  return match.requirements;
+
+  // If an explicit central recipe exists for this item, prefer it (preserves curated behaviour)
+  if (recipes && recipes.length > 0) {
+    const match = recipes.find(r => typeof r.nextUpgradeLevel === 'number' ? r.nextUpgradeLevel === nextLevel : true) || recipes[0];
+    return match.requirements;
+  }
+
+  // No explicit recipe: generate a sensible default material requirement for uncommon+ items.
+  // This improves UX by showing *some* material requirement for higher-tier upgrades even when
+  // a curated recipe isn't present in UPGRADE_RECIPES. The generated ids are conservative
+  // (e.g. `steel_ingot`, `mithril_ingot`, `ebony_ingot`, `daedric_core`) and can be satisfied
+  // by shop stock when available.
+  const MATERIAL_BY_RARITY: Record<string, string> = {
+    uncommon: 'steel_ingot',
+    rare: 'mithril_ingot',
+    mythic: 'ebony_ingot',
+    epic: 'daedric_core'
+  };
+  const TYPE_MATERIAL_FALLBACK: Record<string, string> = {
+    weapon: 'metal_scrap',
+    apparel: 'leather_strip'
+  };
+
+  const materialId = MATERIAL_BY_RARITY[itemRarity] || TYPE_MATERIAL_FALLBACK[item.type] || `${item.type}_material`;
+  // Quantity scales modestly with next level and rarity
+  const qty = Math.max(1, Math.min(8, Math.floor(nextLevel / 1.5) + (RARITY_INDEX[itemRarity] || 0)));
+  return [{ itemId: materialId, quantity: qty }];
 }
 
 /**
@@ -149,11 +173,18 @@ export function canUpgrade(item: InventoryItem, opts?: { shopItemIds?: string[] 
 // Player level gating: require higher player levels for high-tier upgrades.
 // Returns required player level for the *next* upgrade (0 = no requirement).
 export function getRequiredPlayerLevelForNextUpgrade(item: InventoryItem): number {
-  const nextLevel = (item.upgradeLevel || 0) + 1;
-  // No requirement for early upgrades
-  if (nextLevel <= 3) return 0;
-  // Reduced gating: require player level = nextLevel * 2
-  return nextLevel * 2;
+  const maxPerTier = getMaxUpgradeForItem(item) || 5;
+  const rarityIdx = RARITY_ORDER.indexOf((item.rarity || 'common') as any) || 0;
+  // Compute an "effective" progression index that continues across rarity tiers so
+  // a rarity upgrade (which resets upgradeLevel to 1 visually) does not reduce the
+  // player's gating requirement. This preserves progression expectations.
+  const effectiveProgress = (rarityIdx * (maxPerTier + 1)) + (item.upgradeLevel || 0);
+  const nextEffective = effectiveProgress + 1;
+
+  // No requirement for very early progression
+  if (nextEffective <= 3) return 0;
+  // Scale requirement more gently but ensure it never drops after a rarity change
+  return Math.max(1, Math.round(nextEffective * 1.8));
 }
 
 export function previewUpgradeStats(item: InventoryItem) {

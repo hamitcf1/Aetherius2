@@ -142,10 +142,29 @@ interface Props {
 export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold, shopItems }: Props) {
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState<'all'|'weapons'|'armor'>('all');
   const [showSparks, setShowSparks] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
-  const upgradeButtonRef = useRef<HTMLButtonElement>(null);
+  const upgradeButtonRef = useRef<HTMLButtonElement | null>(null);
   const sparkTimeoutRef = useRef<number | null>(null);
+
+  // Category-filtered + deterministic sorting to match inventory/shop behavior
+  const eligibleSorted = useMemo(() => {
+    const base = eligible.filter(i => {
+      if (filterCategory === 'weapons') return i.type === 'weapon';
+      if (filterCategory === 'armor') return i.type === 'apparel';
+      return true;
+    });
+    return base.sort((a, b) => {
+      // Primary: type (weapons first), then upgradeLevel desc, then name
+      const typeOrder = (t: string) => (t === 'weapon' ? 0 : 1);
+      const td = typeOrder(a.type) - typeOrder(b.type);
+      if (td !== 0) return td;
+      const ld = (b.upgradeLevel || 0) - (a.upgradeLevel || 0);
+      if (ld !== 0) return ld;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [eligible, filterCategory]);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
@@ -249,7 +268,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
 
   return (
     <ModalWrapper open={open} onClose={onClose} zIndex="z-[80]">
-      <div className="bg-skyrim-paper border-2 border-skyrim-border rounded-lg p-4 sm:p-6 w-full max-w-[720px] h-[min(92vh,calc(100vh-2rem))] sm:max-h-[80vh] overflow-auto">
+      <div className="bg-skyrim-paper border-2 border-skyrim-border rounded-lg p-4 pr-6 sm:p-6 sm:pr-8 w-full max-w-[920px] h-[min(92vh,calc(100vh-2rem))] sm:max-h-[80vh] overflow-auto" style={{ scrollbarGutter: 'stable both-edges' as any }}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-serif text-skyrim-gold">Blacksmith</h2>
           <div className="flex items-center gap-2 text-sm text-skyrim-text">
@@ -257,39 +276,56 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="md:col-span-1 md:min-w-[260px] overflow-hidden">
             <h3 className="text-sm text-skyrim-text mb-2">Eligible Items</h3>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-6" style={{ scrollbarGutter: 'stable' as any }}>
-              {/* Reserved gutter and extra right padding prevents the scrollbar from overlapping the "Selected" badge */}
-              {eligible.map(it => (
-                <button aria-pressed={selectedId === it.id} key={it.id} onClick={() => setSelectedId(it.id)} className={`w-full text-left p-3 rounded border transition-all ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/12 ring-2 ring-skyrim-gold/30 shadow-[0_8px_30px_rgba(0,0,0,0.45)]' : 'border-skyrim-border hover:border-skyrim-gold/40'}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-2 rounded bg-skyrim-paper/40 text-skyrim-gold ${selectedId === it.id ? 'scale-105' : ''}`}>{it.type === 'weapon' ? <Sword size={16}/> : <Shield size={16}/>}</div>
-                      <div>
-                        <div className="text-skyrim-gold font-serif">{it.name}</div>
-                        <div className="text-xs text-skyrim-text">Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-300 flex items-center gap-2 min-w-[64px] justify-end">
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">{it.value ?? ''}g</div>
-                        {selectedId === it.id && <div className="ml-2 text-xs text-yellow-300 font-semibold z-10">Selected</div>}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))} 
-              {eligible.length === 0 && <div className="text-gray-500 italic">No weapons or armor available.</div>}
-            </div>
-          </div>
 
-          <div className="md:col-span-2">
+            {/* Category filter (mirrors Shop/Inventory UX) */}
+            <div className="mb-3 flex gap-2 text-xs">
+              <button data-testid="filter-all" onClick={() => setFilterCategory('all')} className={`px-2 py-1 rounded ${filterCategory === 'all' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>All</button>
+              <button data-testid="filter-weapons" onClick={() => setFilterCategory('weapons')} className={`px-2 py-1 rounded ${filterCategory === 'weapons' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>Weapons</button>
+              <button data-testid="filter-armor" onClick={() => setFilterCategory('armor')} className={`px-2 py-1 rounded ${filterCategory === 'armor' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>Armor</button>
+            </div>
+
+            <div dir="rtl" className="custom-scrollbar space-y-2 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-10" style={{ scrollbarGutter: 'stable both-edges' as any }}>
+              {/* Reserved gutter + RTL places the scrollbar on the LEFT; inner children preserve normal LTR layout */}
+              {eligibleSorted.map((it) => {
+                return (
+                  <button
+                    dir="ltr"
+                    aria-pressed={selectedId === it.id}
+                    key={it.id}
+                    onClick={() => setSelectedId(it.id)}
+                    className={`w-full text-left p-3 rounded border transition-all relative z-0 ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/12 ring-2 ring-skyrim-gold/30 shadow-[0_8px_30px_rgba(0,0,0,0.45)]' : 'border-skyrim-border hover:border-skyrim-gold/40'}`}
+                  >
+                    <div className="flex items-center justify-between min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`p-2 rounded bg-skyrim-paper/40 text-skyrim-gold ${selectedId === it.id ? 'scale-102' : ''}`}>
+                          {it.type === 'weapon' ? <Sword size={16} /> : <Shield size={16} />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-skyrim-gold font-serif truncate text-sm md:text-base">{it.name}</div>
+                          <div className="text-xs text-skyrim-text truncate">Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-300 flex items-center gap-2 justify-end">
+                        {selectedId === it.id && <div className="ml-2 text-xs text-yellow-300 font-semibold z-0">Selected</div>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {eligibleSorted.length === 0 && (
+                <div className="text-gray-500 italic">No weapons or armor available.</div>
+              )}
+            </div>
+
+          <div className="md:col-span-3 relative z-30">
             <h3 className="text-sm text-skyrim-text mb-2">Details</h3>
             {!selected && <div className="text-gray-500 italic">Select an item to view upgrade options.</div>}
             {selected && (
-              <div className="bg-skyrim-paper/30 p-3 sm:p-4 rounded border border-skyrim-border">
+              <div className="bg-skyrim-paper/30 p-3 sm:p-4 rounded border border-skyrim-border pl-2">
                 <div className="flex items-start gap-4">
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
@@ -359,10 +395,12 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                           <ul className="mt-1 space-y-1">
                             {nextUpgradeRequirements.map(r => {
                               const present = (shopItems || []).some(s => s.id === r.itemId);
+                              const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
+                              const pretty = shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase());
                               return (
                                 <li key={r.itemId} className={`flex items-center gap-2 ${present ? 'text-green-400' : 'text-red-400'}`}>
                                   <span className="font-mono text-[13px]">{r.quantity ?? 1}×</span>
-                                  <span className="truncate">{(r.itemId || '').replace(/_/g, ' ')}</span>
+                                  <span className="truncate">{pretty}</span>
                                   <span className="ml-2 text-xs text-gray-400">{present ? 'available in shop' : 'not available in shop'}</span>
                                 </li>
                               );

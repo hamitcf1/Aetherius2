@@ -102,7 +102,7 @@ describe('Blacksmith modal upgrade flow', () => {
 
   });
 
-  it('disables upgrade when required materials are not present in shop and shows requirement text', () => {
+  it('disables upgrade when required materials are not present in shop and shows requirement text (rare)', () => {
     const items = [
       { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' } as any
     ];
@@ -123,6 +123,55 @@ describe('Blacksmith modal upgrade flow', () => {
     expect(screen.getByText(/steel ingot/i)).toBeTruthy();
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).toBeDisabled();
+  });
+
+  it('disables upgrade for uncommon items when recipes exist and shop lacks materials', () => {
+    // use the same recipe key as UPGRADE_RECIPES (iron_sword) but mark item as 'uncommon'
+    const items = [
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'uncommon' } as any
+    ];
+    let currentItems = [...items];
+    const setItems = (next: any) => { currentItems = next; };
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 1000 } as any);
+
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
+      </AppContext.Provider>
+    );
+
+    fireEvent.click(screen.getByText(/Iron Sword/i));
+
+    // Should now enforce the recipe because uncommon+ is in-scope
+    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
+    expect(screen.getByText(/steel ingot/i)).toBeTruthy();
+    const confirmBtn2 = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn2).toBeDisabled();
+  });
+
+  it('allows upgrade when required materials are available in the shop (uncommon)', () => {
+    const items = [
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'uncommon' } as any
+    ];
+    let currentItems = [...items];
+    const setItems = (next: any) => { currentItems = next; };
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
+
+    // Provide shopItems that include the required steel_ingot
+    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
+
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
+      </AppContext.Provider>
+    );
+
+    fireEvent.click(screen.getByText(/Iron Sword/i));
+
+    const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn).not.toBeDisabled();
   });
 
   it('allows upgrade when required materials are available in the shop', () => {
@@ -147,5 +196,40 @@ describe('Blacksmith modal upgrade flow', () => {
 
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).not.toBeDisabled();
+  });
+
+  it('shows generated material requirement for uncommon+ items without explicit recipes and respects shop stock', () => {
+    const items = [
+      { id: 'daedric_sword', characterId: 'c1', name: 'Daedric Sword', type: 'weapon', damage: 14, value: 1200, quantity: 1, rarity: 'uncommon' } as any
+    ];
+    let currentItems = [...items];
+    const setItems = (next: any) => { currentItems = next; };
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 1000 } as any);
+
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
+      </AppContext.Provider>
+    );
+
+    fireEvent.click(screen.getByText(/Daedric Sword/i));
+
+    // Should surface a generated material requirement (fallback shown as prettified id)
+    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
+    expect(screen.getByText(/Steel Ingot/i)).toBeTruthy();
+    const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn).toBeDisabled();
+
+    // If the generated material is present in shop, the button becomes enabled
+    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
+      </AppContext.Provider>
+    );
+    fireEvent.click(screen.getByText(/Daedric Sword/i));
+    const confirmBtn2 = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    expect(confirmBtn2).not.toBeDisabled();
   });
 });

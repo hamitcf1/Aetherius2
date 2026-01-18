@@ -94,6 +94,8 @@ import {
   loadUserCompanions,
   saveUserCompanions,
   deleteUserCompanions,
+  // Delete a single companion document (used when dismissing a companion)
+  deleteUserCompanion,
   loadUserLoadouts,
   saveUserLoadout,
   deleteUserLoadout,
@@ -738,8 +740,23 @@ const App: React.FC = () => {
       }
       return item;
     }));
-    
+
+    // Remove companion locally and mark for persistence cleanup
     setCompanions(prev => prev.filter(p => p.id !== id));
+    setDirtyEntities(d => new Set([...d, id]));
+
+    // Fire-and-forget: remove companion document from Firestore if available
+    try {
+      if (currentUser?.uid) {
+        // don't await — keep UI responsive; log failures
+        deleteUserCompanion(currentUser.uid, id).catch(err => {
+          console.warn('Failed to delete companion from remote store:', err);
+        });
+      }
+    } catch (e) {
+      // best-effort only
+    }
+
     showToast('Companion removed', 'warning');
   };
 
@@ -4555,6 +4572,7 @@ const App: React.FC = () => {
           dungeonId={dungeonId}
           activeCharacterId={currentCharacterId}
           character={activeCharacter}
+          companions={companions.filter(c => c.characterId === currentCharacterId)}
           inventory={items}
           onClose={(result) => {
             setDungeonOpen(false);

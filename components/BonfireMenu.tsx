@@ -6,6 +6,7 @@ import type { RestOptions } from './SurvivalModals';
 import { useAppContext } from '../AppContext';
 import { PERK_DEFINITIONS, PerkDef } from '../data/perkDefinitions';
 import ModalWrapper from './ModalWrapper';
+import ConfirmModal from './ConfirmModal';
 import { saveUserLoadout, loadUserLoadouts, deleteUserLoadout } from '../services/firestore';
 
 interface BonfireMenuProps {
@@ -397,6 +398,20 @@ export const BonfireMenu: React.FC<BonfireMenuProps> = ({ open, onClose, onConfi
                 </div>
               </div>
             ))}
+
+            {/* Confirm loadout deletion */}
+            {confirmDelete && (
+              <ConfirmModal
+                open={!!confirmDelete}
+                danger
+                title="Delete Loadout"
+                description={<span>Permanently delete loadout <strong>{confirmDelete.name}</strong>?</span>}
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onCancel={() => setConfirmDelete(null)}
+                onConfirm={() => doRemoveLoadout(confirmDelete.idx)}
+              />
+            )}
           </div>
         </div>
           </div>

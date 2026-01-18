@@ -4,6 +4,7 @@ import { Play, Plus, Dice5, MessageSquare, Loader2, Sparkles, Send, FileText, Ar
 import { generateCharacterProfile, chatWithScribe } from '../services/geminiService';
 import { isFeatureEnabled } from '../featureFlags';
 import { DropdownSelector } from './GameFeatures';
+import ConfirmModal from './ConfirmModal';
 import { audioService } from '../services/audioService';
 import { useLocalization, AVAILABLE_LANGUAGES, getLanguageFlag, type Language } from '../services/localization';
 
@@ -238,6 +239,20 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
   return (
     <div className="min-h-screen flex items-center justify-center bg-skyrim-dark bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
       <div className="w-full max-w-4xl p-4 sm:p-8 bg-skyrim-paper border border-skyrim-gold shadow-2xl rounded-lg flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+
+        {/* Reusable confirm modal for destructive character actions */}
+        {confirmDeleteCharacter && (
+          <ConfirmModal
+            open={!!confirmDeleteCharacter}
+            danger
+            title="Delete Character"
+            description={<span>Permanently delete character <strong>{(characters.find(cc => cc.id === confirmDeleteCharacter) || {}).name}</strong>? This cannot be undone.</span>}
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmDeleteCharacter(null)}
+            onConfirm={() => { if (onDeleteCharacter && confirmDeleteCharacter) onDeleteCharacter(confirmDeleteCharacter); setConfirmDeleteCharacter(null); }}
+          />
+        )}
         
         {/* Settings Bar - Only Settings toggle, rest inside panel */}
         <div className="flex items-center justify-end mb-4">
@@ -361,28 +376,6 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                                                 setConfirmDeathCharacter(null);
                                                 setDeathCause('');
                                               }}
-                                              className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-                                            >
-                                              Cancel
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : confirmDeleteCharacter === c.id ? (
-                                        /* Delete Confirmation */
-                                        <div className="flex-1 flex items-center justify-between gap-3">
-                                          <span className="text-red-400 text-sm">Permanently delete "{c.name}"?</span>
-                                          <div className="flex gap-2">
-                                            <button 
-                                              onClick={() => {
-                                                if (onDeleteCharacter) onDeleteCharacter(c.id);
-                                                setConfirmDeleteCharacter(null);
-                                              }}
-                                              className="px-3 py-1 bg-red-700 text-white rounded text-sm hover:bg-red-600"
-                                            >
-                                              Delete
-                                            </button>
-                                            <button 
-                                              onClick={() => setConfirmDeleteCharacter(null)}
                                               className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
                                             >
                                               Cancel

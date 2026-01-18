@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { Companion, InventoryItem, EquipmentSlot } from '../types';
 import { Plus, Trash2, X, Dog, Heart } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 import { SortSelector, DropdownSelector } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 
@@ -78,6 +79,10 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
 
   const [selectedEquipCompanion, setSelectedEquipCompanion] = useState<Companion | null>(null);
   const [equipSlotPicker, setEquipSlotPicker] = useState<EquipmentSlot | null>(null);
+
+  // Confirm delete flow for companions
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [confirmRemoveName, setConfirmRemoveName] = useState<string | null>(null);
 
   const handleAdd = () => {
     if (!name.trim()) return;
@@ -164,7 +169,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => onRemove(c.id)} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
+                <button onClick={() => { setConfirmRemoveId(c.id); setConfirmRemoveName(c.name); }} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
                 <button onClick={() => onUpdate({ ...c, behavior: c.behavior === 'follow' ? 'guard' : 'follow' })} className="px-2 py-1 rounded bg-skyrim-paper/30 text-skyrim-text text-xs" title="Toggle Follow/Guard">{c.behavior === 'follow' ? 'Following' : c.behavior === 'guard' ? 'Guarding' : 'Idle'}</button>
                 {!c.isAnimal && (
                   <button onClick={() => onUpdate({ ...c, autoLoot: !c.autoLoot })} className={`px-2 py-1 rounded text-xs ${c.autoLoot ? 'bg-yellow-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-loot">{c.autoLoot ? 'Auto-loot: On' : 'Auto-loot: Off'}</button>
@@ -322,6 +327,20 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
               )}
             </div>
           </ModalWrapper>
+        )}
+
+        {/* Companion removal confirmation (reusable) */}
+        {confirmRemoveId && (
+          <ConfirmModal
+            open={!!confirmRemoveId}
+            danger
+            title="Dismiss Companion"
+            description={<span>Are you sure you want to dismiss <strong>{confirmRemoveName}</strong>? This will unequip their items.</span>}
+            confirmLabel="Dismiss"
+            cancelLabel="Keep"
+            onCancel={() => { setConfirmRemoveId(null); setConfirmRemoveName(null); }}
+            onConfirm={() => { onRemove(confirmRemoveId as string); setConfirmRemoveId(null); setConfirmRemoveName(null); }}
+          />
         )}
       </div>
     </ModalWrapper>

@@ -574,12 +574,26 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // Equipment modal local state (allows opening equipment while combat is active)
   const [equipModalOpen, setEquipModalOpen] = useState(false);
   const [equipSelectedSlot, setEquipSelectedSlot] = useState<EquipmentSlot | null>(null);
+
+
   const [localInventory, setLocalInventory] = useState<InventoryItem[]>(inventory);
 
   useEffect(() => {
     // Keep local inventory in sync with prop
     setLocalInventory(inventory);
   }, [inventory]);
+
+  // When opening the equipment modal, pre-select the most-relevant slot (improves discoverability
+  // and restores previous behavior where the weapon slot was shown by default). This makes the
+  // list of equippable items visible immediately without an extra click.
+  useEffect(() => {
+    if (!equipModalOpen) return;
+    if (equipSelectedSlot) return;
+    // Prefer weapon slot if any weapon/apparel exists; otherwise pick the first allowed slot.
+    const firstEquippable = localInventory.find(i => (i.type === 'weapon' || i.type === 'apparel'));
+    const defaultSlot = firstEquippable ? getDefaultSlotForItem(firstEquippable) : 'weapon';
+    setEquipSelectedSlot(defaultSlot || 'weapon');
+  }, [equipModalOpen, equipSelectedSlot, localInventory]);
 
   // Recompute player combat stats whenever the local inventory or character changes
   // BUT preserve current combat vitals (health/magicka/stamina) to avoid resetting combat damage
@@ -1074,7 +1088,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         undefined,
         undefined,
         undefined,
-        inventory,
+        localInventory,
         undefined,
         character
       );
@@ -1127,7 +1141,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       targetToUse,
       abilityId,
       itemId,
-      inventory,
+      localInventory,
       finalRoll,
       character
     );

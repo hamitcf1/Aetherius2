@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyUpgrade, getMaxUpgradeForItem, canUpgrade, getUpgradeCost } from '../services/upgradeService';
+import { applyUpgrade, getMaxUpgradeForItem, canUpgrade, getUpgradeCost, getRequiredPlayerLevelForNextUpgrade } from '../services/upgradeService';
 
 import type { InventoryItem } from '../types';
 
@@ -36,6 +36,29 @@ describe('upgradeService - rarity upgrade behavior', () => {
     expect((updated.value || 0)).toBeGreaterThanOrEqual(200);
   });
 
+  it('does not reduce player level gating after a rarity upgrade (progression persists)', () => {
+    const item: InventoryItem = {
+      id: 'test_sword_2',
+      characterId: 'char_1',
+      name: 'Test Sword II',
+      type: 'weapon',
+      damage: 50,
+      value: 300,
+      upgradeLevel: getMaxUpgradeForItem({} as any)
+    } as any;
+
+    item.upgradeLevel = getMaxUpgradeForItem(item);
+    item.rarity = 'common';
+
+    const requiredBefore = getRequiredPlayerLevelForNextUpgrade(item);
+    const { updated } = applyUpgrade(item); // rarity upgrade
+    // After rarity-upgrade the visible upgradeLevel resets to 1 but the required player level
+    // for the *next* upgrade should not be lower than it was before
+    const requiredAfter = getRequiredPlayerLevelForNextUpgrade(updated as any);
+    expect(requiredAfter).toBeGreaterThanOrEqual(requiredBefore);
+    expect(requiredAfter).toBeGreaterThan(0);
+  });
+
   it('respects shop stock when an upgrade recipe requires materials', () => {
     const item: InventoryItem = {
       id: 'iron_sword',
@@ -60,10 +83,11 @@ describe('upgradeService - rarity upgrade behavior', () => {
     expect(canUpgrade(item, { shopItemIds: ['steel_ingot', 'iron_ingot'] })).toBe(true);
   });
 
-  it('does NOT enforce central recipes for uncommon/common items', () => {
+  it('enforces central recipes for uncommon+ items when shop context is provided', () => {
     const item: InventoryItem = { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, rarity: 'uncommon' } as any;
-    // central recipe exists but should be ignored for uncommon rarity
-    expect(canUpgrade(item, { shopItemIds: [] })).toBe(true);
+    // central recipe exists and should be enforced for uncommon+ when shopItemIds is provided
+    expect(canUpgrade(item, { shopItemIds: [] })).toBe(false);
+    expect(canUpgrade(item, { shopItemIds: ['steel_ingot'] })).toBe(true);
   });
 
   it('caps upgrade cost at 10k for very high-value items', () => {

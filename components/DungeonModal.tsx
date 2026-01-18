@@ -12,6 +12,7 @@ interface DungeonModalProps {
   onClose: (result?: { cleared?: boolean; rewards?: any }) => void;
   activeCharacterId: string | null;
   character: Character | null;
+  companions?: Companion[];
   inventory: InventoryItem[];
   onApplyRewards: (rewards: { gold?: number; xp?: number; items?: any[]; transactionId?: string }) => void;
   onApplyBuff?: (effect: any) => void;
@@ -100,7 +101,7 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition): { nodes: MapNode[]
 }
 
 export const DungeonModal: React.FC<DungeonModalProps> = ({ 
-  open, dungeonId, onClose, activeCharacterId, character, inventory, 
+  open, dungeonId, onClose, activeCharacterId, character, companions, inventory, 
   onApplyRewards, onApplyBuff, onStartCombat, showToast, onInventoryUpdate
 }) => {
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
@@ -272,7 +273,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           };
           return scaled;
         });
-        const initializedCombat = initializeCombat(enemies, dungeon.location, false, true, false, []);
+        // Include player's companions (if any) so allies appear in dungeon combats
+        const companionsForCombat = (companions || []).filter(c => c.characterId === (character?.id || activeCharacterId));
+        const initializedCombat = initializeCombat(enemies, dungeon.location, false, true, false, companionsForCombat);
         setCombatState(initializedCombat);
         break;
 
