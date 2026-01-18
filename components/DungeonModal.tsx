@@ -4,7 +4,7 @@ import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy, Character, I
 import { getDungeonById } from '../data/dungeonDefinitions';
 import { CombatModal } from './CombatModal';
 import { initializeCombat } from '../services/combatService';
-import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle } from 'lucide-react';
+import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle, DoorOpen, Swords } from 'lucide-react';
 
 interface DungeonModalProps {
   open: boolean;
@@ -111,6 +111,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   const [showBossConfirm, setShowBossConfirm] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [eventChoice, setEventChoice] = useState<DungeonNode | null>(null);
+  const [showFloorComplete, setShowFloorComplete] = useState(false);
+  const [currentFloor, setCurrentFloor] = useState(1);
+  const [floorScalingFactor, setFloorScalingFactor] = useState(1);
   
   // Refs for node positions (to draw connections accurately)
   const nodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -259,17 +262,18 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         // Scale enemies based on how many times this dungeon has been cleared
         const clearData = character?.clearedDungeons?.find(d => d.dungeonId === dungeonId);
         const clearCount = clearData?.clearCount || 0;
-        const scaleFactor = 1 + (clearCount * 0.25); // 25% stronger per clear
+        const baseScaleFactor = 1 + (clearCount * 0.25); // 25% stronger per clear
+        const totalScaleFactor = baseScaleFactor * floorScalingFactor; // Also scale by current floor
         
         const enemies = (node.enemies || []).map(e => {
           const scaled: CombatEnemy = {
             ...e,
-            maxHealth: Math.floor(e.maxHealth * scaleFactor),
-            currentHealth: Math.floor(e.maxHealth * scaleFactor),
-            damage: Math.floor(e.damage * scaleFactor),
-            armor: Math.floor((e.armor || 0) * scaleFactor),
-            xpReward: Math.floor((e.xpReward || 0) * scaleFactor),
-            goldReward: e.goldReward ? Math.floor(e.goldReward * scaleFactor) : undefined,
+            maxHealth: Math.floor(e.maxHealth * totalScaleFactor),
+            currentHealth: Math.floor(e.maxHealth * totalScaleFactor),
+            damage: Math.floor(e.damage * totalScaleFactor),
+            armor: Math.floor((e.armor || 0) * totalScaleFactor),
+            xpReward: Math.floor((e.xpReward || 0) * totalScaleFactor),
+            goldReward: e.goldReward ? Math.floor(e.goldReward * totalScaleFactor) : undefined,
           };
           return scaled;
         });
@@ -415,10 +419,8 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         return;
       }
 
-      // Auto-advance to next if single connection
-      if (currentNode?.connections.length === 1) {
-        setTimeout(() => advanceToNode(currentNode.connections[0]), 500);
-      }
+      // Show floor completion choice after combat victory (non-boss)
+      setShowFloorComplete(true);
     }
 
     if (result === 'defeat') {
@@ -543,6 +545,11 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {currentFloor > 1 && (
+              <div className="text-sm px-2 py-1 rounded bg-purple-600/30 text-purple-300 border border-purple-600/50">
+                Floor {currentFloor} • {Math.round(floorScalingFactor * 100)}% Difficulty
+              </div>
+            )}
             <div className="text-sm text-skyrim-gold">Gold: {state.collectedRewards.gold}</div>
             <div className="text-sm text-blue-300">XP: {state.collectedRewards.xp}</div>
             <button 
@@ -751,6 +758,77 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                 className="flex-1 px-3 py-2 border border-skyrim-border text-skyrim-text rounded hover:bg-skyrim-paper/30"
               >
                 Stay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floor Complete Modal - Optional continue or leave */}
+      {showFloorComplete && state && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
+          <div className="bg-skyrim-paper p-6 rounded-lg border-2 border-skyrim-gold max-w-md">
+            <div className="text-center mb-4">
+              <div className="text-3xl text-skyrim-gold mb-2">⚔️</div>
+              <h4 className="font-semibold text-xl text-skyrim-gold">Floor {currentFloor} Complete!</h4>
+              <p className="text-sm text-skyrim-text/80 mt-2">
+                You've cleared this floor. Do you wish to continue deeper into the dungeon or leave with your rewards?
+              </p>
+            </div>
+            
+            {/* Current Rewards Summary */}
+            <div className="bg-skyrim-dark/50 rounded p-3 mb-4 border border-skyrim-border">
+              <div className="text-xs text-skyrim-text/60 mb-2 uppercase tracking-wider">Rewards Collected</div>
+              <div className="flex justify-center gap-6 text-sm">
+                <span className="text-yellow-400 flex items-center gap-1">
+                  💰 {state.collectedRewards.gold} Gold
+                </span>
+                <span className="text-purple-400 flex items-center gap-1">
+                  ✨ {state.collectedRewards.xp} XP
+                </span>
+                <span className="text-green-400 flex items-center gap-1">
+                  📦 {state.collectedRewards.items.length} Items
+                </span>
+              </div>
+            </div>
+
+            {/* Warning about difficulty */}
+            <div className="bg-red-900/30 rounded p-3 mb-4 border border-red-600/50">
+              <p className="text-xs text-red-300 text-center">
+                ⚠️ Next floor enemies will be <span className="font-bold">{Math.round((1 + currentFloor * 0.15) * 100)}%</span> stronger!
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  // Leave dungeon with rewards
+                  setShowFloorComplete(false);
+                  setState(prev => prev ? { ...prev, result: 'cleared', active: false } : prev);
+                  onClose({ cleared: true, rewards: state?.collectedRewards });
+                }}
+                className="flex-1 px-4 py-3 bg-green-600 text-white rounded hover:bg-green-500 transition-colors flex items-center justify-center gap-2"
+              >
+                <DoorOpen size={18} />
+                Leave with Rewards
+              </button>
+              <button 
+                onClick={() => {
+                  // Continue to next floor
+                  setShowFloorComplete(false);
+                  setCurrentFloor(prev => prev + 1);
+                  setFloorScalingFactor(prev => prev + 0.15);
+                  
+                  // Auto-advance to next node if single connection
+                  const currentNode = dungeon.nodes.find(n => n.id === state.currentNodeId);
+                  if (currentNode?.connections.length === 1) {
+                    setTimeout(() => advanceToNode(currentNode.connections[0]), 300);
+                  }
+                }}
+                className="flex-1 px-4 py-3 bg-skyrim-gold text-skyrim-dark font-semibold rounded hover:bg-skyrim-gold/90 transition-colors flex items-center justify-center gap-2"
+              >
+                <Swords size={18} />
+                Continue Deeper
               </button>
             </div>
           </div>

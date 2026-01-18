@@ -31,6 +31,7 @@ import { populatePendingLoot, finalizeLoot } from '../services/lootService';
 import { BASE_PATH } from '../services/basePath';
 import { getEasterEggName } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
+import { LoadoutManager } from './LoadoutManager';
 import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
 import { getItemBaseAndBonus } from '../services/upgradeService';
@@ -135,6 +136,113 @@ const HealthBar: React.FC<{
   );
 };
 
+// Turn List component - displays turn order with all entities
+const TurnList: React.FC<{
+  turnOrder: string[];
+  currentTurnActor: string;
+  player: { name: string; currentHealth: number; maxHealth: number };
+  enemies: CombatEnemy[];
+  allies: CombatEnemy[];
+}> = ({ turnOrder, currentTurnActor, player, enemies, allies }) => {
+  // Build a list of all participants with their status
+  const participants = turnOrder.map(id => {
+    if (id === 'player') {
+      return {
+        id: 'player',
+        name: player.name,
+        type: 'player' as const,
+        isCurrentTurn: currentTurnActor === 'player',
+        isDead: player.currentHealth <= 0,
+        isSummon: false,
+        summonTurnsRemaining: undefined as number | undefined,
+        healthPercent: Math.round((player.currentHealth / player.maxHealth) * 100)
+      };
+    }
+    
+    const ally = allies.find(a => a.id === id);
+    if (ally) {
+      const isSummon = !!ally.companionMeta?.isSummon;
+      // Summon decay is tracked via activeEffects with type 'summon_decay'
+      const decayEffect = (ally.activeEffects || []).find((e: any) => e.effect?.type === 'summon_decay');
+      return {
+        id: ally.id,
+        name: ally.name,
+        type: 'ally' as const,
+        isCurrentTurn: currentTurnActor === ally.id,
+        isDead: ally.currentHealth <= 0,
+        isSummon,
+        summonTurnsRemaining: decayEffect?.turnsRemaining,
+        healthPercent: Math.round((ally.currentHealth / ally.maxHealth) * 100)
+      };
+    }
+    
+    const enemy = enemies.find(e => e.id === id);
+    if (enemy) {
+      return {
+        id: enemy.id,
+        name: enemy.name,
+        type: 'enemy' as const,
+        isCurrentTurn: currentTurnActor === enemy.id,
+        isDead: enemy.currentHealth <= 0,
+        isSummon: false,
+        summonTurnsRemaining: undefined,
+        healthPercent: Math.round((enemy.currentHealth / enemy.maxHealth) * 100)
+      };
+    }
+    
+    // Unknown actor (shouldn't happen, but handle gracefully)
+    return null;
+  }).filter(Boolean);
+
+  return (
+    <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700">
+      <h4 className="text-xs font-bold text-stone-400 mb-2">TURN ORDER</h4>
+      <div className="flex flex-wrap gap-1">
+        {participants.map((p, idx) => {
+          if (!p) return null;
+          const baseClasses = `px-2 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all`;
+          const typeClasses = 
+            p.type === 'player' ? 'bg-green-900/40 border-green-600' :
+            p.type === 'ally' ? 'bg-sky-900/40 border-sky-600' :
+            'bg-red-900/40 border-red-600';
+          const stateClasses = 
+            p.isDead ? 'opacity-40 line-through text-stone-500' :
+            p.isCurrentTurn ? 'ring-2 ring-amber-400 scale-105' : '';
+          
+          return (
+            <div 
+              key={p.id} 
+              className={`${baseClasses} ${typeClasses} ${stateClasses} border`}
+              title={`${p.name} (${p.healthPercent}% HP)${p.isSummon && p.summonTurnsRemaining ? ` - ${p.summonTurnsRemaining} turns remaining` : ''}`}
+            >
+              {/* Turn indicator */}
+              {p.isCurrentTurn && !p.isDead && <span className="text-amber-400">▶</span>}
+              
+              {/* Entity icon */}
+              <span>{p.type === 'player' ? '🧙' : p.type === 'ally' ? (p.isSummon ? '✨' : '🤝') : '👹'}</span>
+              
+              {/* Name (truncated) */}
+              <span className={`truncate max-w-[60px] ${p.isDead ? 'text-stone-500' : p.type === 'player' ? 'text-green-200' : p.type === 'ally' ? 'text-sky-200' : 'text-red-200'}`}>
+                {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
+              </span>
+              
+              {/* Summon duration indicator */}
+              {p.isSummon && p.summonTurnsRemaining !== undefined && !p.isDead && (
+                <span className="text-[10px] text-purple-300 bg-purple-900/50 px-1 rounded">
+                  {p.summonTurnsRemaining}t
+                </span>
+              )}
+              
+              {/* Death indicator */}
+              {p.isDead && <span>💀</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Enemy card component
 const EnemyCard: React.FC<{
   enemy: CombatEnemy;
@@ -220,11 +328,25 @@ const EnemyCard: React.FC<{
         </div>
       </div>
       
+      {/* Summon duration indicator for conjured allies */}
+      {enemy.isCompanion && enemy.companionMeta?.isSummon && (() => {
+        const decayEffect = (enemy.activeEffects || []).find((ae: any) => ae.effect?.type === 'summon_decay');
+        if (decayEffect && decayEffect.turnsRemaining > 0) {
+          return (
+            <div className="mb-2 px-2 py-1 bg-purple-900/40 rounded text-xs text-purple-300 flex items-center gap-1">
+              <span>✨</span>
+              <span>Conjured — {decayEffect.turnsRemaining} turn{decayEffect.turnsRemaining !== 1 ? 's' : ''} remaining</span>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       {/* Status effects */}
       {enemy.activeEffects && enemy.activeEffects.length > 0 && (
         <div className="flex gap-1 flex-wrap">
-          {enemy.activeEffects.map((ae, i) => (
-            <span key={i} className="px-1.5 py-0.5 bg-purple-900/60 rounded text-xs text-purple-300">
+          {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => (
+            <span key={`${enemy.id}-effect-${ae.effect?.type || 'unknown'}-${i}`} className="px-1.5 py-0.5 bg-purple-900/60 rounded text-xs text-purple-300">
               {ae.effect.type} ({ae.turnsRemaining})
             </span>
           ))}
@@ -910,7 +1032,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       // If the acting actor is stunned, skip the visual roll (engine will early-return)
       const acting = (currentState.enemies || []).find(a => a.id === actorId) || (currentState.allies || []).find(a => a.id === actorId) || null;
       const actingStunned = acting?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
-      if (!actingStunned) {
+      if (actingStunned) {
+        // Show stunned indication instead of dice roll
+        showToast?.(`${acting?.name || 'Entity'} is stunned and cannot act!`, 'warning');
+        await waitMs(Math.floor(600 * timeScale));
+      } else {
         // animate wheel-style roll with ease-out for smooth stop
         await animateRoll(finalEnemyRoll, Math.floor(3000 * timeScale));
         await waitMs(Math.floor(220 * timeScale));
@@ -989,7 +1115,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         currentState,
         currentState.currentTurnActor,
         currentPlayerStats,
-        finalEnemyRoll,
+        actingStunned ? undefined : finalEnemyRoll,
         character
       );
       
@@ -1513,6 +1639,17 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         }
       </div>
 
+      {/* Turn List - shows turn order for all entities */}
+      <div className="px-2 sm:px-4 py-2">
+        <TurnList
+          turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
+          currentTurnActor={combatState.currentTurnActor}
+          player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
+          enemies={combatState.enemies}
+          allies={combatState.allies || []}
+        />
+      </div>
+
       {/* Main combat area - reorganized for mobile */}
       <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
@@ -1739,7 +1876,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 const isAlly = !!(combatState.allies && combatState.allies.find(a => a.name === entry.actor));
                 return (
                   <div 
-                    key={i} 
+                    key={`log-${entry.turn}-${entry.actor}-${entry.timestamp || i}`} 
                     className={`text-sm p-2 rounded ${
                       entry.actor === 'player' 
                         ? 'bg-green-900/20 border-l-2 border-green-500' 
@@ -2543,9 +2680,34 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       {/* Equipment modal (non-blocking) */}
       <ModalWrapper open={equipModalOpen} onClose={() => { setEquipModalOpen(false); setEquipSelectedSlot(null); }} preventOutsideClose={false}>
-        <div className="w-[760px] max-w-full bg-stone-900/95 rounded-lg p-4 border border-stone-700">
+        <div className="w-[760px] max-w-full bg-stone-900/95 rounded-lg p-4 border border-stone-700 max-h-[85vh] overflow-y-auto">
           <h3 className="text-lg font-bold text-amber-100 mb-3">Equipment</h3>
           <EquipmentHUD items={localInventory} onUnequip={(it) => unequipItem(it)} onEquipFromSlot={(slot) => setEquipSelectedSlot(slot)} />
+          
+          {/* Loadout Manager in Combat Equipment */}
+          <div className="mt-4">
+            <LoadoutManager
+              items={localInventory}
+              characterId={character?.id}
+              onApplyLoadout={(mapping) => {
+                const updatedItems = localInventory.map(it => ({
+                  ...it,
+                  equipped: !!mapping[it.id],
+                  slot: mapping[it.id]?.slot
+                }));
+                setLocalInventory(updatedItems);
+                onInventoryUpdate && onInventoryUpdate(updatedItems as InventoryItem[]);
+                // Recalculate player stats with preserved vitals
+                setPlayerStats(prev => {
+                  const recalculated = calculatePlayerCombatStats(character, updatedItems);
+                  return { ...recalculated, currentHealth: prev.currentHealth, currentMagicka: prev.currentMagicka, currentStamina: prev.currentStamina };
+                });
+              }}
+              showToast={showToast}
+              compact
+            />
+          </div>
+          
           {equipSelectedSlot && (
             <div className="mt-4">
               <h4 className="text-sm font-semibold text-stone-300 mb-2">Equip to: {equipSelectedSlot}</h4>

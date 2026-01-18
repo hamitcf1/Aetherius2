@@ -17,6 +17,7 @@ import { DropdownSelector, SortSelector } from './GameFeatures';
 import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
 import { resolvePotionEffect } from '../services/potionResolver';
 import { audioService } from '../services/audioService';
+import { LoadoutManager } from './LoadoutManager';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
 
@@ -356,6 +357,19 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
     
     // Sort based on sortOrder with optional direction support (e.g., 'name:asc' or 'name:desc')
     const [key, dir] = (sortOrder || 'name:asc').split(':');
+    
+    // Rarity order for sorting (higher = better)
+    const RARITY_ORDER: Record<string, number> = {
+      'common': 1,
+      'uncommon': 2,
+      'rare': 3,
+      'epic': 4,
+      'legendary': 5,
+      'daedric': 6,
+      'artifact': 7
+    };
+    const getRarityValue = (it: InventoryItem) => RARITY_ORDER[(it.rarity || 'common').toLowerCase()] || 0;
+    
     return uniqueItems.sort((a, b) => {
       const asc = dir !== 'desc';
       const getDamage = (it: InventoryItem) => it.damage ?? getItemStats(it.name, it.type).damage ?? 0;
@@ -374,6 +388,8 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
             return getDamage(b) - getDamage(a) || a.name.localeCompare(b.name);
           case 'value':
             return getValue(b) - getValue(a) || a.name.localeCompare(b.name);
+          case 'rarity':
+            return getRarityValue(b) - getRarityValue(a) || a.name.localeCompare(b.name);
           default:
             return 0;
         }
@@ -600,11 +616,27 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
 
     {/* Equipment View */}
     {viewMode === 'equipment' && (
-      <div className="mb-8">
+      <div className="mb-8 space-y-4">
         <EquipmentHUD
           items={items}
           onUnequip={unequipItem}
           onEquipFromSlot={openEquipModal}
+        />
+        
+        {/* Loadout Manager in Equipment View */}
+        <LoadoutManager
+          items={items}
+          characterId={items[0]?.characterId}
+          onApplyLoadout={(mapping) => {
+            // Apply the loadout by updating items' equipped state
+            const updatedItems = items.map(it => ({
+              ...it,
+              equipped: !!mapping[it.id],
+              slot: mapping[it.id]?.slot
+            }));
+            setItems(updatedItems);
+          }}
+          showToast={showToast}
         />
       </div>
     )}
@@ -824,6 +856,7 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
             options={[
               { id: 'name', label: 'Name (A-Z)' },
               { id: 'type', label: 'Type' },
+              { id: 'rarity', label: 'Rarity' },
               { id: 'newest', label: 'Newest First' },
               { id: 'quantity', label: 'Quantity' },
               { id: 'damage', label: 'Damage / Power' },
