@@ -144,7 +144,8 @@ const TurnList: React.FC<{
   player: { name: string; currentHealth: number; maxHealth: number };
   enemies: CombatEnemy[];
   allies: CombatEnemy[];
-}> = ({ turnOrder, currentTurnActor, player, enemies, allies }) => {
+  className?: string;
+}> = ({ turnOrder, currentTurnActor, player, enemies, allies, className }) => {
   // Build a list of all participants with their status
   const participants = turnOrder.map(id => {
     if (id === 'player') {
@@ -196,46 +197,58 @@ const TurnList: React.FC<{
   }).filter(Boolean);
 
   return (
-    <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700">
-      <h4 className="text-xs font-bold text-stone-400 mb-2">TURN ORDER</h4>
-      <div className="flex flex-wrap gap-1">
+    <div className={`bg-stone-900/60 rounded-lg p-3 border border-stone-700 ${className || ''}`}>
+      <h4 className="text-xs font-bold text-stone-400 mb-2 border-b border-stone-700 pb-1">TURN ORDER</h4>
+      <div className="flex flex-col gap-1 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin scrollbar-thumb-stone-700">
         {participants.map((p, idx) => {
           if (!p) return null;
-          const baseClasses = `px-2 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all`;
+          const isPlayer = p.type === 'player';
+          const isAlly = p.type === 'ally';
+          const isEnemy = p.type === 'enemy';
+          
+          const baseClasses = `p-2 rounded text-xs font-medium flex items-center gap-2 transition-all w-full relative overflow-hidden`;
           const typeClasses = 
-            p.type === 'player' ? 'bg-green-900/40 border-green-600' :
-            p.type === 'ally' ? 'bg-sky-900/40 border-sky-600' :
-            'bg-red-900/40 border-red-600';
+            isPlayer ? 'bg-green-900/20 border-green-800' :
+            isAlly ? 'bg-sky-900/20 border-sky-800' :
+            'bg-red-900/20 border-red-800';
           const stateClasses = 
-            p.isDead ? 'opacity-40 line-through text-stone-500' :
-            p.isCurrentTurn ? 'ring-2 ring-amber-400 scale-105' : '';
+            p.isDead ? 'opacity-40 grayscale' :
+            p.isCurrentTurn ? `${isPlayer ? 'bg-green-900/40 border-green-500' : isAlly ? 'bg-sky-900/40 border-sky-500' : 'bg-red-900/40 border-red-500'} ring-1 ring-amber-400/50` : 'border-stone-800';
           
           return (
             <div 
-              key={p.id} 
+              key={`${p.id}-${idx}`} 
               className={`${baseClasses} ${typeClasses} ${stateClasses} border`}
-              title={`${p.name} (${p.healthPercent}% HP)${p.isSummon && p.summonTurnsRemaining ? ` - ${p.summonTurnsRemaining} turns remaining` : ''}`}
+              title={`${p.name} (${p.healthPercent}% HP)`}
             >
-              {/* Turn indicator */}
-              {p.isCurrentTurn && !p.isDead && <span className="text-amber-400">▶</span>}
-              
-              {/* Entity icon */}
-              <span>{p.type === 'player' ? '🧙' : p.type === 'ally' ? (p.isSummon ? '✨' : '🤝') : '👹'}</span>
-              
-              {/* Name (truncated) */}
-              <span className={`truncate max-w-[60px] ${p.isDead ? 'text-stone-500' : p.type === 'player' ? 'text-green-200' : p.type === 'ally' ? 'text-sky-200' : 'text-red-200'}`}>
-                {p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name}
-              </span>
-              
-              {/* Summon duration indicator */}
-              {p.isSummon && p.summonTurnsRemaining !== undefined && !p.isDead && (
-                <span className="text-[10px] text-purple-300 bg-purple-900/50 px-1 rounded">
-                  {p.summonTurnsRemaining}t
-                </span>
-              )}
-              
-              {/* Death indicator */}
-              {p.isDead && <span>💀</span>}
+              {/* Number */}
+              <div className="flex flex-col items-center justify-center min-w-[20px] text-[10px] text-stone-500 font-bold border-r border-stone-700/50 pr-2 mr-1">
+                 <span>{idx + 1}</span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                     <span className={`truncate font-bold ${p.isDead ? 'line-through decoration-stone-500' : ''} ${isPlayer ? 'text-green-200' : isAlly ? 'text-sky-200' : 'text-red-200'}`}>
+                        {p.name}
+                     </span>
+                     {p.isCurrentTurn && !p.isDead && <span className="text-amber-400 animate-pulse text-[10px]">◀</span>}
+                     {p.isDead && <span className="text-stone-500 text-[10px]">💀</span>}
+                  </div>
+                  {/* Summon duration indicator */}
+                  {p.isSummon && p.summonTurnsRemaining !== undefined && !p.isDead && (
+                    <div className="text-[9px] text-purple-300 mt-0.5">
+                      {p.summonTurnsRemaining} turns left
+                    </div>
+                  )}
+                  
+                  {/* Mini Health Bar */}
+                  <div className="h-1 bg-stone-900 mt-1 rounded-full overflow-hidden w-full opacity-70">
+                    <div 
+                       className={`h-full ${isPlayer ? 'bg-green-500' : isAlly ? 'bg-sky-500' : 'bg-red-500'}`} 
+                       style={{ width: `${p.healthPercent}%` }}
+                    />
+                  </div>
+              </div>
             </div>
           );
         })}
@@ -1640,19 +1653,22 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         }
       </div>
 
-      {/* Turn List - shows turn order for all entities */}
-      <div className="px-2 sm:px-4 py-2">
-        <TurnList
-          turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
-          currentTurnActor={combatState.currentTurnActor}
-          player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
-          enemies={combatState.enemies}
-          allies={combatState.allies || []}
-        />
-      </div>
+
 
       {/* Main combat area - reorganized for mobile */}
       <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
+        {/* Mobile Turn List (scrolls with content) */}
+        <div className="lg:hidden w-full">
+           <TurnList
+              turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
+              currentTurnActor={combatState.currentTurnActor}
+              player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
+              enemies={combatState.enemies}
+              allies={combatState.allies || []}
+              className="max-h-[200px]"
+            />
+        </div>
+
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
         <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
           <div 
@@ -1763,6 +1779,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 </button>
               </div>
             </div>
+            
+            {/* Turn List */}
+            <TurnList
+              turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
+              currentTurnActor={combatState.currentTurnActor}
+              player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
+              enemies={combatState.enemies}
+              allies={combatState.allies || []}
+            />
           </div>
         </div>
 

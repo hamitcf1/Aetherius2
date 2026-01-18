@@ -314,7 +314,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
       case 'reward':
         if (node.rewards) {
-          onApplyRewards({ gold: node.rewards.gold, xp: node.rewards.xp, items: node.rewards.items || [] });
+          // Accumulate rewards instead of applying immediately
           setState(prev => prev ? { 
             ...prev, 
             collectedRewards: { 
@@ -366,7 +366,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     if (!eventChoice || !state) return;
     
     if (choice.outcome === 'reward') {
-      onApplyRewards({ gold: choice.value || 0 });
+      // Accumulate rewards instead of applying immediately
       setState(prev => prev ? { 
         ...prev, 
         collectedRewards: { ...prev.collectedRewards, gold: prev.collectedRewards.gold + (choice.value || 0) }, 
@@ -398,13 +398,14 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     
     if (result === 'victory') {
       if (rewards) {
+        // Accumulate rewards instead of applying immediately
         // Pass through the transactionId from finalizeLoot to prevent creating duplicate transactions
-        onApplyRewards({ gold: rewards.gold || 0, xp: rewards.xp || 0, items: rewards.items || [], transactionId: rewards.transactionId });
         setState(prev => prev ? { 
           ...prev, 
           collectedRewards: { 
             gold: prev.collectedRewards.gold + (rewards.gold || 0), 
             xp: prev.collectedRewards.xp + (rewards.xp || 0), 
+            // Deduplicate items slightly
             items: [...prev.collectedRewards.items, ...(rewards.items || [])] 
           } 
         } : prev);
@@ -414,13 +415,12 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
       const currentNode = dungeon.nodes.find(n => n.id === state.currentNodeId);
       if (currentNode?.type === 'boss') {
-        setState(prev => prev ? { ...prev, result: 'cleared', active: false } : prev);
-        onClose({ cleared: true, rewards: state?.collectedRewards });
+        // Boss defeated! Show floor complete modal to allow continuing deeper or leaving
+        setShowFloorComplete(true);
         return;
       }
 
-      // Show floor completion choice after combat victory (non-boss)
-      setShowFloorComplete(true);
+      // Standard node victory - just stay on map (don't show floor complete)
     }
 
     if (result === 'defeat') {
@@ -814,15 +814,21 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
               </button>
               <button 
                 onClick={() => {
-                  // Continue to next floor
+                  // Continue to next floor - Reset dungeon state but keep character progress/buffs/rewards
                   setShowFloorComplete(false);
                   setCurrentFloor(prev => prev + 1);
                   setFloorScalingFactor(prev => prev + 0.15);
                   
-                  // Auto-advance to next node if single connection
-                  const currentNode = dungeon.nodes.find(n => n.id === state.currentNodeId);
-                  if (currentNode?.connections.length === 1) {
-                    setTimeout(() => advanceToNode(currentNode.connections[0]), 300);
+                  // Reset map progress to start
+                  if (dungeon) {
+                    const startNode = dungeon.nodes.find(n => n.id === dungeon.startNodeId) || dungeon.nodes[0];
+                    setState(prev => prev ? {
+                      ...prev,
+                      currentNodeId: startNode.id,
+                      visitedNodes: [startNode.id],
+                      completedNodes: [],
+                    } : prev);
+                    setSelectedNodeId(null);
                   }
                 }}
                 className="flex-1 px-4 py-3 bg-skyrim-gold text-skyrim-dark font-semibold rounded hover:bg-skyrim-gold/90 transition-colors flex items-center justify-center gap-2"
