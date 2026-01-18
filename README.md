@@ -4,7 +4,7 @@
 
 # Skyrim Aetherius
 
-**Version 0.5.6** | [Changelog](components/Changelog.tsx)
+**Version 1.0.0** | [Changelog](components/Changelog.tsx)
 
 Skyrim Aetherius is a web app for running a Skyrim-flavored roleplay campaign like a game: you create characters, track inventory and quests, write story/journal entries, and use an AI GM to generate narrative + structured game-state updates.
 
@@ -95,9 +95,18 @@ The game features a Pokemon-style turn-based combat system:
 
 - **Combat triggers**: AI can start combat via `combatStart` in game state updates
 - **Actions**: Attack, Power Attack, Magic, Shout, Defend, Use Item, Flee
+- **AoE physical attacks**: Whirlwind Attack and Cleaving Strike hit multiple enemies based on your roll:
+  - Nat 1: Miss all targets
+  - 2-4: Hit 1 enemy
+  - 5-9: Hit 2 enemies
+  - 10-14: Hit 3 enemies
+  - 15-19: Hit 4 enemies
+  - Nat 20: Hit ALL enemies
+- **Ability cooldowns**: Powerful abilities have cooldowns (1-4 turns) preventing spam tactics
 - **Sound effects**: Melee/ranged/magic hits, blocking, enemy death sounds
 - **Loot system**: Enemies drop items, gold, and XP on defeat
 - **Companions**: Can join combat and act autonomously or be player-controlled
+- **Mobile support**: Full combat UI on mobile with Physical/Magical ability tabs
 
 ## Console commands (dev tools)
 

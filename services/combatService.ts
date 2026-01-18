@@ -615,7 +615,7 @@ const generatePlayerAbilities = (
   const getSkillLevel = (name: string) => 
     (character.skills || []).find(s => s.name === name)?.level || 0;
 
-  // Always available: Basic Attack
+  // Always available: Basic Attack (no cooldown - can be spammed)
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
   abilities.push({
     id: 'basic_attack',
@@ -623,6 +623,7 @@ const generatePlayerAbilities = (
     type: 'melee',
     damage: weapon?.damage || 10,
     cost: 10, // stamina
+    cooldown: 0, // No cooldown for basic attack
     description: 'A basic attack with your equipped weapon.'
   });
 
@@ -639,6 +640,7 @@ const generatePlayerAbilities = (
         type: 'melee',
         damage: Math.max(4, Math.floor((weapon?.damage || 10) * 0.7)), // base unarmed damage (slightly below weapon)
         cost: 0, // zero stamina
+        cooldown: 0, // No cooldown
         unarmed: true,
         description: 'A fallback strike that requires no stamina and scales with the Unarmed skill.'
       });
@@ -654,6 +656,7 @@ const generatePlayerAbilities = (
       type: 'melee',
       damage: Math.max(5, Math.floor((offhandWeapon.damage || 6) * 0.6)),
       cost: 8,
+      cooldown: 1, // Short cooldown to prevent dual-wield spam
       description: `A quick off-hand strike with ${offhandWeapon.name}.`
     });
   }
@@ -670,6 +673,39 @@ const generatePlayerAbilities = (
       cooldown: 2,
       description: 'A powerful strike that deals 50% more damage.',
       effects: [{ type: 'stun', value: 1, duration: 1, chance: 25 }]
+    });
+  }
+
+  // Whirlwind Attack - AoE physical attack (requires Two-Handed 35 or One-Handed 40)
+  // High stamina cost (70-85), hits multiple enemies based on roll
+  const twoHandedSkill = getSkillLevel('Two-Handed');
+  const oneHandedSkillVal = getSkillLevel('One-Handed');
+  if (twoHandedSkill >= 35 || oneHandedSkillVal >= 40) {
+    const baseDamage = Math.floor((weapon?.damage || 10) * 1.2);
+    abilities.push({
+      id: 'whirlwind_attack',
+      name: 'Whirlwind Attack',
+      type: 'melee',
+      damage: baseDamage,
+      cost: 75, // High stamina cost (70-100 range)
+      cooldown: 3,
+      description: 'A powerful spinning attack that hits multiple enemies. Enemies hit depends on your roll.',
+      effects: [{ type: 'aoe_damage', value: baseDamage, aoeTarget: 'all_enemies' }]
+    });
+  }
+  
+  // Cleaving Strike - AoE physical for Two-Handed specialists
+  if (twoHandedSkill >= 50) {
+    const cleaveDamage = Math.floor((weapon?.damage || 10) * 1.4);
+    abilities.push({
+      id: 'cleaving_strike',
+      name: 'Cleaving Strike',
+      type: 'melee',
+      damage: cleaveDamage,
+      cost: 85, // Higher cost for more damage
+      cooldown: 4,
+      description: 'A devastating overhead cleave that damages all enemies in front of you.',
+      effects: [{ type: 'aoe_damage', value: cleaveDamage, aoeTarget: 'all_enemies' }]
     });
   }
 
@@ -697,6 +733,7 @@ const generatePlayerAbilities = (
       type: 'magic',
       damage: 15 + Math.floor(destructionSkill * 0.3),
       cost: 15,
+      cooldown: 0, // Basic spell - no cooldown
       description: 'A stream of fire that damages enemies.',
       effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30 }]
     });
@@ -708,7 +745,7 @@ const generatePlayerAbilities = (
       type: 'magic',
       damage: 25 + Math.floor(destructionSkill * 0.4),
       cost: 25,
-      cooldown: 1,
+      cooldown: 1, // Short cooldown
       description: 'A spike of ice that slows enemies.',
       effects: [{ type: 'debuff', stat: 'stamina', value: -20, duration: 2 }]
     });
@@ -720,7 +757,7 @@ const generatePlayerAbilities = (
       type: 'magic',
       damage: 35 + Math.floor(destructionSkill * 0.5),
       cost: 35,
-      cooldown: 2,
+      cooldown: 2, // Medium cooldown
       description: 'A bolt of lightning that drains magicka.',
       effects: [{ type: 'drain', stat: 'magicka', value: 15 }]
     });
@@ -779,6 +816,7 @@ const generatePlayerAbilities = (
       type: 'magic',
       damage: 0,
       cost: 20,
+      cooldown: 1, // Short cooldown to prevent heal spam
       description: 'Restore your health.',
       effects: [{ type: 'heal', stat: 'health', value: 25 + Math.floor(restorationSkill * 0.5) }]
     });
@@ -876,21 +914,22 @@ export const grantAbilityToPlayer = (playerStats: PlayerCombatStats, ability: Co
 /**
  * Calculate enemy count based on player level.
  * Returns 1-5 enemies depending on level.
+ * SKY-51: Increased enemy counts to make combat more engaging.
  */
 export const getEnemyCountForLevel = (playerLevel: number): number => {
-  // Level 1-5: 1-2 enemies
-  // Level 6-10: 1-3 enemies
-  // Level 11-15: 2-4 enemies
-  // Level 16+: 2-5 enemies
-  if (playerLevel <= 5) return randomRange(1, 2);
-  if (playerLevel <= 10) return randomRange(1, 3);
-  if (playerLevel <= 15) return randomRange(2, 4);
-  return randomRange(2, 5);
+  // Level 1-3: 1-3 enemies (some easy fights, some challenging)
+  // Level 4-7: 2-4 enemies 
+  // Level 8-12: 2-5 enemies
+  // Level 13+: 3-5 enemies (always multiple enemies at high levels)
+  if (playerLevel <= 3) return randomRange(1, 3);
+  if (playerLevel <= 7) return randomRange(2, 4);
+  if (playerLevel <= 12) return randomRange(2, 5);
+  return randomRange(3, 5);
 };
 
 /**
  * Add minions to boss enemies.
- * Bosses always spawn with 1-3 minions of appropriate type.
+ * SKY-51: Bosses ALWAYS spawn with 2-4 minions of appropriate type to make boss fights more epic.
  */
 export const addMinionsToEnemies = (enemies: CombatEnemy[], playerLevel: number): CombatEnemy[] => {
   const result: CombatEnemy[] = [...enemies];
@@ -898,18 +937,28 @@ export const addMinionsToEnemies = (enemies: CombatEnemy[], playerLevel: number)
   // Find bosses and add minions
   for (const enemy of enemies) {
     if (enemy.isBoss) {
-      // Determine minion count (scale up with level, allow up to 5)
-      const minionCount = randomRange(1, Math.min(5, Math.max(1, Math.ceil(playerLevel / 3))));
+      // SKY-51: Bosses always have 2-4 minions (minimum 2, scales with level)
+      const baseMinions = 2;
+      const bonusMinions = Math.min(2, Math.floor(playerLevel / 5)); // +1 at level 5, +2 at level 10
+      const minionCount = baseMinions + randomRange(0, bonusMinions);
       
-      // Determine minion type based on boss type
+      // Determine minion type based on boss type with more variety
       let minionTemplateId = 'bandit';
-      if (enemy.type === 'undead') minionTemplateId = enemy.name.toLowerCase().includes('draugr') ? 'draugr' : 'skeleton';
-      else if (enemy.type === 'beast') minionTemplateId = 'wolf';
-      else if (enemy.type === 'daedra') minionTemplateId = 'skeleton'; // fallback
-      else if (enemy.name.toLowerCase().includes('vampire')) minionTemplateId = 'skeleton';
-      else if (enemy.name.toLowerCase().includes('mage') || enemy.name.toLowerCase().includes('necromancer')) minionTemplateId = 'skeleton';
-      else if (enemy.name.toLowerCase().includes('bandit')) minionTemplateId = 'bandit';
-      else if (enemy.name.toLowerCase().includes('troll')) minionTemplateId = 'wolf';
+      const nameLower = enemy.name.toLowerCase();
+      if (enemy.type === 'undead') {
+        minionTemplateId = nameLower.includes('draugr') ? 'draugr' : 
+                          nameLower.includes('vampire') ? 'skeleton' : 'skeleton';
+      } else if (enemy.type === 'beast') {
+        minionTemplateId = nameLower.includes('spider') ? 'frost_spider' :
+                          nameLower.includes('troll') ? 'wolf' : 'wolf';
+      } else if (enemy.type === 'daedra') {
+        minionTemplateId = 'skeleton'; // daedric minions
+      } else if (enemy.type === 'automaton') {
+        minionTemplateId = 'skeleton'; // fallback for dwemer
+      } else if (nameLower.includes('vampire')) minionTemplateId = 'skeleton';
+      else if (nameLower.includes('mage') || nameLower.includes('necromancer')) minionTemplateId = 'skeleton';
+      else if (nameLower.includes('bandit') || nameLower.includes('forsworn')) minionTemplateId = 'bandit';
+      else if (nameLower.includes('troll')) minionTemplateId = 'wolf';
       
       // Generate minions
       try {
@@ -1849,14 +1898,34 @@ export const executePlayerAction = (
               );
               narrative += ` You recover ${healAmount} health.`;
             } else if (effect.type === 'aoe_damage') {
-              // AoE damage - hit all enemies
+              // AoE damage - hit enemies based on roll for physical, all enemies for magic
               const aoeDamage = effect.value || 0;
               let totalAoeDamage = 0;
               let hitCount = 0;
               const aoeDamages: Array<{ id: string; name: string; amount: number }> = [];
 
+              // For physical AoE (melee), determine how many enemies are hit based on the roll
+              const isPhysicalAoE = ability.type === 'melee' || ability.type === 'ranged';
+              let maxTargets = newState.enemies.filter(e => e.currentHealth > 0 && e.id !== target?.id).length;
+              
+              if (isPhysicalAoE && attackResolved) {
+                // Physical AoE: roll determines how many enemies are hit
+                // Roll 1-4: 1 enemy, 5-9: 2 enemies, 10-14: 3 enemies, 15-19: 4 enemies, 20: all
+                const nat = attackResolved.natRoll || 10;
+                if (nat === 1) maxTargets = 0; // Critical fail - miss all
+                else if (nat <= 4) maxTargets = Math.min(1, maxTargets);
+                else if (nat <= 9) maxTargets = Math.min(2, maxTargets);
+                else if (nat <= 14) maxTargets = Math.min(3, maxTargets);
+                else if (nat <= 19) maxTargets = Math.min(4, maxTargets);
+                // nat === 20: hit all (maxTargets stays as is)
+              }
+
+              // Get alive enemies excluding primary target
+              const eligibleEnemies = newState.enemies.filter(e => e.currentHealth > 0 && e.id !== target?.id);
+              const enemiesToHit = eligibleEnemies.slice(0, maxTargets);
+
               newState.enemies = newState.enemies.map(enemy => {
-                if (enemy.currentHealth > 0 && enemy.id !== target?.id) {
+                if (enemy.currentHealth > 0 && enemy.id !== target?.id && enemiesToHit.some(e => e.id === enemy.id)) {
                   // Apply armor reduction to AoE damage
                   const armorReduction = enemy.armor / (enemy.armor + 100);
                   const actualDamage = Math.max(1, Math.floor(aoeDamage * (1 - armorReduction)));
@@ -1867,8 +1936,15 @@ export const executePlayerAction = (
                 }
                 return enemy;
               });
+              
               if (hitCount > 0) {
-                narrative += ` The attack chains to ${hitCount} other ${hitCount === 1 ? 'enemy' : 'enemies'} for ${totalAoeDamage} total damage!`;
+                if (isPhysicalAoE) {
+                  narrative += ` Your sweeping attack hits ${hitCount} other ${hitCount === 1 ? 'enemy' : 'enemies'} for ${totalAoeDamage} total damage!`;
+                } else {
+                  narrative += ` The attack chains to ${hitCount} other ${hitCount === 1 ? 'enemy' : 'enemies'} for ${totalAoeDamage} total damage!`;
+                }
+              } else if (isPhysicalAoE && attackResolved?.natRoll === 1) {
+                narrative += ` Your wild swing misses all other enemies!`;
               }
 
               // Attach AoE summary so UI can show per-target indicators

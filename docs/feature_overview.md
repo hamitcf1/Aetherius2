@@ -18,10 +18,13 @@ This single-page map points to canonical files and extension points for the majo
 - Files: `services/combatService.ts` (templates & combat engine), `components/CombatModal.tsx` (UI), `services/lootService.ts` (loot generation & finalize).
 - Tips: Update `BASE_ENEMY_TEMPLATES` or move it to `data/enemies.ts` for easier editing; add tests for expected damage/loot behaviors.
 - Note: Players and companions can now choose to **Skip Turn**; this records a `skip` action in the combat log and advances the turn (see `skipActorTurn` in `services/combatService.ts`).
+- **AoE Physical Attacks (v1.0.0)**: Whirlwind Attack and Cleaving Strike hit multiple enemies based on roll (nat 1=miss, 2-4=1 enemy, 5-9=2, 10-14=3, 15-19=4, nat 20=all).
+- **Ability Cooldowns (v1.0.0)**: Powerful abilities have cooldowns (1-4 turns) to prevent spam tactics.
 
 ## Items, Loot & Economy
 - Files: `services/itemStats.ts`, `data/lootTables.ts`, `services/lootService.ts`, `components/LootModal.tsx`.
 - Tips: Add canonical items to `itemStats` to ensure value/weight/damage are consistent.
+- **Economy Balance (v1.0.0)**: MAX_ITEM_VALUE cap of 25,000 gold; legendary/epic items have realistic stat ranges.
 
 ## Audio & SFX
 - File: `services/audioService.ts`, `public/audio/sfx/` (assets), `console-demo.js` (dev testing helpers).

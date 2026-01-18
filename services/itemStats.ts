@@ -193,16 +193,16 @@ const WEAPON_STATS: Record<string, ItemStats> = {
   'crossbow': { damage: 19, value: 400 },
   'steel bolts (20)': { damage: 0, value: 30 },
   // === LEGENDARY ITEMS ===
-  // Legendary items (max-power promo)
-  'sword of ages (legendary)': { damage: 9999, value: 99999 },
-  'aeon greatsword (legendary)': { damage: 9999, value: 99999 },
-  'bow of the apocalypse (legendary)': { damage: 9999, value: 99999 },
-  'void dagger (legendary)': { damage: 9999, value: 99999 },
+  // Legendary items (max-power promo - balanced values, not absurdly high)
+  'sword of ages (legendary)': { damage: 50, value: 15000 },
+  'aeon greatsword (legendary)': { damage: 60, value: 18000 },
+  'bow of the apocalypse (legendary)': { damage: 45, value: 14000 },
+  'void dagger (legendary)': { damage: 35, value: 12000 },
   // Epic variants - meaningful but lower than legendary
-  'sword of ages (epic)': { damage: 320, value: 75000 },
-  'aeon greatsword (epic)': { damage: 340, value: 75000 },
-  'bow of the apocalypse (epic)': { damage: 300, value: 75000 },
-  'void dagger (epic)': { damage: 260, value: 75000 },
+  'sword of ages (epic)': { damage: 35, value: 8000 },
+  'aeon greatsword (epic)': { damage: 42, value: 10000 },
+  'bow of the apocalypse (epic)': { damage: 32, value: 7500 },
+  'void dagger (epic)': { damage: 25, value: 6000 },
 };
 
 // Armor rating values by name (case-insensitive match)
@@ -315,17 +315,17 @@ const ARMOR_STATS: Record<string, ItemStats> = {
   'gold circlet': { armor: 0, value: 150 },
 };
 
-// Legendary armor pieces
-ARMOR_STATS['plate of titans (legendary)'] = { armor: 9999, value: 99999 };
-ARMOR_STATS['helm of eternity (legendary)'] = { armor: 9999, value: 99999 };
-ARMOR_STATS['shield of sol (legendary)'] = { armor: 9999, value: 99999 };
-ARMOR_STATS['epic legion armor (legendary)'] = { armor: 9999, value: 99999 };
+// Legendary armor pieces (balanced values)
+ARMOR_STATS['plate of titans (legendary)'] = { armor: 120, value: 20000 };
+ARMOR_STATS['helm of eternity (legendary)'] = { armor: 50, value: 10000 };
+ARMOR_STATS['shield of sol (legendary)'] = { armor: 80, value: 12000 };
+ARMOR_STATS['epic legion armor (legendary)'] = { armor: 130, value: 22000 };
 
 // Epic armor variants (realistic high-tier stats)
-ARMOR_STATS['plate of titans (epic)'] = { armor: 300, value: 75000 };
-ARMOR_STATS['helm of eternity (epic)'] = { armor: 160, value: 40000 };
-ARMOR_STATS['shield of sol (epic)'] = { armor: 200, value: 50000 };
-ARMOR_STATS['epic legion armor (epic)'] = { armor: 320, value: 75000 };
+ARMOR_STATS['plate of titans (epic)'] = { armor: 85, value: 10000 };
+ARMOR_STATS['helm of eternity (epic)'] = { armor: 38, value: 5000 };
+ARMOR_STATS['shield of sol (epic)'] = { armor: 60, value: 6000 };
+ARMOR_STATS['epic legion armor (epic)'] = { armor: 95, value: 12000 };
 
 /**
  * Get stats for an item by name
@@ -429,13 +429,14 @@ export function estimateItemValue(itemName: string, itemType?: string, rarity?: 
     return stats.value;
   }
   
-  // Rarity multipliers
+  // Rarity multipliers (balanced to prevent millions)
   const rarityMultiplier: Record<string, number> = {
     common: 1,
     uncommon: 1.5,
     rare: 2.5,
-    epic: 5,
-    legendary: 15
+    mythic: 4,
+    epic: 6,
+    legendary: 10
   };
   const rarityMul = rarityMultiplier[(rarity || '').toLowerCase()] || 1;
   
@@ -487,5 +488,9 @@ export function estimateItemValue(itemName: string, itemType?: string, rarity?: 
     if (nameLower.includes('fortify')) baseValue = 50;
   }
   
-  return Math.max(1, Math.round(baseValue * rarityMul));
+  // Calculate final value with soft cap to prevent astronomical prices
+  const calculatedValue = Math.round(baseValue * rarityMul);
+  const MAX_ITEM_VALUE = 25000; // Soft cap to keep economy balanced
+  
+  return Math.max(1, Math.min(calculatedValue, MAX_ITEM_VALUE));
 }

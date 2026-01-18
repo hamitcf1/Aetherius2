@@ -1207,6 +1207,236 @@ window.demo.simulateCombatHelp = function() {
   return helpText;
 };
 
+// ============================================================================
+// MODAL TESTING (Admin)
+// ============================================================================
+
+/**
+ * Open dungeon modal for testing
+ */
+window.demo.openDungeonModal = function(dungeonId = 'bleak_falls_barrow') {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setActiveDungeonId) {
+    console.error('App context not available');
+    return 'App context not available';
+  }
+  
+  // Available dungeon IDs: bleak_falls_barrow, bandit_hideout, labyrinthian, blackreach, vampire_lair, frost_spider_den
+  app.setActiveDungeonId(dungeonId);
+  const msg = `Opened dungeon modal: ${dungeonId}`;
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open combat modal for testing
+ */
+window.demo.openCombatModal = function(options = {}) {
+  // This is essentially the same as simulateCombat
+  return window.demo.simulateCombat(options);
+};
+
+/**
+ * Open shop modal for testing
+ */
+window.demo.openShopModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowShop) {
+    console.error('App context not available or setShowShop not found');
+    return 'App context not available';
+  }
+  app.setShowShop(true);
+  const msg = 'Opened shop modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open level up modal for testing
+ */
+window.demo.openLevelUpModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowLevelUp) {
+    console.error('App context not available or setShowLevelUp not found');
+    return 'App context not available';
+  }
+  app.setShowLevelUp(true);
+  const msg = 'Opened level up modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open perk tree modal for testing
+ */
+window.demo.openPerkTreeModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowPerkTree) {
+    console.error('App context not available or setShowPerkTree not found');
+    return 'App context not available';
+  }
+  app.setShowPerkTree(true);
+  const msg = 'Opened perk tree modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open companions modal for testing
+ */
+window.demo.openCompanionsModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowCompanions) {
+    console.error('App context not available or setShowCompanions not found');
+    return 'App context not available';
+  }
+  app.setShowCompanions(true);
+  const msg = 'Opened companions modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open achievements modal for testing
+ */
+window.demo.openAchievementsModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowAchievements) {
+    console.error('App context not available or setShowAchievements not found');
+    return 'App context not available';
+  }
+  app.setShowAchievements(true);
+  const msg = 'Opened achievements modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open character sheet for testing
+ */
+window.demo.openCharacterSheet = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowCharacterSheet) {
+    console.error('App context not available or setShowCharacterSheet not found');
+    return 'App context not available';
+  }
+  app.setShowCharacterSheet(true);
+  const msg = 'Opened character sheet';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open inventory for testing
+ */
+window.demo.openInventory = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowInventory) {
+    console.error('App context not available or setShowInventory not found');
+    return 'App context not available';
+  }
+  app.setShowInventory(true);
+  const msg = 'Opened inventory';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open journal for testing
+ */
+window.demo.openJournal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowJournal) {
+    console.error('App context not available or setShowJournal not found');
+    return 'App context not available';
+  }
+  app.setShowJournal(true);
+  const msg = 'Opened journal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open spells modal for testing
+ */
+window.demo.openSpellsModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowSpells) {
+    console.error('App context not available or setShowSpells not found');
+    return 'App context not available';
+  }
+  app.setShowSpells(true);
+  const msg = 'Opened spells modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Open rest modal for testing
+ */
+window.demo.openRestModal = function() {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  const app = window.app;
+  if (!app || !app.setShowRest) {
+    console.error('App context not available or setShowRest not found');
+    return 'App context not available';
+  }
+  app.setShowRest(true);
+  const msg = 'Opened rest modal';
+  console.log(msg);
+  return msg;
+};
+
+/**
+ * Test all modals sequentially
+ */
+window.demo.testAllModals = function(delayMs = 2000) {
+  if (!_isAdmin()) { console.error('Admin only'); return 'Admin only'; }
+  
+  const modals = [
+    { name: 'CharacterSheet', fn: () => window.demo.openCharacterSheet() },
+    { name: 'Inventory', fn: () => window.demo.openInventory() },
+    { name: 'Journal', fn: () => window.demo.openJournal() },
+    { name: 'Spells', fn: () => window.demo.openSpellsModal() },
+    { name: 'PerkTree', fn: () => window.demo.openPerkTreeModal() },
+    { name: 'Companions', fn: () => window.demo.openCompanionsModal() },
+    { name: 'Achievements', fn: () => window.demo.openAchievementsModal() },
+    { name: 'Shop', fn: () => window.demo.openShopModal() },
+    { name: 'LevelUp', fn: () => window.demo.openLevelUpModal() },
+    { name: 'Rest', fn: () => window.demo.openRestModal() },
+    { name: 'Dungeon', fn: () => window.demo.openDungeonModal() }
+  ];
+  
+  console.log(`Testing ${modals.length} modals with ${delayMs}ms delay between each...`);
+  console.log('Press ESC or close each modal to continue.');
+  
+  let idx = 0;
+  const testNext = () => {
+    if (idx >= modals.length) {
+      console.log('Modal test complete!');
+      return;
+    }
+    const modal = modals[idx];
+    console.log(`Testing modal ${idx + 1}/${modals.length}: ${modal.name}`);
+    modal.fn();
+    idx++;
+    setTimeout(testNext, delayMs);
+  };
+  
+  testNext();
+  return 'Modal test started. Check console for progress.';
+};
+
 /**
  * Show help
  */
@@ -1267,6 +1497,23 @@ window.demo.help = function() {
     '  demo.addRandomQuests(n)        - Add multiple quests',
     '',
     '┌─────────────────────────────────────────────────────────────────┐',
+    '│ MODAL TESTING [ADMIN]                                           │',
+    '└─────────────────────────────────────────────────────────────────┘',
+    '  demo.openDungeonModal(id)      - Open dungeon (bleak_falls_barrow, bandit_hideout, etc)',
+    '  demo.openCombatModal()         - Open combat (same as simulateCombat)',
+    '  demo.openShopModal()           - Open shop modal',
+    '  demo.openLevelUpModal()        - Open level up modal',
+    '  demo.openPerkTreeModal()       - Open perk tree modal',
+    '  demo.openCompanionsModal()     - Open companions modal',
+    '  demo.openAchievementsModal()   - Open achievements modal',
+    '  demo.openCharacterSheet()      - Open character sheet',
+    '  demo.openInventory()           - Open inventory',
+    '  demo.openJournal()             - Open journal',
+    '  demo.openSpellsModal()         - Open spells modal',
+    '  demo.openRestModal()           - Open rest modal',
+    '  demo.testAllModals(delayMs)    - Test all modals sequentially',
+    '',
+    '┌─────────────────────────────────────────────────────────────────┐',
     '│ UTILITIES                                                       │',
     '└─────────────────────────────────────────────────────────────────┘',
     '  demo.getAppState()             - Show current app state',
@@ -1302,6 +1549,12 @@ window.demo.help = function() {
     '',
     '  // Test lockpicking:',
     "  demo.lockpick('master', 'Ancient Nordic Chest')",
+    '',
+    '  // Test dungeon modal:',
+    "  demo.openDungeonModal('bleak_falls_barrow')",
+    '',
+    '  // Test all modals (auto-close with 3 second delay):',
+    '  demo.testAllModals(3000)',
     '',
     '───────────────────────────────────────────────────────────────────',
     'Type demo.simulateCombatHelp() for detailed combat configuration.',

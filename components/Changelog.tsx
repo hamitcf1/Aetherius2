@@ -18,6 +18,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.0',
+    date: '2026-01-15',
+    title: '🎉 Official Release - Combat Overhaul & Economy Balance',
+    changes: [
+      { type: 'feature', text: 'AoE Physical Attacks: New Whirlwind Attack (75 stamina) and Cleaving Strike (85 stamina) hit multiple enemies based on roll' },
+      { type: 'feature', text: 'Roll-Based AoE Targeting: Natural 1 misses, 2-4 hits 1 enemy, 5-9 hits 2, 10-14 hits 3, 15-19 hits 4, nat 20 hits ALL' },
+      { type: 'feature', text: 'Ability Cooldown System: Powerful abilities now have cooldowns (1-4 turns) to prevent spam tactics' },
+      { type: 'improvement', text: 'Economy Rebalance: Legendary/Epic item values capped at 25,000 gold, realistic stat scaling' },
+      { type: 'improvement', text: 'Mobile Combat UI: Full ability access with Physical/Magical tabs, scrollable ability list' },
+      { type: 'improvement', text: 'Performance: React.memo on HealthBar and ActionButton components to reduce re-renders' },
+      { type: 'fix', text: 'Legendary weapons now deal 35-60 damage instead of unrealistic 9999 values' },
+      { type: 'fix', text: 'Epic armor provides 38-95 armor instead of inflated 160-320 values' },
+    ]
+  },
+  {
     version: '0.5.8',
     date: '2026-01-14',
     title: 'Major Bug Fixes & QoL Improvements',

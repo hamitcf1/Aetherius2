@@ -105,15 +105,15 @@ interface CombatModalProps {
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
-// Health bar component
-const HealthBar: React.FC<{
+// Health bar component - memoized to prevent re-renders when values don't change
+const HealthBar = React.memo<{
   current: number;
   max: number;
   label: string;
   color: string;
   showNumbers?: boolean;
   isHealing?: boolean;
-}> = ({ current, max, label, color, showNumbers = true, isHealing = false }) => {
+}>(({ current, max, label, color, showNumbers = true, isHealing = false }) => {
   const percentage = Math.max(0, Math.min(100, (current / max) * 100));
   
   return (
@@ -135,7 +135,7 @@ const HealthBar: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 // Turn List component - displays turn order with all entities
 const TurnList: React.FC<{
@@ -429,7 +429,8 @@ type ActionButtonProps = {
   compact?: boolean;
 };
 
-const ActionButton: React.FC<ActionButtonProps> = ({ ability, disabled, cooldown, canAfford, onClick, accentColor, compact }) => {
+// ActionButton - memoized to prevent re-renders when props don't change
+const ActionButton = React.memo<ActionButtonProps>(({ ability, disabled, cooldown, canAfford, onClick, accentColor, compact }) => {
   const getTypeIcon = () => {
     switch (ability.type) {
       case 'melee': return '⚔️';
@@ -508,7 +509,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ ability, disabled, cooldown
       )}
       </button>
     );
-};
+});
 
 export const CombatModal: React.FC<CombatModalProps> = ({
   character,
@@ -2441,21 +2442,41 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </button>
         
         {mobileActionsExpanded && (
-          <div className="p-2 max-h-[40vh] overflow-y-auto">
-            {/* Quick abilities grid */}
+          <div className="p-2 max-h-[50vh] overflow-y-auto">
+            {/* Tab selection for mobile abilities */}
+            {(!awaitingCompanionAction && !pendingTargeting) && (
+              <div className="flex gap-1 mb-2 bg-stone-900/80 p-1 rounded border border-stone-700">
+                <button 
+                  onClick={() => setActiveAbilityTab('Physical')} 
+                  className={`flex-1 px-3 py-1.5 text-xs font-bold rounded transition-colors ${activeAbilityTab === 'Physical' ? 'bg-amber-900 text-amber-100' : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800'}`}
+                >
+                  ⚔️ PHYSICAL
+                </button>
+                <button 
+                  onClick={() => setActiveAbilityTab('Magical')} 
+                  className={`flex-1 px-3 py-1.5 text-xs font-bold rounded transition-colors ${activeAbilityTab === 'Magical' ? 'bg-blue-900 text-blue-100' : 'text-stone-500 hover:text-stone-300 hover:bg-stone-800'}`}
+                >
+                  ✨ MAGICAL
+                </button>
+              </div>
+            )}
+            
+            {/* Quick abilities grid - shows all abilities in selected category */}
             <div className="mb-2">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-stone-400">ABILITIES</span>
+                <span className="text-xs font-bold text-stone-400">
+                  {awaitingCompanionAction ? 'COMPANION ABILITIES' : `${activeAbilityTab.toUpperCase()} ABILITIES`}
+                </span>
                 <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-0.5 text-[10px] rounded bg-blue-800 hover:bg-blue-700">⚔ Equip</button>
               </div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-[25vh] overflow-y-auto">
                 {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
                   (() => {
                     const allyActor = combatState.allies.find(a => a.id === combatState.currentTurnActor);
                     if (!allyActor) return null;
                     return (
                       <>
-                        {allyActor.abilities.slice(0, 3).map(ab => {
+                        {allyActor.abilities.map(ab => {
                           const sub = determineSubcategory(ab);
                           const tab = (ab.type === 'melee' || ab.type === 'ranged') ? 'Physical' : 'Magical';
                           const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
@@ -2514,39 +2535,53 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     );
                   })()
                 ) : (
-                  playerStats.abilities.slice(0, 6).map(ability => {
-                    const sub = determineSubcategory(ability);
-                    const tab = (ability.type === 'melee' || ability.type === 'ranged') ? 'Physical' : 'Magical';
-                    const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
-                    const conjureLocked = (ability.effects || []).some((ef: any) => ef.type === 'summon') && combatHasActiveSummon(combatState);
-                    const isDisabledBtn = !isPlayerTurn || isAnimating || conjureLocked || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
-                    return (
-                      <button
-                        key={ability.id}
-                        disabled={isDisabledBtn}
-                        aria-disabled={isDisabledBtn}
-                        data-tooltip={conjureLocked ? 'Already summoned' : (ability.description || undefined)}
-                        onClick={() => {
-                          if (conjureLocked) {
-                            showToast && showToast('Already summoned', 'warning');
-                            return;
-                          }
-                          lastAbilityClickAt.current = Date.now();
-                          handlePlayerAction('attack', ability.id);
-                        }}
-                        title={ability.description || `${ability.name} - ${ability.type} ability`}
-                        data-sfx="button_click"
-                        className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${isDisabledBtn ? 'bg-stone-700 text-stone-500 opacity-50' : ''}`}
-                        style={!isDisabledBtn ? { background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.45))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` } : undefined}
-                      >
-                        <span className="inline-block w-2 h-2 rounded-sm mr-2 align-middle" style={{ backgroundColor: accent }} />
-                        {ability.name}
-                        {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
-                          <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
-                        )}
-                      </button>
-                    );
-                  })
+                  // Show abilities from active tab category
+                  Object.entries(categorizedAbilities[activeAbilityTab]).flatMap(([subCat, abilities]: [string, CombatAbility[]]) =>
+                    abilities.map(ability => {
+                      const accent = getAccentColor(activeAbilityTab as 'Physical' | 'Magical', subCat);
+                      const conjureLocked = (ability.effects || []).some((ef: any) => ef.type === 'summon') && combatHasActiveSummon(combatState);
+                      const isDisabledBtn = !isPlayerTurn || isAnimating || conjureLocked || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
+                      return (
+                        <button
+                          key={ability.id}
+                          disabled={isDisabledBtn}
+                          aria-disabled={isDisabledBtn}
+                          data-tooltip={conjureLocked ? 'Already summoned' : (ability.description || undefined)}
+                          onClick={() => {
+                            if (conjureLocked) {
+                              showToast && showToast('Already summoned', 'warning');
+                              return;
+                            }
+                            // Use same targeting flow as desktop
+                            const isPositive = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ['heal', 'buff'].includes(ef.type))));
+                            if (isPositive) {
+                              setPendingTargeting({ abilityId: ability.id, abilityName: ability.name, allow: 'allies' });
+                              setSelectedTarget('player');
+                              if (showToast) showToast(`Choose target for ${ability.name}`, 'info');
+                              return;
+                            }
+                            lastAbilityClickAt.current = Date.now();
+                            handlePlayerAction('attack', ability.id);
+                          }}
+                          title={ability.description || `${ability.name} - ${ability.type} ability`}
+                          data-sfx="button_click"
+                          className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${isDisabledBtn ? 'bg-stone-700 text-stone-500 opacity-50' : ''}`}
+                          style={!isDisabledBtn ? { background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.45))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` } : undefined}
+                        >
+                          <span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ backgroundColor: accent }} />
+                          <span className="truncate">{ability.name}</span>
+                          {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
+                            <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
+                          )}
+                          {ability.cost > 0 && (
+                            <span className="text-[9px] ml-1 opacity-70">
+                              {ability.type === 'magic' ? '💧' : '⚡'}{ability.cost}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )
                 )}
               </div>
             </div>
