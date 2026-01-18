@@ -59,8 +59,15 @@ describe('Blacksmith — eligible items layout', () => {
     expect(classString(selectedBtn!).includes('relative')).toBeTruthy();
     expect(classString(selectedBtn!).includes('z-0')).toBeTruthy();
     expect(document.querySelectorAll('[class*="scale-105"]').length).toBe(0);
-    // Logic changed to scale-102? or just check it's highlighted
-    // expect(document.querySelectorAll('[class*="scale-102"]').length).toBeGreaterThan(0);
+
+    // Confirm and Cancel buttons should be present and visible in the modal footer
+    const confirm = screen.getByRole('button', { name: /Confirm Upgrade/i });
+    const cancel = screen.getByRole('button', { name: /Cancel/i });
+    expect(confirm).toBeTruthy();
+    expect(cancel).toBeTruthy();
+    // They must be visible to the user (not hidden or clipped)
+    expect(confirm).toBeVisible();
+    expect(cancel).toBeVisible();
 
     // Buttons should render but should NOT display per-item gold (no 'g' suffix values)
     const buttons = within(listContainer!).getAllByRole('button');

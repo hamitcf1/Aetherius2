@@ -367,10 +367,16 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                           {it.type === 'weapon' ? <Sword size={18} /> : <Shield size={18} />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className={`font-serif truncate text-sm md:text-base transition-colors ${selectedId === it.id ? 'text-skyrim-gold' : 'text-gray-300 group-hover:text-skyrim-gold'}`}>{it.name}</div>
+                          <div className="flex items-center gap-2">
+                            <div className={`font-serif truncate text-sm md:text-base transition-colors ${selectedId === it.id ? 'text-skyrim-gold' : 'text-gray-300 group-hover:text-skyrim-gold'}`}>{it.name}</div>
+                            {(it as any).rarity ? <span className="ml-2"><RarityBadge rarity={String((it as any).rarity)} /></span> : null}
+                          </div>
                           <div className="text-xs text-stone-500 truncate flex items-center justify-between mt-0.5">
                               <span>Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</span>
-                              {selectedId === it.id && <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">Selected</span>}
+                              <div className="flex flex-col items-end gap-1">
+                                {(it as any).rarity ? <span className="text-[10px] uppercase tracking-wider text-stone-400">{String((it as any).rarity)}</span> : null}
+                                {selectedId === it.id && <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">Selected</span>}
+                              </div>
                           </div>
                         </div>
                       </div>
@@ -494,30 +500,32 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                       {nextUpgradeRequirements && nextUpgradeRequirements.length > 0 && (
                         <div className="bg-black/20 p-5 rounded border border-skyrim-border/20">
                           <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-3 ml-1">Required Materials</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {nextUpgradeRequirements.map(r => {
-                              const ownedQty = countMaterialInInventory(items, r.itemId);
-                              const requiredQty = r.quantity || 1;
-                              const met = ownedQty >= requiredQty;
-                              // Try to find name in inventory first, then shop, then fallback formatting
-                              const invMatch = items.find(i => i.id === r.itemId) || items.find(i => (i.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_') === r.itemId);
-                              const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
-                              const pretty = invMatch ? invMatch.name : (shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase()));
-                              
-                              return (
-                                <div key={r.itemId} className={`flex items-center justify-between p-2 rounded relative overflow-hidden transition-colors ${met ? 'bg-green-900/10 border border-green-900/20' : 'bg-red-900/10 border border-red-900/20'}`}>
-                                  {met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-green-500/50"></div>}
-                                  {!met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500/50"></div>}
-                                  
-                                  <div className={`flex items-center gap-2 pl-2 ${met ? 'text-gray-200' : 'text-red-300'}`}>
-                                    <span className="text-sm font-medium">{pretty}</span>
+                          <div className="max-h-44 overflow-y-auto custom-scrollbar pr-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {nextUpgradeRequirements.map(r => {
+                                const ownedQty = countMaterialInInventory(items, r.itemId);
+                                const requiredQty = r.quantity || 1;
+                                const met = ownedQty >= requiredQty;
+                                // Try to find name in inventory first, then shop, then fallback formatting
+                                const invMatch = items.find(i => i.id === r.itemId) || items.find(i => (i.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_') === r.itemId);
+                                const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
+                                const pretty = invMatch ? invMatch.name : (shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase()));
+                                
+                                return (
+                                  <div key={r.itemId} className={`flex items-center justify-between p-2 rounded relative overflow-hidden transition-colors ${met ? 'bg-green-900/10 border border-green-900/20' : 'bg-red-900/10 border border-red-900/20'}`}>
+                                    {met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-green-500/50"></div>}
+                                    {!met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500/50"></div>}
+
+                                    <div className={`flex items-center gap-2 pl-2 ${met ? 'text-gray-200' : 'text-red-300'}`}>
+                                      <span className="text-sm font-medium">{pretty}</span>
+                                    </div>
+                                    <span className={`font-mono text-sm tracking-tighter ${met ? 'text-green-400' : 'text-red-400'}`}>
+                                      {ownedQty} <span className="text-gray-500 text-xs">/</span> {requiredQty}
+                                    </span>
                                   </div>
-                                  <span className={`font-mono text-sm tracking-tighter ${met ? 'text-green-400' : 'text-red-400'}`}>
-                                    {ownedQty} <span className="text-gray-500 text-xs">/</span> {requiredQty}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                           {!inventoryRequirementsMet && (
                             <div className="text-xs mt-3 text-red-300/80 italic text-center flex items-center justify-center gap-2">
@@ -531,14 +539,14 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                   </div>
                 </div>
 
-                <div className="flex-shrink-0 px-6 md:px-8 py-5 border-t border-skyrim-border/30 bg-black/40 flex justify-end gap-4 relative z-20 backdrop-blur-md">
+                <div className="sticky bottom-0 flex-shrink-0 px-6 md:px-8 py-5 border-t border-skyrim-border/30 bg-skyrim-paper/70 backdrop-blur-md flex justify-end gap-4 relative z-40">
                   <button onClick={onClose} data-sfx="button_click" className="px-6 py-2 bg-transparent border border-skyrim-border/60 text-skyrim-text hover:text-white rounded hover:bg-white/5 transition-all font-serif tracking-wide text-sm uppercase">Cancel</button>
                   <button 
                     ref={upgradeButtonRef}
                     onClick={handleConfirm}
                     data-sfx="button_click"
                     disabled={isUpgrading || !inventoryRequirementsMet}
-                    className={`px-8 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 font-serif text-lg shadow-lg uppercase tracking-wide flex items-center gap-2 ${(isUpgrading || !inventoryRequirementsMet) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                    className={`px-8 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 font-serif text-lg shadow-lg uppercase tracking-wide flex items-center gap-2 ${(isUpgrading || !inventoryRequirementsMet) ? 'opacity-60 cursor-not-allowed' : ''} disabled:opacity-60`}
                   >
                     <span>Confirm Upgrade</span>
                   </button>
