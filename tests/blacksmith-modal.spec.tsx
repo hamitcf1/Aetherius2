@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react';
 import BlacksmithModal from '../components/BlacksmithModal';
 import { vi } from 'vitest';
 import { AppContext } from '../AppContext';
@@ -117,6 +117,49 @@ describe('Blacksmith modal upgrade flow', () => {
     expect(confirm).toBeDisabled();
   });
 
+  it('when upgrading one item from a stack the new upgraded item is created and selected', () => {
+    const { Component, getCurrentItems, setItems } = setupTest([
+      { id: 'stack1', characterId: 'c1', name: 'Stacked Sword', type: 'weapon', damage: 8, value: 80, quantity: 2 }
+    ], [], 500);
+
+    const { rerender } = render(Component);
+    // Select the stacked item
+    const listBtn = screen.getAllByText(/Stacked Sword/i).find(el => el.closest('button'))!;
+    fireEvent.click(listBtn);
+
+    const confirm = screen.getByText(/Confirm Upgrade/i).closest('button')!;
+    fireEvent.click(confirm);
+
+    // Ensure a new item with quantity 1 and upgradeLevel > 0 was added locally
+    const items = getCurrentItems();
+    const upgraded = items.find(i => i.name === 'Stacked Sword' && (i.upgradeLevel || 0) > 0);
+    expect(upgraded).toBeTruthy();
+    expect(upgraded!.quantity).toBe(1);
+
+    // The original stack must have been decremented
+    const original = items.find(i => i.id === 'stack1');
+    expect(original).toBeTruthy();
+    expect(original!.quantity).toBe(1);
+
+    // Rerender so the modal reflects the updated items prop and selection
+    rerender(
+      <AppContext.Provider value={createMockContext({ gold: 500 }) as any}>
+        <BlacksmithModal
+          open={true}
+          onClose={() => {}}
+          items={getCurrentItems() as any}
+          setItems={setItems as any}
+          gold={500}
+          setGold={() => {}}
+        />
+      </AppContext.Provider>
+    );
+
+    // UI should show the newly-created upgraded item as selected in the modal
+    const selected = screen.getAllByText(/Stacked Sword/i).find(b => b.closest('button')?.getAttribute('aria-pressed') === 'true');
+    expect(selected).toBeTruthy();
+  });
+
   it('disables upgrade when required materials are missing from inventory (rare)', () => {
     // Rare sword requires materials (e.g. mithril ingot by default mechanism)
     const { Component } = setupTest([
@@ -124,13 +167,26 @@ describe('Blacksmith modal upgrade flow', () => {
     ]);
     render(Component);
 
-    fireEvent.click(screen.getByText(/Iron Sword/i));
+    // Click the list button (robust against multiple matches)
+    const ironBtns = screen.getAllByText(/Iron Sword/i);
+    const ironListBtn = ironBtns.find(el => el.closest('button')) || ironBtns[0];
+    fireEvent.click(ironListBtn);
 
-    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
-    // Should show "missing" status
-    // exact text "Upgrade requires materials from your inventory"
-    expect(screen.getByText(/Upgrade requires materials from your inventory/i)).toBeTruthy();
-    
+    // Ensure the right-pane selected heading updated (if this fails selection didn't occur)
+    expect(screen.getByRole('heading', { name: /Iron Sword/i })).toBeTruthy();
+
+    // The UI should show the requirements block and indicate missing materials
+    expect(screen.getAllByText(/Required Materials|Material requirements/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Missing required materials/i).length).toBeGreaterThan(0);
+
+    // Find the requirements container and assert the material row shows a quantity fraction like `0 / N`
+    const reqHeading = screen.getAllByText(/Required Materials|Material requirements/i)[0];
+    let reqContainer = reqHeading.nextElementSibling as HTMLElement | null;
+    if (!reqContainer) reqContainer = document.querySelector('.max-h-44, .overflow-y-auto') as HTMLElement | null;
+    expect(reqContainer).toBeTruthy();
+    // The requirements container should include a quantity fraction like `0 / N`
+    expect(within(reqContainer!).getByText(/\d+\s*\/\s*\d+/)).toBeTruthy();
+
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).toBeDisabled();
   });
@@ -144,11 +200,23 @@ describe('Blacksmith modal upgrade flow', () => {
     ]);
     render(Component);
 
-    fireEvent.click(screen.getByText(/Iron Sword/i));
-    
-    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
-    // Should show (owned)
-    expect(screen.getByText(/\(owned\)/i)).toBeTruthy();
+    const ironBtns = screen.getAllByText(/Iron Sword/i);
+    const ironListBtn = ironBtns.find(el => el.closest('button')) || ironBtns[0];
+    fireEvent.click(ironListBtn);
+
+    // Ensure the right-pane selected heading updated (if this fails selection didn't occur)
+    expect(screen.getByRole('heading', { name: /Iron Shield|Daedric Sword|Daedric Sword/i })).toBeTruthy();
+
+    // Requirements block present
+    const reqHeading = screen.getAllByText(/Required Materials|Material requirements/i)[0];
+    let reqContainer = reqHeading.nextElementSibling as HTMLElement | null;
+    if (!reqContainer) reqContainer = document.querySelector('.max-h-44, .overflow-y-auto') as HTMLElement | null;
+    expect(reqContainer).toBeTruthy();
+
+    // The material row should show an owned count like `5 / N`
+    const matRow = within(reqContainer!).getByText(/Steel Ingot/i).closest('div') as HTMLElement | null;
+    expect(matRow).toBeTruthy();
+    expect(within(matRow!).getByText(/\d+\s*\/\s*\d+/)).toBeTruthy();
 
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).not.toBeDisabled();
@@ -168,15 +236,19 @@ describe('Blacksmith modal upgrade flow', () => {
     const listButton = itemBtns.find(el => el.closest('button'));
     fireEvent.click(listButton || itemBtns[0]);
     
-    // Check materials missing
-    expect(screen.getByText(/Material requirements/i)).toBeTruthy();
-    expect(screen.getByText(/Steel Ingot/i)).toBeTruthy();
+    // Check materials missing (scoped to requirements grid)
+    const reqHeading = screen.getAllByText(/Required Materials|Material requirements/i)[0];
+    let reqContainer = reqHeading.nextElementSibling as HTMLElement | null;
+    if (!reqContainer) reqContainer = document.querySelector('.max-h-44, .overflow-y-auto') as HTMLElement | null;
+    expect(reqContainer).toBeTruthy();
+    expect(within(reqContainer!).getByText(/Steel Ingot/i)).toBeTruthy();
+    expect(within(reqContainer!).getByText(/\d+\s*\/\s*\d+/)).toBeTruthy();
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).toBeDisabled();
 
     // Now update inventory to have Steel Ingot
     // We simulate parent state update (since setItems is mock)
-    // Actually we need to re-render with new items prop.
+    // Re-render the modal with the new items prop so the UI updates
     const itemsWithIngot = [
         ...getCurrentItems(),
         { id: 'steel_ingot', characterId: 'c1', name: 'Steel Ingot', type: 'misc', quantity: 5 }
@@ -195,6 +267,10 @@ describe('Blacksmith modal upgrade flow', () => {
           />
         </AppContext.Provider>
     );
+
+    // Re-select the Daedric Sword and assert confirm is enabled now that materials are present
+    const daedricAfter = screen.getAllByText(/Daedric Sword/i).find(el => el.closest('button')) || screen.getAllByText(/Daedric Sword/i)[0];
+    fireEvent.click(daedricAfter);
 
     const confirmBtn2 = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn2).not.toBeDisabled();

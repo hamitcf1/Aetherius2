@@ -115,13 +115,47 @@ const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
     if (entry.nat !== undefined) console.debug && console.debug('[combatService] pushCombatLogUnique adding roll entry', { entry });
   } catch (e) {}
 
-  // Consider entries duplicates if same turn, actor, narrative, and damage (ignoring timestamp)
-  if (!last || last.turn !== entry.turn || last.actor !== entry.actor || last.narrative !== entry.narrative || (last.damage !== undefined && entry.damage !== undefined && last.damage !== entry.damage)) {
+  // If there is no last entry, just push
+  if (!last) {
     state.combatLog.push(entry);
-  } else {
-    // Update timestamp of existing entry to the newest time
-    last.timestamp = entry.timestamp || Date.now();
+    return;
   }
+
+  const sameTurn = last.turn === entry.turn;
+  const sameActor = last.actor === entry.actor;
+  const sameAction = last.action === entry.action;
+  const sameTarget = (last.target || '') === (entry.target || '');
+  const sameDamage = (last.damage === undefined && entry.damage === undefined) || last.damage === entry.damage;
+
+  // Strong equality: same turn/actor/action/target and identical damage — treat as duplicate
+  if (sameTurn && sameActor && sameAction && sameTarget && sameDamage && last.narrative === entry.narrative) {
+    last.timestamp = entry.timestamp || Date.now();
+    return;
+  }
+
+  // Heuristic merge: if narratives are semantically the same (one includes the other)
+  // and the numeric damage matches, prefer the longer narrative and update timestamp instead of pushing a near-duplicate
+  if (sameTurn && sameActor && sameAction && sameTarget && sameDamage) {
+    try {
+      const a = (last.narrative || '').trim();
+      const b = (entry.narrative || '').trim();
+      if (a && b && (a.includes(b) || b.includes(a))) {
+        // keep the more descriptive narrative
+        last.narrative = a.length >= b.length ? a : b;
+        last.timestamp = entry.timestamp || Date.now();
+        // copy over any missing numeric metadata (nat/isCrit/rollTier)
+        last.nat = last.nat ?? entry.nat;
+        last.isCrit = last.isCrit ?? entry.isCrit;
+        last.rollTier = last.rollTier ?? entry.rollTier;
+        return;
+      }
+    } catch (e) {
+      // fall through to pushing as a separate entry
+    }
+  }
+
+  // Fallback: different enough — push as new entry
+  state.combatLog.push(entry);
 };
 
 // Dice helper: roll `count` d`sides`
@@ -228,6 +262,29 @@ const normalizeSummonedCompanions = (state: CombatState): CombatState => {
     }
   }
   return newState;
+};
+
+// Helper: detect whether there's an active summoned companion (alive/pending) in the combat state
+export const combatHasActiveSummon = (state: CombatState | undefined): boolean => {
+  if (!state) return false;
+  const aliveSummons = (state.allies || []).concat(state.enemies || []).some(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+  const pending = (state.pendingSummons || []).length > 0;
+  return aliveSummons || pending;
+};
+
+// Map a d20 nat to a conjuration outcome used to scale summon level/duration and spawn-chance
+export const getConjurationOutcome = (nat: number) => {
+  // Outcomes:
+  // 1 -> fail
+  // 2-9 -> weak (reduced duration/level)
+  // 10-18 -> normal
+  // 19 -> powerful
+  // 20 -> critical (powerful + extra weak minion)
+  if (nat <= 1) return { outcome: 'fail' as const, multiplier: 0, extraSummons: 0, durationMod: 0 };
+  if (nat >= 2 && nat <= 9) return { outcome: 'weak' as const, multiplier: 0.6, extraSummons: 0, durationMod: -1 };
+  if (nat >= 10 && nat <= 18) return { outcome: 'normal' as const, multiplier: 1.0, extraSummons: 0, durationMod: 0 };
+  if (nat === 19) return { outcome: 'powerful' as const, multiplier: 1.35, extraSummons: 0, durationMod: 1 };
+  return { outcome: 'critical' as const, multiplier: 1.5, extraSummons: 1, durationMod: 1 };
 };
 
 // ============================================================================
@@ -1150,11 +1207,20 @@ export const executePlayerAction = (
   inventory?: InventoryItem[],
   natRoll?: number,
   character?: Character
-): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; usedItem?: InventoryItem } => {
+): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; usedItem?: InventoryItem; aoeSummary?: { damaged: Array<any>; healed: Array<any> } } => {
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
   let narrative = '';
+  // Collector for AoE per-target details (engine -> UI contract)
+  const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
 
+  // EARLY-EXIT: if the player is stunned they must skip their turn (no dice, no action)
+  const playerStunned = (newState.playerActiveEffects || []).some((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+  if (playerStunned) {
+    const stNarr = 'You are stunned and skip your turn.';
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'stunned', narrative: stNarr, timestamp: Date.now() });
+    return { newState, newPlayerStats, narrative: stNarr, aoeSummary };
+  }
   switch (action) {
     case 'attack':
     case 'power_attack':
@@ -1180,13 +1246,23 @@ export const executePlayerAction = (
       const actionKey = ability.type === 'magic' ? 'magic' : ability.type === 'melee' ? (ability.id || 'melee') : ability.type;
       newState.playerActionCounts[actionKey] = (newState.playerActionCounts[actionKey] || 0) + 1;
 
+      // Defensive: if this ability is a conjuration and there is already an active summon,
+      // block early before consuming resources to avoid accidentally spending magicka.
+      const hasSummonEffectEarly = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
+      if (hasSummonEffectEarly && combatHasActiveSummon(newState)) {
+        const msg = 'You already have an active summon.';
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
+        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+      }
+
       // Check cost and handle stamina-shortage by scaling damage instead of blocking
-      const costType = ability.type === 'magic' ? 'currentMagicka' : 'currentStamina';
+      // Treat 'aeo' as a magical subtype that consumes magicka (high-cost AoE/heal)
+      const costType = (ability.type === 'magic' || ability.type === 'aeo') ? 'currentMagicka' : 'currentStamina';
       const isUnarmed = !!(ability as any).unarmed || ability.id === 'unarmed_strike';
       let staminaMultiplier = 1;
       // Adjust cost by level/skills
       const effectiveCost = adjustAbilityCost(character, ability);
-      if (ability.type === 'magic') {
+      if (ability.type === 'magic' || ability.type === 'aeo') {
         const availableMagicka = newPlayerStats.currentMagicka || 0;
         // Spend as much magicka as available up to the effective cost. If none available, cast at base damage.
         const magickaSpent = Math.max(0, Math.min(availableMagicka, effectiveCost));
@@ -1227,6 +1303,15 @@ export const executePlayerAction = (
       const isHealingAbility = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal')));
       const hasSummonEffect = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
       const isUtilityOrBuff = !!(ability.type === 'utility' || (ability.effects && ability.effects.some((ef: any) => ['buff', 'debuff', 'slow', 'stun', 'drain', 'dot'].includes(ef.type))));
+
+      // Defensive engine guard: if ability summons but a summon is already active, block the action
+      // here (no roll, no resource spend, do not advance/consume the player's turn). This prevents
+      // UI races from accidentally letting a conjure attempt consume the turn.
+      if (hasSummonEffect && combatHasActiveSummon(newState)) {
+        const msg = 'You already have an active summon.';
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
+        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+      }
 
       // Healing: prefer self when no explicit target; explicit enemy target is disallowed
       if (isHealingAbility) {
@@ -1308,15 +1393,28 @@ export const executePlayerAction = (
         break;
       }
 
-      // Summon abilities: create companion/summon without attack resolution
+      // Summon abilities: create companion/summon without attack resolution (D20-influenced)
       if (hasSummonEffect) {
-        // Find summon effect and execute
+        // Enforce one active conjuration per combat
+        if (combatHasActiveSummon(newState)) {
+          narrative += ' The conjuration fizzles — another summoned ally is already present.';
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative, timestamp: Date.now() });
+          break;
+        }
+
+        // Prefer any externally-provided natRoll; otherwise roll a d20 here so summons follow same randomness as attacks
+        const conjureNat = (typeof natRoll === 'number' && natRoll >= 1 && natRoll <= 20) ? natRoll : (Math.floor(Math.random() * 20) + 1);
+        const conjOutcome = getConjurationOutcome(conjureNat);
+
         const summonEffects = (ability.effects || []).filter((ef: any) => ef.type === 'summon');
         for (const ef of summonEffects) {
           const summonName = ef.name || 'Summoned Ally';
-          const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
-          const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
-          const maxHealth = 30 + (level * 8);
+
+          if (conjOutcome.outcome === 'fail') {
+            narrative += ` You attempt to conjure ${summonName} but roll ${conjureNat} — the conjuration fails.`;
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, nat: conjureNat, narrative, timestamp: Date.now() });
+            continue;
+          }
 
           // If the ability also deals damage (damage + summon), apply basic damage to the selected enemy target.
           if (ability.damage && target && !targetIsAlly) {
@@ -1330,29 +1428,33 @@ export const executePlayerAction = (
             }
           }
 
-          const summonLevel = Math.max(1, Math.floor((playerStats?.maxHealth || 100) / 20));
+          const baseLevel = Math.max(1, Math.floor((playerStats?.maxHealth || 100) / 20));
+          const level = Math.max(1, Math.floor(baseLevel * conjOutcome.multiplier));
+          const maxHealth = Math.max(8, Math.floor(((ef as any).baseHealth || 30) * conjOutcome.multiplier));
+
+          const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
           const companion: CombatEnemy = {
             id: summonId,
             name: summonName,
-            level: summonLevel,
+            level,
             type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
-            armor: 5,
-            damage: 8 + summonLevel,
+            armor: Math.max(1, Math.floor(((ef as any).baseArmor || 5) * conjOutcome.multiplier)),
+            damage: Math.max(1, Math.floor(((ef as any).baseDamage || (6 + level)) * conjOutcome.multiplier)),
             maxHealth,
             currentHealth: maxHealth,
-            abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(summonLevel * 2)), cost: 0, description: 'Summoned minion attack' } ],
+            abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(2, Math.floor(level * 2 * conjOutcome.multiplier)), cost: 0, description: 'Summoned minion attack' } ],
             behavior: 'support',
             xpReward: 0,
             loot: [],
             isCompanion: true,
             companionMeta: { companionId: summonId, autoLoot: false, autoControl: true, isSummon: true },
-            description: `A summoned ally: ${summonName}`
+            description: `${summonName} (roll ${conjureNat} — ${conjOutcome.outcome})`
           } as any;
 
-          // Mark as companion and add to allies (not enemies)
-          companion.companionMeta = { ...(companion.companionMeta||{}), companionId: companion.id, autoLoot: false, autoControl: companion.companionMeta?.autoControl ?? true, isSummon: true };
+          // Add companion and register pending/player-turn duration
           newState.allies = [...(newState.allies || []), companion];
-          // Insert into turn order right after player
+          const playerTurns = Math.max(1, (ef.playerTurns || ef.duration || 3) + (conjOutcome.durationMod || 0));
+          const turns = Math.max(1, ef.duration || 3);
           const playerIndex = newState.turnOrder.indexOf('player');
           if (playerIndex >= 0) {
             const before = newState.turnOrder.slice(0, playerIndex + 1);
@@ -1362,11 +1464,17 @@ export const executePlayerAction = (
             newState.turnOrder = [...newState.turnOrder, companion.id];
           }
 
-          const turns = Math.max(1, ef.duration || 3);
-          // Track both generic turnsRemaining (backcompat) and player-turn-specific duration
-          const playerTurns = ef.playerTurns || ef.duration || 3;
+          // Extra summons on critical
+          if (conjOutcome.extraSummons > 0) {
+            for (let i = 0; i < conjOutcome.extraSummons; i++) {
+              const extraId = `${summonId}_x${i}`;
+              const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: Math.max(1, Math.floor(level * 0.6)), maxHealth: Math.max(4, Math.floor(maxHealth * 0.6)), currentHealth: Math.max(4, Math.floor(maxHealth * 0.6)), description: `${summonName} (lesser)` };
+              newState.allies.push(extra);
+            }
+          }
+
           newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: turns, playerTurnsRemaining: playerTurns } as any];
-          narrative += ` ${summonName} joins the fight to aid you for ${playerTurns} player turns!`;
+          narrative += ` ${summonName} joins the fight to aid you for ${playerTurns} player turns! (roll ${conjureNat} — ${conjOutcome.outcome})`;
         }
 
         // Set cooldown
@@ -1374,7 +1482,7 @@ export const executePlayerAction = (
           newState.abilityCooldowns[ability.id] = ability.cooldown;
         }
 
-        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, nat: conjureNat, rollTier: (conjOutcome && conjOutcome.outcome) || undefined, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
         break;
       }
 
@@ -1420,7 +1528,7 @@ export const executePlayerAction = (
       }
 
       // Resolve attack (d20 + bonuses vs armor/dodge) then roll damage dice
-      const attackBonus = Math.floor(playerStats.weaponDamage / 10);
+      const attackBonus = Math.floor((playerStats.weaponDamage || 0) / 10);
       const attackerLvl = character?.level || playerStats.maxHealth ? Math.max(1, Math.floor((character?.level || 10))) : 10;
       let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
 
@@ -1437,7 +1545,7 @@ export const executePlayerAction = (
         } else {
           // Critical failure (nat 1) - deal self damage!
           if (attackResolved.rollTier === 'fail') {
-            const selfDamage = Math.max(1, Math.floor(playerStats.weaponDamage * 0.25)); // 25% of weapon damage
+            const selfDamage = Math.max(1, Math.floor((playerStats.weaponDamage || 0) * 0.25)); // 25% of weapon damage
             newPlayerStats = { ...newPlayerStats, currentHealth: Math.max(0, newPlayerStats.currentHealth - selfDamage) };
             narrative = `You roll ${attackResolved.natRoll} - CRITICAL FAILURE! Your ${ability.name} goes horribly wrong, dealing ${selfDamage} damage to yourself!`;
             pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: selfDamage, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
@@ -1523,7 +1631,7 @@ export const executePlayerAction = (
             }
           }
         }
-        const baseDamage = abilityDamage + Math.floor(playerStats.weaponDamage * (ability.type === 'melee' ? 0.5 : 0));
+        const baseDamage = abilityDamage + Math.floor((playerStats.weaponDamage || 0) * (ability.type === 'melee' ? 0.5 : 0));
         const tierMult = tierMultipliers[attackResolved.rollTier] ?? 1;
         const scaledBase = Math.max(1, Math.floor(baseDamage * staminaMultiplier * tierMult));
         const res = computeDamageFromNat(scaledBase, character?.level || 1, attackResolved.natRoll, attackResolved.rollTier, attackResolved.isCrit);
@@ -1720,6 +1828,8 @@ export const executePlayerAction = (
               const aoeDamage = effect.value || 0;
               let totalAoeDamage = 0;
               let hitCount = 0;
+              const aoeDamages: Array<{ id: string; name: string; amount: number }> = [];
+
               newState.enemies = newState.enemies.map(enemy => {
                 if (enemy.currentHealth > 0 && enemy.id !== target?.id) {
                   // Apply armor reduction to AoE damage
@@ -1727,6 +1837,7 @@ export const executePlayerAction = (
                   const actualDamage = Math.max(1, Math.floor(aoeDamage * (1 - armorReduction)));
                   totalAoeDamage += actualDamage;
                   hitCount++;
+                  aoeDamages.push({ id: enemy.id, name: enemy.name, amount: actualDamage });
                   return { ...enemy, currentHealth: Math.max(0, enemy.currentHealth - actualDamage) };
                 }
                 return enemy;
@@ -1734,55 +1845,101 @@ export const executePlayerAction = (
               if (hitCount > 0) {
                 narrative += ` The attack chains to ${hitCount} other ${hitCount === 1 ? 'enemy' : 'enemies'} for ${totalAoeDamage} total damage!`;
               }
+
+              // Attach AoE summary so UI can show per-target indicators
+              aoeSummary.damaged = aoeSummary.damaged || [];
+              aoeSummary.damaged.push(...aoeDamages);
+
             } else if (effect.type === 'aoe_heal') {
               // AoE heal - heal self and all allies
               const aoeHeal = effect.value || 0;
               let totalHealed = 0;
-              
+              const aoeHeals: Array<{ id: string; name: string; amount: number }> = [];
+
               // Heal the player
               const playerHealAmount = Math.min(aoeHeal, newPlayerStats.maxHealth - newPlayerStats.currentHealth);
               newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + aoeHeal);
               totalHealed += playerHealAmount;
-              
+              if (playerHealAmount > 0) aoeHeals.push({ id: 'player', name: (character && character.name) || 'You', amount: playerHealAmount });
+
               // Heal all allies
               if (newState.allies && newState.allies.length > 0) {
                 newState.allies = newState.allies.map(ally => {
                   if (ally.currentHealth > 0 && ally.currentHealth < ally.maxHealth) {
                     const allyHeal = Math.min(aoeHeal, ally.maxHealth - ally.currentHealth);
                     totalHealed += allyHeal;
+                    if (allyHeal > 0) aoeHeals.push({ id: ally.id, name: ally.name, amount: allyHeal });
                     return { ...ally, currentHealth: Math.min(ally.maxHealth, ally.currentHealth + aoeHeal) };
                   }
                   return ally;
                 });
               }
-              
+
               if (totalHealed > 0) {
                 narrative += ` The healing aura restores ${totalHealed} total health to you and your allies!`;
               }
+
+              aoeSummary.healed = aoeSummary.healed || [];
+              aoeSummary.healed.push(...aoeHeals);
+
             } else if ((effect as any).type === 'summon') {
-              // Create a summoned companion (ally)
+              // Enemy conjuration: respect one-summon-per-combat and roll outcome
               const summonName = (effect as any).name || 'Summoned Ally';
+
+              if (combatHasActiveSummon(newState)) {
+                narrative += ` ${actor.name} attempts to conjure ${summonName} but another summon is already present.`;
+                pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: 'conjure', target: 'self', damage: 0, narrative, timestamp: Date.now() });
+                return; // inside forEach callback: return to proceed to next effect
+              }
+
+              // Enemy uses its own nat if provided, else roll
+              const conjureResolved = resolveAttack({ attackerLevel: actor.level || 1, attackBonus: 0, targetArmor: 0, targetDodge: 0, critChance: 10, natRoll });
+              const conjOutcome = getConjurationOutcome(conjureResolved.natRoll || 1);
+              if (conjOutcome.outcome === 'fail') {
+                narrative += ` ${actor.name} attempts ${summonName} but the conjuration fails (roll ${conjureResolved.natRoll}).`;
+                pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: 'conjure', target: 'self', damage: 0, nat: conjureResolved.natRoll, rollTier: conjureResolved.rollTier, narrative, timestamp: Date.now() });
+                return; // inside forEach callback: return to proceed to next effect
+              }
+
               const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
-              const level = Math.max(1, playerStats.maxHealth ? Math.floor(playerStats.maxHealth / 20) : 1);
-              const maxHealth = 30 + (level * 8);
+              const baseLevel = Math.max(1, actor.level ? Math.floor(actor.level / 2) : 1);
+              const level = Math.max(1, Math.floor(baseLevel * conjOutcome.multiplier));
+              const maxHealth = Math.max(8, Math.floor((effect as any).baseHealth || 30) * conjOutcome.multiplier);
+
               const companion: CombatEnemy = {
                 id: summonId,
                 name: summonName,
-                type: 'humanoid',
+                type: looksLikeAnimal(summonName) ? 'beast' : 'humanoid',
                 level,
                 maxHealth,
                 currentHealth: maxHealth,
-                armor: 5,
-                damage: 8 + level,
-                abilities: [
-                  { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(4, Math.floor(level * 2)), cost: 0, description: 'Summoned minion attack' }
-                ],
+                armor: Math.max(1, Math.floor(((effect as any).baseArmor || 5) * conjOutcome.multiplier)),
+                damage: Math.max(1, Math.floor(((effect as any).baseDamage || (6 + level)) * conjOutcome.multiplier)),
+                abilities: [ { id: `${summonId}_attack`, name: `${summonName} Attack`, type: 'melee', damage: Math.max(2, Math.floor(level * 2 * conjOutcome.multiplier)), cost: 0, description: 'Summoned minion attack' } ],
                 behavior: 'support',
                 xpReward: 0,
                 loot: [],
                 isCompanion: true,
-                description: `A summoned ally: ${summonName}`
+                companionMeta: { companionId: summonId, autoLoot: false, autoControl: true, isSummon: true },
+                description: `${summonName} (conjured by ${actor.name}, roll ${conjureResolved.natRoll} — ${conjOutcome.outcome})`
               } as any;
+
+              newState.allies = [...(newState.allies || []), companion];
+
+              // Extra (weaker) minions for critical conjurations
+              if (conjOutcome.extraSummons > 0) {
+                for (let i = 0; i < conjOutcome.extraSummons; i++) {
+                  const extraId = `${summonId}_x${i}`;
+                  const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: Math.max(1, Math.floor(level * 0.6)), maxHealth: Math.max(4, Math.floor(maxHealth * 0.6)), currentHealth: Math.max(4, Math.floor(maxHealth * 0.6)), description: `${summonName} (lesser)` };
+                  newState.allies.push(extra);
+                }
+              }
+
+              // Register pending/player-turn duration
+              newState.pendingSummons = [...(newState.pendingSummons || []), { companionId: companion.id, turnsRemaining: Math.max(1, (effect as any).duration || 1), playerTurnsRemaining: Math.max(1, (effect as any).playerTurns || (effect as any).duration || 3) } as any];
+              narrative += ` ${companion.name} appears to aid you (roll ${conjureResolved.natRoll} — ${conjOutcome.outcome}).`;
+              pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: 'conjure', target: 'self', damage: 0, nat: conjureResolved.natRoll, rollTier: conjureResolved.rollTier, narrative, timestamp: Date.now() });
+
 
                   // Add to allies list (player summons should be friendly companions)
               newState.allies = [...(newState.allies || []), companion];
@@ -1945,7 +2102,7 @@ export const executePlayerAction = (
           usedItem = { ...item, quantity: item.quantity - 1 };
           narrative = `You use ${item.name} and recover ${mod.actual} ${resolved.stat}.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative, usedItem };
+          return { newState, newPlayerStats, narrative, usedItem, aoeSummary };
         }
 
         narrative = `The ${item.name} had no effect.`;
@@ -1968,7 +2125,7 @@ export const executePlayerAction = (
 
           narrative = `You consume ${item.name} and recover ${actualHeal} health.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative, usedItem };
+          return { newState, newPlayerStats, narrative, usedItem, aoeSummary };
         }
         narrative = `You cannot use ${item.name} right now.`;
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
@@ -1983,12 +2140,8 @@ export const executePlayerAction = (
     }
   }
 
-  return { newState, newPlayerStats, narrative };
+  return { newState, newPlayerStats, narrative, aoeSummary };
 };
-
-// ============================================================================
-// ENEMY AI & ACTIONS
-// ============================================================================
 
 export const executeEnemyTurn = (
   state: CombatState,
@@ -1996,14 +2149,17 @@ export const executeEnemyTurn = (
   playerStats: PlayerCombatStats,
   natRoll?: number,
   character?: Character
-): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string } => {
+): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; aoeSummary?: { damaged: Array<any>; healed: Array<any> } } => {
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
+  let narrative = '';
+  // Collector for AoE per-target details (engine -> UI contract)
+  const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
   
   // Find actor (enemy or ally) by id
   const actor = (newState.enemies || []).find(e => e.id === enemyId) || (newState.allies || []).find(a => a.id === enemyId);
   if (!actor || actor.currentHealth <= 0) {
-    return { newState, newPlayerStats, narrative: '' };
+    return { newState, newPlayerStats, narrative: '', aoeSummary };
   }
 
   // If this is an ally (companion), run ally-support AI which targets enemies rather than player
@@ -2036,17 +2192,27 @@ export const executeEnemyTurn = (
 
     // If stunned, skip the rest of this turn
     if (isStunned) {
-      return { newState, newPlayerStats, narrative: `${actor.name} is stunned and skips their turn.` };
+      return { newState, newPlayerStats, narrative: `${actor.name} is stunned and skips their turn.`, aoeSummary };
     }
   }
 
   // Choose ability based on behavior
   let chosenAbility: CombatAbility;
   const availableAbilities = (actor.abilities || []).filter(a => {
-    // Disallow magic if not enough magicka, but allow melee even with low stamina
-    if (a.type === 'magic' && actor.currentMagicka && actor.currentMagicka < a.cost) return false;
+    // Disallow magic/AeO if actor has an explicit magicka pool and it's insufficient; allow melee even with low stamina
+    if ((a.type === 'magic' || a.type === 'aeo') && actor.currentMagicka && actor.currentMagicka < a.cost) return false;
     return true;
   });
+
+  // Bosses will attempt a last-resort conjuration when below half health (one-time per-combat)
+  let forceChoice: CombatAbility | undefined;
+  if (actor.isBoss && (actor.currentHealth || 0) > 0 && ((actor.currentHealth || 0) / Math.max(1, actor.maxHealth || 1)) < 0.5 && !combatHasActiveSummon(newState)) {
+    const conj = availableAbilities.find(a => (a.effects || []).some((ef: any) => ef.type === 'summon'));
+    if (conj) {
+      // Force a conjure as the chosen ability (higher-priority boss behavior)
+      forceChoice = conj;
+    }
+  }
 
   // SKY-52: Prefer spells for certain enemy types (undead, mage-types, vampires)
   const shouldPreferSpells = actor.type === 'undead' || actor.type === 'daedra' ||
@@ -2056,7 +2222,8 @@ export const executeEnemyTurn = (
     actor.name.toLowerCase().includes('warlock') ||
     actor.name.toLowerCase().includes('lich');
   
-  const magicAbilities = availableAbilities.filter(a => a.type === 'magic');
+  // Treat 'aeo' as a magical subtype so spell-casters prefer it
+  const magicAbilities = availableAbilities.filter(a => a.type === 'magic' || a.type === 'aeo');
   const meleeAbilities = availableAbilities.filter(a => a.type === 'melee' || a.type === 'ranged');
 
   const behaviorSource = actor.behavior || 'tactical';
@@ -2100,6 +2267,9 @@ export const executeEnemyTurn = (
         chosenAbility = availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
       }
   }
+
+  // If a boss was flagged to force a conjure, override the chosen ability
+  if (forceChoice) chosenAbility = forceChoice;
 
   if (!chosenAbility) {
     chosenAbility = { 
@@ -2191,7 +2361,7 @@ export const executeEnemyTurn = (
       const actualHeal = Math.min(healAmount, actor.maxHealth - actor.currentHealth);
       actor.currentHealth = Math.min(actor.maxHealth, (actor.currentHealth || 0) + actualHeal);
       pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: actor.name, damage: -actualHeal, narrative: `${actor.name} heals for ${actualHeal} health.`, timestamp: Date.now() });
-      return { newState, newPlayerStats, narrative: `${actor.name} heals for ${actualHeal} health.` };
+      return { newState, newPlayerStats, narrative: `${actor.name} heals for ${actualHeal} health.`, aoeSummary };
     } else {
       // Heal an allied companion if present
       const allies = (actor.isCompanion ? (newState.allies || []) : (newState.enemies || [])).filter(a => a.id !== actor.id && (a.currentHealth || 0) < (a.maxHealth || 1));
@@ -2207,7 +2377,7 @@ export const executeEnemyTurn = (
             newState.enemies[allyIndex] = { ...targetAlly, currentHealth: Math.min(targetAlly.maxHealth, (targetAlly.currentHealth || 0) + healAmount) } as any;
           }
           pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: targetAlly.name, damage: -healAmount, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.`, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.` };
+          return { newState, newPlayerStats, narrative: `${actor.name} heals ${targetAlly.name} for ${healAmount} health.`, aoeSummary };
         }
       }
     }
@@ -2254,12 +2424,13 @@ export const executeEnemyTurn = (
       }
     }
 
-    const base = (chosenAbility.damage || actor.damage) * staminaMultiplier;
+    const base = ((chosenAbility.damage || actor.damage || 0) * staminaMultiplier);
     const scaledBase = Math.max(1, Math.floor(base));
     const rollRes = computeDamageFromNat(scaledBase, actor.level, resolved.natRoll, resolved.rollTier, resolved.isCrit);
     hitLocation = rollRes.hitLocation;
-    // Apply armor reduction
-    const armorReduction = playerStats.armor / (playerStats.armor + 100);
+    // Apply armor reduction (defensive: default undefined armor to 0 to avoid NaN)
+    const safePlayerArmor = Number.isFinite(playerStats.armor) ? playerStats.armor : 0;
+    const armorReduction = safePlayerArmor / (safePlayerArmor + 100);
     let d = Math.floor(rollRes.damage * (1 - armorReduction));
     if (resolved.isCrit) d = Math.floor(d * 1.25);
     
@@ -2289,7 +2460,7 @@ export const executeEnemyTurn = (
     if (!target) {
       const noTargetNarrative = `${actor.name} has no valid targets.`;
       pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: 'wait', narrative: noTargetNarrative, timestamp: Date.now() });
-      return { newState, newPlayerStats, narrative: noTargetNarrative };
+      return { newState, newPlayerStats, narrative: noTargetNarrative, aoeSummary };
     }
 
     // Compute damage similarly to enemy attack but against the enemy target
@@ -2306,6 +2477,86 @@ export const executeEnemyTurn = (
 
     pushCombatLogUnique(newState, { turn: newState.turn, actor: actor.name, action: chosenAbility.name, target: target.name, damage: resolved.hit ? appliedDamage : 0, narrative: narrativeLocal, isCrit: resolved.isCrit, nat: resolved.natRoll, rollTier: resolved.rollTier, timestamp: Date.now() });
 
+    // === Support AoE effects for enemy abilities (populate aoeSummary for UI) ===
+    if (chosenAbility.effects && chosenAbility.effects.length > 0) {
+      for (const ef of chosenAbility.effects) {
+        if (ef.type === 'aoe_damage') {
+          const aoeVal = ef.value || 0;
+          const aoeDamages: Array<{ id: string; name: string; amount: number }> = [];
+          if (ef.aoeTarget === 'all_enemies') {
+            // From enemy perspective, 'all_enemies' targets the player-side
+            const playerArmor = Number.isFinite(newPlayerStats.armor) ? newPlayerStats.armor : 0;
+            const playerRed = playerArmor / (playerArmor + 100);
+            const pd = Math.max(1, Math.floor(aoeVal * (1 - playerRed)));
+            newPlayerStats.currentHealth = Math.max(0, (newPlayerStats.currentHealth || 0) - pd);
+            aoeDamages.push({ id: 'player', name: (character && character.name) || 'You', amount: pd });
+
+            if (newState.allies && newState.allies.length > 0) {
+              newState.allies = newState.allies.map(ally => {
+                if (ally.currentHealth > 0) {
+                  const aArmor = Number.isFinite(ally.armor) ? ally.armor : 0;
+                  const aRed = aArmor / (aArmor + 100);
+                  const ad = Math.max(1, Math.floor(aoeVal * (1 - aRed)));
+                  aoeDamages.push({ id: ally.id, name: ally.name, amount: ad });
+                  return { ...ally, currentHealth: Math.max(0, (ally.currentHealth || 0) - ad) };
+                }
+                return ally;
+              });
+            }
+          } else if (ef.aoeTarget === 'all_allies') {
+            // Enemy healing its own side
+            if (newState.enemies && newState.enemies.length > 0) {
+              newState.enemies = newState.enemies.map(e => {
+                if (e.currentHealth > 0 && e.currentHealth < e.maxHealth) {
+                  const heal = Math.min(ef.value || 0, e.maxHealth - e.currentHealth);
+                  aoeDamages.push({ id: e.id, name: e.name, amount: heal });
+                  return { ...e, currentHealth: Math.min(e.maxHealth, e.currentHealth + (ef.value || 0)) };
+                }
+                return e;
+              });
+            }
+          }
+
+          (aoeSummary as any).damaged = (aoeSummary as any).damaged || [];
+          (aoeSummary as any).damaged.push(...aoeDamages);
+        } else if (ef.type === 'aoe_heal') {
+          const aoeHeals: Array<{ id: string; name: string; amount: number }> = [];
+          if (ef.aoeTarget === 'all_allies') {
+            // Heal enemy's allies
+            if (newState.enemies && newState.enemies.length > 0) {
+              newState.enemies = newState.enemies.map(e => {
+                if (e.currentHealth > 0 && e.currentHealth < e.maxHealth) {
+                  const heal = Math.min(ef.value || 0, e.maxHealth - e.currentHealth);
+                  aoeHeals.push({ id: e.id, name: e.name, amount: heal });
+                  return { ...e, currentHealth: Math.min(e.maxHealth, e.currentHealth + (ef.value || 0)) };
+                }
+                return e;
+              });
+            }
+          } else if (ef.aoeTarget === 'all_enemies') {
+            // Heal player-side (rare)
+            const ph = Math.min(ef.value || 0, newPlayerStats.maxHealth - (newPlayerStats.currentHealth || 0));
+            if (ph > 0) {
+              newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, (newPlayerStats.currentHealth || 0) + (ef.value || 0));
+              aoeHeals.push({ id: 'player', name: (character && character.name) || 'You', amount: ph });
+            }
+            if (newState.allies && newState.allies.length > 0) {
+              newState.allies = newState.allies.map(ally => {
+                if (ally.currentHealth > 0 && ally.currentHealth < ally.maxHealth) {
+                  const ah = Math.min(ef.value || 0, ally.maxHealth - ally.currentHealth);
+                  aoeHeals.push({ id: ally.id, name: ally.name, amount: ah });
+                  return { ...ally, currentHealth: Math.min(ally.maxHealth, ally.currentHealth + (ef.value || 0)) };
+                }
+                return ally;
+              });
+            }
+          }
+          (aoeSummary as any).healed = (aoeSummary as any).healed || [];
+          (aoeSummary as any).healed.push(...aoeHeals);
+        }
+      }
+    }
+
     // If all enemies defeated, mark victory
     const anyAlive = (newState.enemies || []).some(e => e.currentHealth > 0);
     if (!anyAlive) {
@@ -2313,13 +2564,13 @@ export const executeEnemyTurn = (
       newState.active = false;
     }
 
-    return { newState, newPlayerStats, narrative: narrativeLocal };
+    return { newState, newPlayerStats, narrative: narrativeLocal, aoeSummary };
   }
 
   // Allow enemies to target allied companions. Prefer critically-low allies (<30% hp)
   // and make the base chance depend on actor.behavior.
   const aliveAllies = (newState.allies || []).filter(a => a.currentHealth > 0);
-  let narrative = '';
+  narrative = '';
   let targetedAlly: any = null;
   if (aliveAllies.length > 0) {
     // Identify critically-low allies (percentage of their maxHealth)
@@ -2397,7 +2648,7 @@ export const executeEnemyTurn = (
     });
 
     // Allies dying does not end combat but log accordingly
-    return { newState, newPlayerStats, narrative };
+    return { newState, newPlayerStats, narrative, aoeSummary };
   }
 
   // Apply damage to player
@@ -2458,7 +2709,7 @@ export const executeEnemyTurn = (
   // Record actor last action
   newState.lastActorActions[actor.id] = [chosenAbility.id, ...(newState.lastActorActions[actor.id] || [])].slice(0, 4);
 
-  return { newState, newPlayerStats, narrative };
+  return { newState, newPlayerStats, narrative, aoeSummary };
 };
 
 // Helper: register an actor skipping their turn and push a combat log entry
@@ -2491,6 +2742,14 @@ export const executeCompanionAction = (
   let newState = { ...state };
   const ally = (newState.allies || []).find(a => a.id === allyId);
   if (!ally) return { newState, narrative: 'Companion not found', success: false };
+
+  // If companion is stunned, skip their action and log it
+  const compStunned = (ally.activeEffects || []).some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
+  if (compStunned) {
+    const sn = `${ally.name} is stunned and skips their turn.`;
+    pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'stunned', narrative: sn, timestamp: Date.now() });
+    return { newState, narrative: sn, success: false };
+  }
 
   const ability = ally.abilities.find(a => a.id === abilityId) || ally.abilities[0];
   if (!ability) return { newState, narrative: `${ally.name} has no usable abilities.`, success: false };
@@ -3039,6 +3298,13 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       // SKY-52: Additional spell abilities for variety
       { id: 'vampiric_grip', name: 'Vampiric Grip', type: 'magic', damage: 20, cost: 28, description: 'Telekinetically grasp and drain the target', effects: [{ type: 'stun', value: 1, duration: 1, chance: 30 }] },
       { id: 'life_drain_aoe', name: 'Mass Drain', type: 'magic', damage: 15, cost: 40, description: 'Drains life from all nearby foes', effects: [{ type: 'aoe_damage', value: 15, aoeTarget: 'all_enemies' }, { type: 'heal', stat: 'health', value: 20 }] },
+      // New AeO hybrid: damages enemies and heals allies (unlockable via spells)
+      // AeO family — hybrid AoE damage + ally heal (high-cost, magical)
+      { id: 'aeonic_pulse', name: 'Aeonic Pulse', type: 'aeo', damage: 10, cost: 38, description: 'A focused pulse of aeonic energy (lesser).', effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }] },
+      { id: 'aeonic_surge', name: 'Aeonic Surge', type: 'aeo', damage: 18, cost: 45, description: 'A burst of aeonic energy that wounds enemies while restoring allies.', effects: [{ type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' }] },
+      { id: 'aeonic_wave', name: 'Aeonic Wave', type: 'aeo', damage: 26, cost: 60, cooldown: 3, description: 'A sweeping aeonic wave — high power, long cooldown.', effects: [{ type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' }] },
+      // Enemy-only corrupted variant (higher damage, no ally heal)
+      { id: 'necrotic_aeon', name: 'Necrotic Aeon', type: 'aeo', damage: 30, cost: 55, description: 'A corrupted aeonic eruption that favors damage over restoration.', effects: [{ type: 'aoe_damage', value: 30, aoeTarget: 'all_enemies' }] },
       { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100 }] }
     ],
     baseXP: 120,
@@ -3067,6 +3333,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40 }] },
       // SKY-52: Additional AoE and spell abilities
       { id: 'fireball', name: 'Fireball', type: 'magic', damage: 30, cost: 35, description: 'An explosive ball of fire that damages all foes', effects: [{ type: 'aoe_damage', value: 20, aoeTarget: 'all_enemies' }] },
+      { id: 'aeonic_pulse', name: 'Aeonic Pulse', type: 'aeo', damage: 10, cost: 38, description: 'A focused pulse of aeonic energy (lesser).', effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }] },
       { id: 'chain_lightning', name: 'Chain Lightning', type: 'magic', damage: 25, cost: 30, description: 'Lightning that arcs to nearby foes', effects: [{ type: 'aoe_damage', value: 12, aoeTarget: 'all_enemies' }, { type: 'drain', stat: 'magicka', value: 8 }] },
       { id: 'heal_other', name: 'Heal Other', type: 'magic', damage: 0, cost: 25, description: 'Heals an ally', heal: 25 },
       { id: 'paralyze', name: 'Paralyze', type: 'magic', damage: 5, cost: 40, description: 'Paralyzes the target', effects: [{ type: 'stun', value: 1, duration: 2, chance: 60 }] }

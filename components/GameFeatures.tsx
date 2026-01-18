@@ -1013,14 +1013,14 @@ export const SortSelector: React.FC<{
   const current = options.find(o => o.id === currentParsed.key) || options[0];
 
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative flex items-center gap-1">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold transition-colors"
+        className="flex items-center gap-1 px-2 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold transition-colors"
       >
-        <ArrowUpDown size={16} className="text-skyrim-gold" />
-        <span className="text-sm text-skyrim-text">{current.label}</span>
-        <ChevronDown size={14} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ArrowUpDown size={14} className="text-skyrim-gold" />
+        <span className="text-xs text-skyrim-text truncate">{current.label}</span>
+        <ChevronDown size={12} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {allowDirection && (
@@ -1030,14 +1030,14 @@ export const SortSelector: React.FC<{
             const dir = currentParsed.dir === 'asc' ? 'desc' : 'asc';
             onSelect(`${currentParsed.key}:${dir}`);
           }}
-          className="px-2 py-2 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold"
+          className="px-1 py-1 bg-skyrim-paper/30 border border-skyrim-border rounded hover:border-skyrim-gold"
         >
-          {currentParsed.dir === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+          {currentParsed.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
         </button>
       )}
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-48 bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50">
+        <div className="absolute top-full left-0 mt-1 w-40 bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50">
           {options.map(option => (
             <button
               key={option.id}
@@ -1050,13 +1050,13 @@ export const SortSelector: React.FC<{
                 }
                 setIsOpen(false);
               }}
-              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-skyrim-paper/30 transition-colors ${
+              className={`w-full px-2 py-2 text-left text-xs flex items-center gap-2 hover:bg-skyrim-paper/30 transition-colors ${
                 option.id === currentParsed.key ? 'text-skyrim-gold' : 'text-skyrim-text'
               }`}
             >
               {option.icon && <span className="text-xs">{option.icon}</span>}
               {option.label}
-              {option.id === currentParsed.key && <Check size={14} className="ml-auto" />}
+              {option.id === currentParsed.key && <Check size={12} className="ml-auto" />}
             </button>
           ))}
         </div>

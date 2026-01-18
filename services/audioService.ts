@@ -36,6 +36,7 @@ export type SoundEffect =
   | 'spell_impact_fire'
   | 'spell_impact_ice'
   | 'spell_impact_shock'
+  | 'aeo_burst'        // Aeonic burst (hybrid attack+heal)
   | 'hit_received'    // Taking damage
   | 'enemy_death'     // Enemy defeated
   | 'dice_tick'       // Small tick for D20 roll animation
@@ -120,6 +121,7 @@ const SOUND_EFFECTS: Record<SoundEffect, string | string[] | null> = {
   spell_impact_fire: variantPaths('spell_impact_fire', 2),
   spell_impact_ice: variantPaths('spell_impact_ice', 2),
   spell_impact_shock: variantPaths('spell_impact_shock', 2),
+  aeo_burst: variantPaths('spell_impact', 2),
   hit_received: variantPaths('hit_received', 3),
   // Use explicit enemy_death variants rather than falling back to unrelated sounds
   enemy_death: variantPaths('enemy_death', 2),

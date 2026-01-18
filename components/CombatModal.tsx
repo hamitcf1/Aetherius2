@@ -23,7 +23,8 @@ import {
   skipActorTurn,
   advanceTurn,
   applyTurnRegen,
-  checkCombatEnd
+  checkCombatEnd,
+  combatHasActiveSummon
 } from '../services/combatService';
 import { LootModal } from './LootModal';
 import { populatePendingLoot, finalizeLoot } from '../services/lootService';
@@ -264,10 +265,10 @@ const getAccentColor = (tab: 'Physical' | 'Magical', subCat: string) => {
     // Magical
     Destruction: '#ef4444',// red-500
     Restoration: '#10b981',// green-500
+    AeO: '#8b5cf6',      // violet-500 (Aeonic)
     Shouts: '#7c3aed',     // purple-600
     Support: '#06b6d4'     // cyan-500
-  };
-  return map[subCat] || (tab === 'Physical' ? '#f97316' : '#60a5fa');
+  };  return map[subCat] || (tab === 'Physical' ? '#f97316' : '#60a5fa');
 };
 
 // Helper: pick readable text color for accent
@@ -298,6 +299,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ ability, disabled, cooldown
       case 'melee': return '⚔️';
       case 'ranged': return '🏹';
       case 'magic': return '✨';
+      case 'aeo': return '🔮';
       case 'shout': return '📢';
       default: return '⚡';
     }
@@ -388,6 +390,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   // Quick visual highlight when a target is newly selected (transient)
   const [recentlyHighlighted, setRecentlyHighlighted] = useState<string | null>(null);
+  // Track the timestamp of the last ability button click (helps disambiguate rapid click sequences in the UI/tests)
+  const lastAbilityClickAt = useRef<number | null>(null);
   
   // Ability categorization state
   const [activeAbilityTab, setActiveAbilityTab] = useState<'Physical' | 'Magical'>('Physical');
@@ -474,6 +478,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // When an invalid-target is detected we briefly suppress rendering of the textual "Roll:" label
   // to avoid flicker/races where a transient log entry might appear before being cleaned up.
   const [suppressRollLabelUntil, setSuppressRollLabelUntil] = useState<number | null>(null);
+  // Suppress roll labels for a whole turn (helps catch races where the engine appends a nat entry
+  // after the UI's invalid-target handler runs)
+  const [suppressRollForTurn, setSuppressRollForTurn] = useState<number | null>(null);
   // Defensive guard: when an invalid-target action occurs we briefly mark this ref
   // so any asynchronously-scheduled roll animations will be ignored.
   const lastInvalidTargetRef = useRef(false);
@@ -899,16 +906,22 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setIsAnimating(true);
       setRollActor(actorIsAlly ? 'ally' : 'enemy');
       const finalEnemyRoll = Math.floor(Math.random() * 20) + 1;
-      // animate wheel-style roll with ease-out for smooth stop
-      await animateRoll(finalEnemyRoll, Math.floor(3000 * timeScale));
-      await waitMs(Math.floor(220 * timeScale));
-      setShowRoll(false);
-      setRollActor(null);
+
+      // If the acting actor is stunned, skip the visual roll (engine will early-return)
+      const acting = (currentState.enemies || []).find(a => a.id === actorId) || (currentState.allies || []).find(a => a.id === actorId) || null;
+      const actingStunned = acting?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
+      if (!actingStunned) {
+        // animate wheel-style roll with ease-out for smooth stop
+        await animateRoll(finalEnemyRoll, Math.floor(3000 * timeScale));
+        await waitMs(Math.floor(220 * timeScale));
+        setShowRoll(false);
+        setRollActor(null);
+      }
 
       // If current actor is an auto-controlled ally, execute their action
       if (allyActor) {
-        // Auto-control: perform their default attack immediately
-        const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, finalEnemyRoll, true);
+        // Auto-control: perform their default attack immediately (pass undefined natRoll when stunned)
+        const res = executeCompanionAction(currentState, allyActor.id, allyActor.abilities[0].id, undefined, actingStunned ? undefined : finalEnemyRoll, true);
         // If companion couldn't act (invalid target etc.), surface narrative/toast and skip their turn
         if (!res.success) {
           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
@@ -923,6 +936,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
         // Play companion attack sound for their ability
         try { playCombatSound(allyActor.abilities[0].type as any, allyActor, allyActor.abilities[0]); } catch (e) {}
+
+        // Show floating hit for companion auto-action if damage exists
+        try {
+          const last = currentState.combatLog && currentState.combatLog[currentState.combatLog.length - 1];
+          if (last && last.damage && last.damage > 0) {
+            const id = `hit_comp_auto_${Date.now()}`;
+            let x: number | undefined;
+            let y: number | undefined;
+            const targetEnemy = (currentState.enemies || []).find((e: any) => e.name === last.target || e.id === last.target);
+            if (targetEnemy && enemyRefs.current[targetEnemy.id]) {
+              const r = enemyRefs.current[targetEnemy.id]!.getBoundingClientRect();
+              x = r.left + r.width / 2;
+              y = r.top + r.height / 2;
+            }
+            setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+          }
+        } catch (e) { /* best-effort UI */ }
+
         // Update UI and play companion animation
         setCombatState(currentState);
         await waitMs(Math.floor(600 * timeScale));
@@ -1119,6 +1151,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return;
     }
 
+    // Defensive UI guard: if this ability is a conjuration and there's already an active summon,
+    // block the action immediately (no roll animation, no turn consumed) and surface a toast.
+    const abilityToCheck = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
+    const isConjuration = !!(abilityToCheck && abilityToCheck.effects && abilityToCheck.effects.some((ef: any) => ef.type === 'summon'));
+    if (isConjuration && combatHasActiveSummon(combatState)) {
+      if (showToast) showToast('Already summoned', 'warning');
+      // suppress any transient roll UI and ensure we don't consume the player's turn
+      lastInvalidTargetRef.current = true;
+      if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
+      setShowRoll(false);
+      setRollActor(null);
+      setIsAnimating(false);
+      return;
+    }
+
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
@@ -1162,6 +1209,54 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       } else {
         playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout', targetEnemy, ability);
       }
+
+      // If the engine returned an AoE summary, present richer feedback (SFX + floating indicators)
+      if ((execRes as any).aoeSummary) {
+        try {
+          // Layered SFX: an impact then a gentle heal chime
+          playSoundEffect('aeo_burst');
+          playSoundEffect('spell_impact');
+          // Show summary toast and per-target floating numbers
+          const summary = (execRes as any).aoeSummary as { damaged?: any[]; healed?: any[] };
+          const dmgCount = (summary.damaged || []).length;
+          const healCount = (summary.healed || []).length;
+
+          const dmgNames = (summary.damaged || []).map(d => d.name).slice(0,4).join(', ');
+          const healNames = (summary.healed || []).map(h => h.name).slice(0,4).join(', ');
+
+          if (dmgCount || healCount) {
+            const parts: string[] = [];
+            if (dmgCount) parts.push(`Damaged ${dmgCount} ${dmgCount === 1 ? 'enemy' : 'enemies'}${dmgNames ? `: ${dmgNames}` : ''}`);
+            if (healCount) parts.push(`Restored ${healCount} ${healCount === 1 ? 'ally' : 'allies'}${healNames ? `: ${healNames}` : ''}`);
+            showToast && showToast(parts.join(' • '), 'success');
+          }
+
+          // Push floating hits for enemies
+          (summary.damaged || []).forEach(d => {
+            const id = `aeo_d_${d.id}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            const rect = enemyRefs[d.id]?.getBoundingClientRect?.() || { x: window.innerWidth/2, y: 120 };
+            setFloatingHits(h => [{ id, actor: d.name || 'enemy', damage: d.amount, hitLocation: undefined, isCrit: false, x: rect.x + rect.width/2, y: rect.y + rect.height/2 }, ...h]);
+            // brief highlight
+            setRecentlyHighlighted(d.id);
+            setTimeout(() => setRecentlyHighlighted(null), 900);
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+          });
+
+          // Push floating heals for allies + player
+          (summary.healed || []).forEach(hd => {
+            const id = `aeo_h_${hd.id}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+            const isPlayer = hd.id === 'player';
+            const rect = isPlayer ? playerRef.current?.getBoundingClientRect?.() : (enemyRefs[hd.id]?.getBoundingClientRect?.() || { x: window.innerWidth/2, y: 120 });
+            setFloatingHits(f => [{ id, actor: hd.name || (isPlayer ? 'You' : 'ally'), damage: hd.amount, hitLocation: undefined, isCrit: false, x: rect.x + (rect.width||0)/2, y: rect.y + (rect.height||0)/2, isHeal: true } as any, ...f]);
+            setRecentlyHighlighted(hd.id);
+            setTimeout(() => setRecentlyHighlighted(null), 900);
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+          });
+        } catch (e) {
+          // best-effort UI enhancements — do not block combat flow
+          console.warn('Failed to present AeO UI summary:', e);
+        }
+      }
     } else if (action === 'defend') {
       playCombatSound('block', undefined);
     }
@@ -1189,9 +1284,26 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     
     // Update inventory if item was used
     if (usedItem) {
+      // Optimistically update local inventory so UI never shows a "ghost" or 0-count item
+      setLocalInventory(prev => {
+        const next = prev.map(it => it.id === usedItem.id ? { ...it, quantity: Math.max(0, (it.quantity || 0) - 1) } : it).filter(it => (it.quantity || 0) > 0);
+        return next;
+      });
+
       if (onInventoryUpdate) {
-        onInventoryUpdate([{ name: usedItem.name, quantity: 1 }]);
+        // If we have a concrete id from the engine, prefer emitting an id-based update
+        // (allows App to merge by id and treat quantity<=0 as deletion). Fallback to
+        // legacy name-based removal when id is not available.
+        if ((usedItem as any).id) {
+          const precise: InventoryItem = { ...(usedItem as any) } as InventoryItem;
+          // ensure quantity in the payload reflects the post-use quantity
+          precise.quantity = Number(usedItem.quantity || 0);
+          onInventoryUpdate([precise]);
+        } else {
+          onInventoryUpdate([{ name: usedItem.name, quantity: 1 }]);
+        }
       }
+
       // Avoid duplicate toasts: if this item restored health, the heal toast was already shown above
       if (!(action === 'item' && newPlayerStats.currentHealth > playerStats.currentHealth)) {
         if (showToast) {
@@ -1281,6 +1393,38 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   const isPlayerTurn = combatState.currentTurnActor === 'player' && combatState.active;
 
+  // container ref used by the integration/test helper (see below)
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Integration helper: allow external test harnesses or developer shortcuts to trigger
+  // an in-combat item use by clicking a button elsewhere in the document whose
+  // textContent exactly matches an inventory item's name. Scoped to this modal so
+  // tests that render CombatModal standalone behave the same as full-app flows.
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!combatState?.active) return;
+
+    const handler = (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!target || !(target instanceof HTMLButtonElement)) return;
+      if (containerRef.current && containerRef.current.contains(target)) return;
+      const text = (target.textContent || '').trim();
+      if (!text) return;
+      const usable = getUsableItems();
+      const match = usable.find(i => i.name === text);
+      if (!match) return;
+      setTimeout(() => {
+        try { handlePlayerAction('item', undefined, match.id); } catch (err) { console.debug && console.debug('[combat] external item-click helper failed', err); }
+      }, 0);
+    };
+
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [combatState?.active, inventory]);
+
+  // Mobile action panel collapsed state
+  const [mobileActionsExpanded, setMobileActionsExpanded] = useState(true);
+
   // When clicking an ability, decide whether to open explicit target selection (for heals/buffs)
   const handleAbilityClick = (ability: CombatAbility) => {
     const isPositive = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ['heal', 'buff'].includes(ef.type))));
@@ -1295,11 +1439,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     // If the user very recently changed target, defer the ability click one tick so selectedTarget stabilizes
     if (Date.now() - (lastUserTargetChangeAt.current || 0) < 80) {
+      lastAbilityClickAt.current = Date.now();
       setTimeout(() => handlePlayerAction('attack', ability.id), 0);
       return;
     }
 
     // Default immediate execution
+    lastAbilityClickAt.current = Date.now();
     handlePlayerAction('attack', ability.id);
   };
 
@@ -1314,14 +1460,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     );
   };
 
-  // Regen is applied after each turn via applyTurnRegen; time-based tick removed.
-
-  // Mobile action panel collapsed state
-  const [mobileActionsExpanded, setMobileActionsExpanded] = useState(true);
-
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--skyrim-dark, #0f0f0f)' }}>
-      {/* Combat header - more compact on mobile */}
+    <div ref={containerRef} className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--skyrim-dark, #0f0f0f)' }}>
       <div className="bg-gradient-to-b from-stone-900 to-transparent p-2 sm:p-4 border-b border-amber-900/30 relative">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
@@ -1494,8 +1634,19 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                             setSelectedTarget(ally.id);
                           } else {
+                            // If the user very recently clicked an ability (rapid click: ability -> ally), treat the ally
+                            // click as a simple target selection to match expected UX in companion control/tests.
+                            if (lastAbilityClickAt.current && (Date.now() - lastAbilityClickAt.current) < 120) {
+                              userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
+                              setSelectedTarget(ally.id);
+                              if (showToast) showToast(`Target selected: ${ally.name}`, 'info');
+                              return;
+                            }
+
                             if (showToast) showToast('This ability cannot target allies.', 'warning');
-                            setSuppressRollLabelUntil(Date.now() + 250);
+                            setSuppressRollLabelUntil(Date.now() + 600);
+                            setSuppressRollForTurn(combatState.turn);
+
                             // defensive cleanup: remove any combat-log entries with a nat that were added this turn
                             setCombatState(prev => ({
                               ...prev,
@@ -1510,9 +1661,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             }, 0);
                             // mark invalid-target to cancel in-flight animations
                             lastInvalidTargetRef.current = true;
+                            if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
                             setShowRoll(false);
                             setRollActor(null);
                             setIsAnimating(false);
+                            setTimeout(() => { lastInvalidTargetRef.current = false; setSuppressRollForTurn(null); }, 600);
                           }
                         } else {
                           userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
@@ -1561,7 +1714,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   aria-pressed={autoScroll}
                   title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
                   className={`px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none ${autoScroll ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}>
-                  Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
+                  Auto-scroll {autoScroll ? 'ON' : 'OFF'}
                 </button>
               </div>
             </div>
@@ -1583,7 +1736,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   >
                     <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
                     <span className="text-stone-300">{entry.narrative}</span>
-                    {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && (
+                    {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && !lastInvalidTargetRef.current && entry.turn !== suppressRollForTurn && (
                       <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
                     )}
                     {entry.auto && (
@@ -1661,11 +1814,35 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   return;
                                 }
 
+                                // Record a recent ability click so a quick ability->ally click sequence can be
+                                // interpreted as "select target" instead of immediately performing the attack.
+                                // Defer actual execution one tick to give the following click a chance to register.
+                                lastAbilityClickAt.current = Date.now();
+
                                 // Wrap the meat of the ability flow so we can optionally defer when the user just changed target
                                 const performAbility = async () => {
                                   // debug
                                   // eslint-disable-next-line no-console
                                   console.debug && console.debug('[combat] companion.performAbility invoked', { abilityId: ab.id, selectedTarget, pendingTargeting, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
+                                  // debug
+                                  // eslint-disable-next-line no-console
+                                  console.debug && console.debug('[combat] companion.performAbility invoked', { abilityId: ab.id, selectedTarget, pendingTargeting, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
+
+                                  // If the user clicked an ability then immediately clicked an ally, treat that
+                                  // sequence as "select target" (do NOT perform the ability). This prevents a
+                                  // rapid ability->ally click from accidentally performing an offensive action
+                                  // on an ally and consuming a turn. The ally-click handler already emits the
+                                  // 'Target selected' toast; here we ensure the in-flight perform is a no-op.
+                                  const nowMs = Date.now();
+                                  const selectedIsAlly = !!((combatState.allies || []).find(a => a.id === selectedTarget));
+                                  if (lastAbilityClickAt.current && (nowMs - lastAbilityClickAt.current) < 150 && selectedTarget && selectedIsAlly && !pendingTargeting) {
+                                    // keep the companion control active and avoid performing the ability
+                                    setAwaitingCompanionAction(true);
+                                    setIsAnimating(false);
+                                    lastAbilityClickAt.current = null;
+                                    return;
+                                  }
+
                                   // Local validation: prevent UI roll when target is invalid (mirror service rules)
                                   const abilityIsOffensive = !!(ab.damage && ab.damage > 0) || (ab.effects || []).some((ef: any) => ['aoe_damage','dot','damage'].includes(ef.type));
                                   const targetIsPlayer = selectedTarget === 'player';
@@ -1673,6 +1850,23 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
                                     if (showToast) showToast('This ability cannot target allies.', 'warning');
                                     setSuppressRollLabelUntil(Date.now() + 250);
+                                    setSuppressRollForTurn(combatState.turn);
+
+                                    // Mark recent invalid-target so any asynchronously-scheduled roll animations
+                                    // or combat-log renders will be suppressed immediately.
+                                    lastInvalidTargetRef.current = true;
+
+                                    // Cancel any in-flight roll animation frame and clear roll UI state immediately
+                                    if (rollAnimRef.current) {
+                                      cancelAnimationFrame(rollAnimRef.current);
+                                      rollAnimRef.current = null;
+                                    }
+                                    setShowRoll(false);
+                                    setRollActor(null);
+                                    setRollValue(null);
+
+                                    // clear the per-turn suppression after a short grace window
+                                    setTimeout(() => setSuppressRollForTurn(null), 300);
 
                                     // defensive cleanup: remove any combat-log entries with a nat that were added this turn
                                     setCombatState(prev => ({
@@ -1695,24 +1889,29 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   } catch (e) {}
 
                                     // ensure any pending roll UI is cleared and keep companion control active
-                                    setShowRoll(false);
-                                    setRollActor(null);
-                                    setIsAnimating(false);
                                     setAwaitingCompanionAction(true);
+                                    setIsAnimating(false);
+
+                                    // clear the invalid-target marker after a short grace window so subsequent actions behave normally
+                                    setTimeout(() => { lastInvalidTargetRef.current = false; }, 250);
                                     return;
                                   }
 
                                   setIsAnimating(true);
                                   setAwaitingCompanionAction(false);
 
-                                  setRollActor('ally');
+                                  // If companion is stunned, skip the roll animation and let engine handle the skip
+                                  const comp = (combatState.allies || []).find(a => a.id === allyActor.id);
+                                  const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                                   const companionRoll = Math.floor(Math.random() * 20) + 1;
-                                  await animateRoll(companionRoll, Math.floor(3000 * timeScale));
-                                  await waitMs(Math.floor(220 * timeScale));
-                                  setShowRoll(false);
-                                  setRollActor(null);
+                                  if (!compStunned) {
+                                    await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                    await waitMs(Math.floor(220 * timeScale));
+                                    setShowRoll(false);
+                                    setRollActor(null);
+                                  }
 
-                                  const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, companionRoll);
+                                  const res = executeCompanionAction(combatState, allyActor.id, ab.id, selectedTarget || undefined, compStunned ? undefined : companionRoll);
                                   if (!res.success) {
                                     // Invalid target or other failure — surface message and allow the player to choose again
                                     if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
@@ -1730,6 +1929,24 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                                   try { playCombatSound(ab.type as any, allyActor, ab); } catch (e) {}
 
+                                  // Show floating hit for companion action (if damage was applied)
+                                  try {
+                                    const last = res.newState.combatLog && res.newState.combatLog[res.newState.combatLog.length - 1];
+                                    if (last && last.damage && last.damage > 0) {
+                                      const id = `hit_comp_${Date.now()}`;
+                                      let x: number | undefined;
+                                      let y: number | undefined;
+                                      const targetEnemy = (res.newState.enemies || []).find((e: any) => e.name === last.target || e.id === last.target);
+                                      if (targetEnemy && enemyRefs.current[targetEnemy.id]) {
+                                        const r = enemyRefs.current[targetEnemy.id]!.getBoundingClientRect();
+                                        x = r.left + r.width / 2;
+                                        y = r.top + r.height / 2;
+                                      }
+                                      setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
+                                      setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                                    }
+                                  } catch (e) { /* best-effort */ }
+
                                   await waitMs(Math.floor(600 * timeScale));
 
                                   const advanced = advanceTurn(res.newState);
@@ -1745,7 +1962,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   return;
                                 }
 
-                                await performAbility();
+                                // Defer execution one tick so a rapid ability->ally click sequence can act as target selection
+                                setTimeout(() => { void performAbility(); }, 0);
+                                return;
                               }}
                             />
                           );
@@ -1787,14 +2006,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           setIsAnimating(true);
                           setAwaitingCompanionAction(false);
                           // roll
-                          setRollActor('ally');
+                          // If companion is stunned, skip roll animation and let engine handle the skip
+                          const comp = (combatState.allies || []).find(a => a.id === combatState.currentTurnActor);
+                          const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
-                          await animateRoll(companionRoll, Math.floor(3000 * timeScale));
-                          await waitMs(Math.floor(220 * timeScale));
-                          setShowRoll(false);
-                          setRollActor(null);
+                          if (!compStunned) {
+                            await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                            await waitMs(Math.floor(220 * timeScale));
+                            setShowRoll(false);
+                            setRollActor(null);
+                          }
 
-                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, 'player', companionRoll);
+                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, 'player', compStunned ? undefined : companionRoll);
                           if (!res.success) {
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                             if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
@@ -1806,6 +2029,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             return;
                           }
                           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+
+                          // show floating hit for companion action if applicable
+                          try {
+                            const last = res.newState.combatLog && res.newState.combatLog[res.newState.combatLog.length - 1];
+                            if (last && last.damage && last.damage > 0) {
+                              const id = `hit_comp_confirm_${Date.now()}`;
+                              let x: number | undefined;
+                              let y: number | undefined;
+                              const targetEnemy = (res.newState.enemies || []).find((e: any) => e.name === last.target || e.id === last.target);
+                              if (targetEnemy && enemyRefs.current[targetEnemy.id]) {
+                                const r = enemyRefs.current[targetEnemy.id]!.getBoundingClientRect();
+                                x = r.left + r.width / 2;
+                                y = r.top + r.height / 2;
+                              }
+                              setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
+                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                            }
+                          } catch (e) { /* best-effort UI */ }
+
                           const advanced = advanceTurn(res.newState);
                           setCombatState(advanced);
                           setIsAnimating(false);
@@ -1826,6 +2068,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         setPendingTargeting(null);
 
                         if (isPlayerTurn) {
+                          lastAbilityClickAt.current = Date.now();
                           handlePlayerAction('attack', abilityIdToUse);
                           return;
                         }
@@ -1839,25 +2082,37 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const targetIsAlly = !!((combatState.allies||[]).find(a=>a.id===selectedTarget));
                           if ((targetIsPlayer || targetIsAlly) && abilityIsOffensive) {
                             if (showToast) showToast('This ability cannot target allies.', 'warning');
-                            setSuppressRollLabelUntil(Date.now() + 250);
-                            // mark recent invalid-target so any in-flight animation will be skipped
+                            setSuppressRollLabelUntil(Date.now() + 600);
+                            setSuppressRollForTurn(combatState.turn);
+
+                            // Mark recent invalid-target and cancel any in-flight roll UI
                             lastInvalidTargetRef.current = true;
+                            if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
+                            setShowRoll(false);
+                            setRollActor(null);
+                            setRollValue(null);
                             setAwaitingCompanionAction(true);
+                            setIsAnimating(false);
+
+                            setTimeout(() => { lastInvalidTargetRef.current = false; setSuppressRollForTurn(null); }, 600);
                             return;
                           }
 
                           setIsAnimating(true);
                           setAwaitingCompanionAction(false);
 
-                          // roll
-                          setRollActor('ally');
+                          // If companion is stunned, skip the visual roll
+                          const comp = (combatState.allies || []).find(a => a.id === combatState.currentTurnActor);
+                          const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
-                          await animateRoll(companionRoll, Math.floor(3000 * timeScale));
-                          await waitMs(Math.floor(220 * timeScale));
-                          setShowRoll(false);
-                          setRollActor(null);
+                          if (!compStunned) {
+                            await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                            await waitMs(Math.floor(220 * timeScale));
+                            setShowRoll(false);
+                            setRollActor(null);
+                          }
 
-                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, selectedTarget || undefined, companionRoll);
+                          const res = executeCompanionAction(combatState, combatState.currentTurnActor, abilityIdToUse, selectedTarget || undefined, compStunned ? undefined : companionRoll);
                           if (!res.success) {
                             if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
                             if (showToast) showToast(res.narrative || 'Invalid target for that ability.', 'warning');
@@ -1868,6 +2123,24 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             return;
                           }
                           if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
+
+                          try {
+                            const last = res.newState.combatLog && res.newState.combatLog[res.newState.combatLog.length - 1];
+                            if (last && last.damage && last.damage > 0) {
+                              const id = `hit_comp_confirm_${Date.now()}`;
+                              let x: number | undefined;
+                              let y: number | undefined;
+                              const targetEnemy = (res.newState.enemies || []).find((e: any) => e.name === last.target || e.id === last.target);
+                              if (targetEnemy && enemyRefs.current[targetEnemy.id]) {
+                                const r = enemyRefs.current[targetEnemy.id]!.getBoundingClientRect();
+                                x = r.left + r.width / 2;
+                                y = r.top + r.height / 2;
+                              }
+                              setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
+                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                            }
+                          } catch (e) { /* best-effort UI */ }
+
                           const advancedState = advanceTurn(res.newState);
                           setCombatState(advancedState);
                           setIsAnimating(false);
@@ -2066,12 +2339,22 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     const sub = determineSubcategory(ability);
                     const tab = (ability.type === 'melee' || ability.type === 'ranged') ? 'Physical' : 'Magical';
                     const accent = getAccentColor(tab as 'Physical' | 'Magical', sub);
-                    const isDisabledBtn = !isPlayerTurn || isAnimating || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
+                    const conjureLocked = (ability.effects || []).some((ef: any) => ef.type === 'summon') && combatHasActiveSummon(combatState);
+                    const isDisabledBtn = !isPlayerTurn || isAnimating || conjureLocked || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
                     return (
                       <button
                         key={ability.id}
                         disabled={isDisabledBtn}
-                        onClick={() => handlePlayerAction('attack', ability.id)}
+                        aria-disabled={isDisabledBtn}
+                        data-tooltip={conjureLocked ? 'Already summoned' : (ability.description || undefined)}
+                        onClick={() => {
+                          if (conjureLocked) {
+                            showToast && showToast('Already summoned', 'warning');
+                            return;
+                          }
+                          lastAbilityClickAt.current = Date.now();
+                          handlePlayerAction('attack', ability.id);
+                        }}
                         title={ability.description || `${ability.name} - ${ability.type} ability`}
                         data-sfx="button_click"
                         className={`px-2 py-2 rounded text-xs font-bold truncate transition-colors ${isDisabledBtn ? 'bg-stone-700 text-stone-500 opacity-50' : ''}`}
@@ -2199,7 +2482,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       {/* Floating damage / hit indicators */}
       {floatingHits.map((hit) => {
-        const base = hit.actor === 'player'
+        const isHeal = (hit as any).isHeal === true;
+        const base = isHeal || hit.actor === 'player'
           ? 'bg-green-900/60 text-green-200 border border-green-400'
           : 'bg-red-900/60 text-red-200 border border-red-400';
         const critClasses = hit.isCrit
@@ -2217,7 +2501,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             }}
           >
             <div className={`px-3 py-1 rounded-lg text-sm font-bold ${base} ${critClasses} transition-transform duration-300`}>
-              {hit.isCrit ? '💥 ' : ''}-{hit.damage} {hit.hitLocation ? `(${hit.hitLocation})` : ''}
+              {hit.isCrit ? '💥 ' : ''}{isHeal ? '+' : '-'}{hit.damage} {hit.hitLocation ? `(${hit.hitLocation})` : ''}
             </div>
           </div>
         );

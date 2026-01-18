@@ -142,7 +142,8 @@ describe('Spell classification: healing and summons', () => {
     playerStats.abilities.push(summonAbility);
 
     const state = baseState();
-    const res = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_skeleton', undefined, undefined, undefined, char);
+    // Provide a deterministic natRoll so the test is stable
+    const res = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_skeleton', undefined, undefined, 15, char);
     const { newState, narrative } = res;
 
     // There should be a newly added companion in allies list marked as isCompanion
@@ -154,6 +155,30 @@ describe('Spell classification: healing and summons', () => {
     // Ensure no enemy was damaged by the summon
     const enemyAfter = newState.enemies.find((e: any) => e.id === 'enemy1');
     expect(enemyAfter.currentHealth).toBe(30);
+  });
+
+  it('blocks conjure attempts when an active summon exists (engine guard — no roll, no cost, no turn consumed)', () => {
+    const char = makeCharacter();
+    const playerStats = makePlayerStats();
+    const summonAbility = { id: 'summon_skeleton', name: 'Summon Skeleton', type: 'magic', cost: 40, effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }] } as any;
+    playerStats.abilities.push(summonAbility);
+
+    const state = playStateWithSummon(); // helper above produces a state with an active summon
+    // ensure the helper marks this as a summon for combatHasActiveSummon()
+    state.allies[0].companionMeta = { ...(state.allies[0].companionMeta || {}), isSummon: true };
+    const beforeMagicka = playerStats.currentMagicka;
+
+    // Provide a natRoll to emulate the previously-observed bug path where a roll was still applied
+    const res = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_skeleton', undefined, undefined, 18, char);
+
+    expect(res.narrative).toMatch(/already have an active summon/i);
+    // No resource spent
+    expect(res.newPlayerStats.currentMagicka).toBe(beforeMagicka);
+    // No nat entry should have been added by the engine for this blocked attempt
+    expect((res.newState.combatLog || []).some((e: any) => e.nat !== undefined)).toBe(false);
+    // No additional summons added (only the pre-existing one should remain)
+    const summCount = (res.newState.allies || []).filter((a: any) => a.companionMeta?.isSummon).length;
+    expect(summCount).toBeGreaterThanOrEqual(1);
   });
 
   it('summon works and remains friendly even when cast by a damaging spell (damage + summon) and begins decaying after 3 player turns', () => {

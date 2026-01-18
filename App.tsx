@@ -279,8 +279,8 @@ const addMinutesToTime = (time: { day: number; hour: number; minute: number }, m
 // Normalize inventory items before persisting to Firestore or using in combat
 const sanitizeInventoryItem = (item: Partial<InventoryItem>): Partial<InventoryItem> => {
   const clean: any = { ...item };
+  // Undefined quantity defaults to 1; allow explicit 0 to represent deletion (handled by caller)
   if (!Number.isFinite(clean.quantity)) clean.quantity = 1;
-  if (clean.quantity <= 0) clean.quantity = 1;
 
   // Drop undefined or invalid numeric fields to avoid Firestore errors
   if (clean.armor === undefined || !Number.isFinite(clean.armor)) delete clean.armor;
@@ -1356,8 +1356,11 @@ const App: React.FC = () => {
 
   // Load inventory items for the currently selected character (or none if no character selected)
   // Also performs cleanup of zero-quantity items to fix corrupted data
+  // IMPORTANT: skip reload while a combat is active to avoid clobbering combat-local inventory edits
   useEffect(() => {
     if (!currentUser?.uid) return;
+    // Avoid overwriting user-made inventory changes during active combat
+    if ((combatState as any)?.active) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1384,7 +1387,7 @@ const App: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [currentUser?.uid, currentCharacterId]);
+  }, [currentUser?.uid, currentCharacterId, combatState]);
 
   const completeOnboarding = async () => {
     if (!currentUser?.uid) {
@@ -2717,8 +2720,14 @@ const App: React.FC = () => {
 
   const getCharacterItems = () => items.filter((i: any) => i.characterId === currentCharacterId);
   
-  const setCharacterItems = (newCharItems: InventoryItem[]) => {
+  const setCharacterItems = (newCharItemsOrUpdater: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
       const currentCharItems = items.filter((i: any) => i.characterId === currentCharacterId);
+      
+      // Support both direct array and functional updater patterns
+      const newCharItems = typeof newCharItemsOrUpdater === 'function' 
+        ? newCharItemsOrUpdater(currentCharItems)
+        : newCharItemsOrUpdater;
+      
       const others = items.filter((i: any) => i.characterId !== currentCharacterId);
       const taggedItems = newCharItems.map(i => ({ ...i, characterId: currentCharacterId }));
       
@@ -4598,16 +4607,25 @@ const App: React.FC = () => {
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
           showToast={showToast}
           onInventoryUpdate={(itemsOrRemoved) => {
-            // Handle item consumption during dungeon combat (decrement inventory)
-            if (Array.isArray(itemsOrRemoved)) {
-              const toRemove = itemsOrRemoved as Array<{ name: string; quantity: number }>;
-              toRemove.forEach(({ name, quantity }) => {
-                setItems(prev => prev.map(it => 
-                  it.name === name ? { ...it, quantity: Math.max(0, (it.quantity || 1) - quantity) } : it
-                ).filter(it => (it.quantity || 1) > 0));
-              });
-              setDirtyEntities(d => new Set([...d, currentCharacterId!]));
+            // Accept both consumable removals and full inventory updates from the dungeon/combat internals.
+            if (!Array.isArray(itemsOrRemoved)) return;
+            const first = (itemsOrRemoved as any)[0];
+            if (first && first.id) {
+              // Incoming is an array of InventoryItem updates — merge into global state and persist
+              const updatedItems = itemsOrRemoved as InventoryItem[];
+              handleGameUpdate({ updatedItems });
+              updatedItems.forEach(i => setDirtyEntities(d => new Set([...d, i.id])));
+              return;
             }
+
+            // Backwards-compatible: treat as consumable removals
+            const toRemove = itemsOrRemoved as Array<{ name: string; quantity: number }>;
+            toRemove.forEach(({ name, quantity }) => {
+              setItems(prev => prev.map(it => 
+                it.name === name ? { ...it, quantity: Math.max(0, (it.quantity || 1) - quantity) } : it
+              ).filter(it => (it.quantity || 1) > 0));
+            });
+            setDirtyEntities(d => new Set([...d, currentCharacterId!]));
           }}
         />
 
@@ -4617,6 +4635,7 @@ const App: React.FC = () => {
             character={activeCharacter}
             inventory={getCharacterItems()}
             initialCombatState={combatState}
+
             onCombatEnd={(result, rewards, finalVitals, timeAdvanceMinutes, combatResult) => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });

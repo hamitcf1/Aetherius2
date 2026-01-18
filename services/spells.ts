@@ -236,6 +236,37 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     type: 'heal',
     heal: 60,
     prerequisites: { level: 15 }
+  },
+  // Aeonic Surge family: hybrid AoE attack + heal (magical school: AeO)
+  aeonic_pulse: {
+    id: 'aeonic_pulse',
+    name: 'Aeonic Pulse',
+    description: 'A focused pulse of aeonic energy — lesser AoE heal + damage.',
+    cost: 38,
+    perkCost: 2,
+    type: 'damage',
+    effects: [ { type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' } ],
+    prerequisites: { level: 8 }
+  },
+  aeonic_surge: {
+    id: 'aeonic_surge',
+    name: 'Aeonic Surge',
+    description: 'Unleash a pulse of aeonic energy that wounds nearby foes while restoring allies.',
+    cost: 45,
+    perkCost: 3,
+    type: 'damage',
+    effects: [ { type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' } ],
+    prerequisites: { level: 12 }
+  },
+  aeonic_wave: {
+    id: 'aeonic_wave',
+    name: 'Aeonic Wave',
+    description: 'A sweeping wave of aeonic energy — powerful and costly.',
+    cost: 60,
+    perkCost: 6,
+    type: 'damage',
+    effects: [ { type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' } ],
+    prerequisites: { level: 18 }
   }
 };
 

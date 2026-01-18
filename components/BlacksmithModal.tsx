@@ -7,6 +7,8 @@ import { Sword, Shield, Coins, Check } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import { audioService } from '../services/audioService';
+import { compareItemsInventory } from '../utils/itemSort';
+import { SortSelector } from './GameFeatures';
 
 // Spark particle component for blacksmith upgrade effect
 export const SparkParticles: React.FC<{ active: boolean; buttonRef: React.RefObject<HTMLButtonElement | null> }> = ({ active, buttonRef }) => {
@@ -143,6 +145,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<'all'|'weapons'|'armor'>('all');
+  const [sortOrder, setSortOrder] = useState<string>('name:asc');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showSparks, setShowSparks] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const upgradeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -155,16 +159,63 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
       if (filterCategory === 'armor') return i.type === 'apparel';
       return true;
     });
-    return base.sort((a, b) => {
-      // Primary: type (weapons first), then upgradeLevel desc, then name
-      const typeOrder = (t: string) => (t === 'weapon' ? 0 : 1);
-      const td = typeOrder(a.type) - typeOrder(b.type);
-      if (td !== 0) return td;
-      const ld = (b.upgradeLevel || 0) - (a.upgradeLevel || 0);
-      if (ld !== 0) return ld;
-      return (a.name || '').localeCompare(b.name || '');
-    });
-  }, [eligible, filterCategory]);
+
+    const parseSort = (s: string) => {
+      const parts = (s || '').split(':');
+      return { key: parts[0] || 'name', dir: parts[1] === 'desc' ? 'desc' : 'asc' };
+    };
+
+    const parsed = parseSort(sortOrder);
+    const asc = parsed.dir !== 'desc';
+
+    const sorted = base.slice();
+    if (parsed.key === 'name') {
+      sorted.sort((a, b) => {
+        const cmp = compareItemsInventory(a, b);
+        return asc ? cmp : -cmp;
+      });
+    } else if (parsed.key === 'upgrade') {
+      sorted.sort((a, b) => {
+        const cmp = (Number(a.upgradeLevel || 0) - Number(b.upgradeLevel || 0)) || (a.name || '').localeCompare(b.name || '');
+        return asc ? cmp : -cmp;
+      });
+    } else if (parsed.key === 'damage') {
+      const getDamage = (it: typeof base[0]) => it.damage ?? 0;
+      sorted.sort((a, b) => {
+        const cmp = (getDamage(a) - getDamage(b)) || (a.name || '').localeCompare(b.name || '');
+        return asc ? cmp : -cmp;
+      });
+    } else if (parsed.key === 'value') {
+      const getValue = (it: typeof base[0]) => it.value ?? 0;
+      sorted.sort((a, b) => {
+        const cmp = (getValue(a) - getValue(b)) || (a.name || '').localeCompare(b.name || '');
+        return asc ? cmp : -cmp;
+      });
+    } else {
+      // Fallback to inventory comparator
+      sorted.sort((a, b) => {
+        const cmp = compareItemsInventory(a, b);
+        return asc ? cmp : -cmp;
+      });
+    }
+
+    return sorted;
+  }, [eligible, filterCategory, sortOrder]);
+
+  // Search-filtered view (client-side, case-insensitive substring)
+  const visibleEligible = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    if (!q) return eligibleSorted;
+    return eligibleSorted.filter(i => (i.name || '').toLowerCase().includes(q));
+  }, [eligibleSorted, searchQuery]);
+
+  // If user searches and the previously-selected item is no longer visible, clear selection
+  useEffect(() => {
+    if (!searchQuery) return;
+    if (selectedId && !visibleEligible.some(i => i.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [searchQuery, visibleEligible, selectedId]);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
   const { characterLevel, showToast } = useAppContext();
@@ -232,6 +283,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
     }
 
     const { updated, cost } = upgradeSvc.applyUpgrade(selected);
+    
     if (gold < cost) {
       // Even if the player quickly clicked and didn't have enough gold for a subsequent upgrade,
       // restart the spark to provide consistent feedback that their click was registered visually
@@ -257,46 +309,44 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
     // Start spark + sounds and lock input until visual completes
     startSpark();
 
-    // Helper to update local items (mirroring App behavior)
-    const updateLocalItems = (prev: InventoryItem[], removed: typeof removedMaterials) => {
-        const next = [...prev];
-        removed.forEach(rm => {
-             const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
-             if (idx >= 0) {
-                 const exist = next[idx];
-                 const nextQ = (exist.quantity || 1) - rm.quantity;
-                 if (nextQ <= 0) next.splice(idx, 1);
-                 else next[idx] = { ...exist, quantity: nextQ };
-             }
-        });
-        return next;
-    };
-
     // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
     // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.
     if ((selected.quantity || 0) > 1) {
       const newId = `item_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
-      const upgradedSingle = { ...updated, id: newId, quantity: 1 } as InventoryItem;
-      const originalReduced = { ...selected, quantity: (selected.quantity || 1) - 1 } as InventoryItem;
+      const upgradedSingle = { ...updated, id: newId, quantity: 1, characterId: selected.characterId } as InventoryItem;
+      const originalReduced = { ...selected, quantity: (selected.quantity || 1) - 1, characterId: selected.characterId } as InventoryItem;
 
-      // Persist. Note: we treat originalReduced as 'updated' (quantity changed) and new upgraded as 'new'
       setGold(gold - cost);
       
-      (window as any).app?.handleGameUpdate?.({ 
-          updatedItems: [originalReduced], 
-          newItems: [{ ...upgradedSingle, __forceCreate: true }],
-          removedItems: removedMaterials
+      // Update local items state directly for immediate UI feedback
+      setItems(prev => {
+        let next = prev.map(item => {
+          if (item.id === selected.id) {
+            // Reduce the stack quantity
+            return originalReduced;
+          }
+          return item;
+        });
+        // Add the new upgraded single item
+        next.push(upgradedSingle);
+        // Remove materials if any
+        removedMaterials.forEach(rm => {
+          const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
+          if (idx >= 0) {
+            const exist = next[idx];
+            const nextQ = (exist.quantity || 1) - rm.quantity;
+            if (nextQ <= 0) {
+              next.splice(idx, 1);
+            } else {
+              next[idx] = { ...exist, quantity: nextQ };
+            }
+          }
+        });
+        return next;
       });
 
-      // Local update
-      setItems(prev => {
-          // Reflect stack split
-          const afterSplit = prev.map(i => i.id === selected.id ? originalReduced : i);
-          // Add new item
-          afterSplit.push(upgradedSingle);
-          // Remove materials
-          return updateLocalItems(afterSplit, removedMaterials);
-      });
+      // Focus the newly-created upgraded item so the player sees the result immediately
+      setSelectedId(upgradedSingle.id);
 
       showToast?.('Upgraded one item from the stack', 'success');
       return;
@@ -305,17 +355,36 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
     // Deduct gold and update single item
     setGold(gold - cost);
     
-    // Persist
-    (window as any).app?.handleGameUpdate?.({ 
-        updatedItems: [updated],
-        removedItems: removedMaterials
+    // Ensure characterId is preserved
+    const updatedWithCharId = { ...updated, characterId: selected.characterId } as InventoryItem;
+    
+    // Update the local items state directly for immediate UI feedback
+    // This is the authoritative update - setItems is passed from parent and updates App.tsx state
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id === selected.id) {
+          return updatedWithCharId;
+        }
+        return item;
+      });
+      // Also remove materials if any
+      removedMaterials.forEach(rm => {
+        const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
+        if (idx >= 0) {
+          const exist = next[idx];
+          const nextQ = (exist.quantity || 1) - rm.quantity;
+          if (nextQ <= 0) {
+            next.splice(idx, 1);
+          } else {
+            next[idx] = { ...exist, quantity: nextQ };
+          }
+        }
+      });
+      return next;
     });
 
-    // Local update
-    setItems(prev => {
-        const next = prev.map(i => i.id === updated.id ? { ...updated } : i);
-        return updateLocalItems(next, removedMaterials);
-    });
+    // Ensure the UI is focused on the upgraded item so the change is obvious
+    setSelectedId(updated.id);
     
     showToast?.('Upgrade successful', 'success');
   };
@@ -332,28 +401,67 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
 
         <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-0 overflow-hidden">
           {/* Left Column: Item List */}
-          <div className="md:col-span-4 lg:col-span-3 border-r border-skyrim-border/30 flex flex-col h-full bg-skyrim-dark/10">
+          <div className="md:col-span-4 lg:col-span-3 border-r border-skyrim-border/30 flex flex-col h-full min-h-0 bg-skyrim-dark/10">
             <div className="p-4 flex-shrink-0">
                <h3 className="text-sm text-skyrim-text mb-3 uppercase tracking-widest opacity-80 decoration-skyrim-gold underline underline-offset-4 decoration-2">Eligible Items</h3>
-               {/* Category filter */}
-               <div className="flex gap-1 text-xs bg-black/20 p-1 rounded-lg">
-                  {(['all', 'weapons', 'armor'] as const).map(cat => (
-                    <button 
-                      key={cat}
-                      data-testid={`filter-${cat}`}
-                      onClick={() => setFilterCategory(cat)} 
-                      className={`flex-1 py-1.5 rounded font-bold transition-all capitalize ${filterCategory === cat ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
+
+               {/* Search (client-side, simple substring) */}
+               <div className="relative mb-3">
+                 <input
+                   data-testid="blacksmith-search"
+                   aria-label="Search eligible items"
+                   value={searchQuery}
+                   onChange={e => setSearchQuery(e.target.value)}
+                   placeholder="Search items..."
+                   className="w-full bg-black/10 placeholder:opacity-60 text-sm text-skyrim-text rounded-md px-3 py-2 pr-10 border border-skyrim-border/50 focus:outline-none focus:border-skyrim-gold"
+                 />
+                 {searchQuery && (
+                   <button
+                     aria-label="Clear search"
+                     onClick={() => setSearchQuery('')}
+                     className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-white/5 rounded px-2 py-1 hover:bg-white/10"
+                   >
+                     ✕
+                   </button>
+                 )}
+               </div>
+
+               <div className="flex items-center gap-3">
+                 {/* Sort selector (matches Inventory/Shop behaviour) */}
+                 <div data-testid="blacksmith-sort" className="shrink min-w-0">
+                   <SortSelector
+                     currentSort={sortOrder}
+                     allowDirection={true}
+                     onSelect={(s) => setSortOrder(s)}
+                     options={[
+                       { id: 'name', label: 'Name' },
+                       { id: 'upgrade', label: 'Upgrade Level' },
+                       { id: 'damage', label: 'Damage' },
+                       { id: 'value', label: 'Value' }
+                     ]}
+                   />
+                 </div>
+
+                 {/* Category filter */}
+                 <div className="flex gap-1 text-xs bg-black/20 p-1 rounded-lg flex-1">
+                   {(['all', 'weapons', 'armor'] as const).map(cat => (
+                     <button 
+                       key={cat}
+                       data-testid={`filter-${cat}`}
+                       onClick={() => setFilterCategory(cat)} 
+                       className={`flex-1 py-1.5 rounded font-bold transition-all capitalize ${filterCategory === cat ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
+                     >
+                       {cat}
+                     </button>
+                   ))}
+                 </div>
                </div>
             </div>
 
-            <div dir="rtl" className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-0 custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+            <div dir="rtl" className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 pt-0 custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
               <div dir="ltr" className="space-y-2 pb-4">
               {/* Reserved gutter + RTL places the scrollbar on the LEFT; inner children preserve normal LTR layout */}
-              {eligibleSorted.map((it) => {
+              {visibleEligible.map((it) => {
                 return (
                   <button
                     aria-pressed={selectedId === it.id}
@@ -374,7 +482,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                           <div className="text-xs text-stone-500 truncate flex items-center justify-between mt-0.5">
                               <span>Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</span>
                               <div className="flex flex-col items-end gap-1">
-                                {(it as any).rarity ? <span className="text-[10px] uppercase tracking-wider text-stone-400">{String((it as any).rarity)}</span> : null}
+
                                 {selectedId === it.id && <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">Selected</span>}
                               </div>
                           </div>
@@ -385,8 +493,10 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                 );
               })}
 
-              {eligibleSorted.length === 0 && (
-                <div className="text-gray-500 italic p-4 text-center text-sm border border-dashed border-skyrim-border/30 rounded">No upgradable items found.</div>
+              {visibleEligible.length === 0 && (
+                <div className="text-gray-500 italic p-4 text-center text-sm border border-dashed border-skyrim-border/30 rounded">
+                  {searchQuery ? `No items match "${searchQuery.trim()}".` : 'No upgradable items found.'}
+                </div>
               )}
               </div>
             </div>
