@@ -121,6 +121,17 @@ import { getDefaultSlotForItem } from './components/EquipmentHUD';
 import BonfireMenu from './components/BonfireMenu';
 import type { RestOptions } from './components/SurvivalModals';
 import { filterDuplicateTransactions, getTransactionLedger } from './services/transactionLedger';
+import AchievementsModal from './components/AchievementsModal';
+import AchievementNotification from './components/AchievementNotification';
+import { 
+  checkAchievements, 
+  collectAchievementReward, 
+  getDefaultAchievementStats,
+  ACHIEVEMENTS,
+  type AchievementState,
+  type AchievementStats,
+  type Achievement
+} from './services/achievementsService';
 import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
@@ -144,6 +155,10 @@ const NEED_RATES = {
   thirstPerMinute: 1 / 120,
   fatiguePerMinute: 1 / 90,
 } as const;
+
+// Combat time scaling: 1 real second in combat = X in-game minutes
+// E.g., 10 means 1 minute of real combat = 10 minutes of in-game time
+const COMBAT_TIME_SCALE = 10;
 
 const calcNeedFromTime = (minutes: number, perMinute: number) => {
   if (!Number.isFinite(minutes) || minutes <= 0) return 0;
@@ -629,6 +644,15 @@ const App: React.FC = () => {
   const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
   const [companionDialogue, setCompanionDialogue] = useState<null | any>(null);
 
+  // Achievement system state
+  const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
+  const [achievementState, setAchievementState] = useState<AchievementState>({ 
+    unlockedAchievements: {}, 
+    stats: getDefaultAchievementStats() 
+  });
+  const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
+  const achievementNotificationQueueRef = useRef<Achievement[]>([]);
+
   // Toast notification helper
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
     // (no-change) helper kept here for context; Bonfire uses same toast flow
@@ -820,6 +844,55 @@ const App: React.FC = () => {
       } catch { /* ignore */ }
     }
   }, [currentUser?.uid, currentCharacterId]);
+
+  // Achievement system: load/save from localStorage per character
+  useEffect(() => {
+    if (!currentUser?.uid || !currentCharacterId) return;
+    const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Merge with default stats to ensure new stat fields are present
+        setAchievementState({
+          unlockedAchievements: parsed.unlockedAchievements || {},
+          stats: { ...getDefaultAchievementStats(), ...(parsed.stats || {}) }
+        });
+      } else {
+        // Reset to defaults when switching characters without saved achievements
+        setAchievementState({ unlockedAchievements: {}, stats: getDefaultAchievementStats() });
+      }
+    } catch (err) {
+      console.warn('Failed to load achievements:', err);
+      setAchievementState({ unlockedAchievements: {}, stats: getDefaultAchievementStats() });
+    }
+  }, [currentUser?.uid, currentCharacterId]);
+
+  // Save achievements when state changes
+  useEffect(() => {
+    if (!currentUser?.uid || !currentCharacterId) return;
+    const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
+    try {
+      localStorage.setItem(key, JSON.stringify(achievementState));
+    } catch (err) {
+      console.warn('Failed to save achievements:', err);
+    }
+  }, [achievementState, currentUser?.uid, currentCharacterId]);
+
+  // Achievement notification queue handler - show one at a time
+  useEffect(() => {
+    if (achievementNotification === null && achievementNotificationQueueRef.current.length > 0) {
+      const next = achievementNotificationQueueRef.current.shift();
+      if (next) {
+        setAchievementNotification(next);
+        // Play achievement sound
+        audioService.playSoundEffect('quest_complete');
+      }
+    }
+  }, [achievementNotification]);
+
+  // Check achievements and update stats
+  // (Moved below activeCharacter definition to avoid ReferenceError)
 
   // Ensure TransactionLedger knows which character is active so it can record transactions
   useEffect(() => {
@@ -1281,6 +1354,153 @@ const App: React.FC = () => {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Helper to get active data
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const activeCharacter = characters.find(c => c.id === currentCharacterId);
+
+  const updateCharacter = useCallback((field: keyof Character, value: any) => {
+      // If someone directly sets `level`, treat it as a level-up when increasing the level
+      if (field === 'level') {
+        setCharacters(prev => prev.map(c => {
+          if (c.id !== currentCharacterId) return c;
+          const oldLevel = c.level || 0;
+          const newLevel = Number(value) || 0;
+          if (newLevel > oldLevel) {
+            // Default choice on manual level bump: increase health and restore all vitals
+            return applyLevelUpToCharacter(c, newLevel, c.experience || 0, 'health');
+          }
+          return { ...c, level: newLevel };
+        }));
+      } else {
+        setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
+      }
+
+      // If we're updating learnedSpells, ensure the local storage copy is kept in sync so
+      // learned spells survive reloads even before a cloud save occurs.
+      try {
+        if (field === 'learnedSpells' && currentCharacterId && Array.isArray(value)) {
+          const existing = getLearnedSpellIds(currentCharacterId);
+          const union = Array.from(new Set([...(existing || []), ...value]));
+          // Persist to local storage (silent on failure)
+          try { storage.setItem(`aetherius:spells:${currentCharacterId}`, JSON.stringify(union)); } catch (e) { /* ignore */ }
+        }
+      } catch (e) {
+        // ignore storage sync failures
+      }
+
+      if (currentCharacterId) {
+        setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
+      }
+  }, [currentCharacterId]);
+
+  // Check achievements and update stats
+  const updateAchievementStats = useCallback((updates: Partial<AchievementStats>) => {
+    if (!activeCharacter) return;
+    
+    setAchievementState(prev => {
+      const newStats = { ...prev.stats };
+      
+      // Apply numeric updates (add to existing values)
+      Object.entries(updates).forEach(([key, value]) => {
+        if (typeof value === 'number' && typeof newStats[key as keyof AchievementStats] === 'number') {
+          (newStats as any)[key] = (newStats[key as keyof AchievementStats] as number) + value;
+        } else if (typeof value === 'string' && Array.isArray(newStats[key as keyof AchievementStats])) {
+          // For arrays like locationsVisited, add unique values
+          const arr = newStats[key as keyof AchievementStats] as string[];
+          if (!arr.includes(value)) {
+            (newStats as any)[key] = [...arr, value];
+          }
+        } else if (Array.isArray(value) && Array.isArray(newStats[key as keyof AchievementStats])) {
+          // Merge arrays
+          const existing = newStats[key as keyof AchievementStats] as string[];
+          const merged = [...new Set([...existing, ...value])];
+          (newStats as any)[key] = merged;
+        }
+      });
+
+      // Check for newly unlocked achievements
+      const { newlyUnlocked, updatedState } = checkAchievements(
+        { ...prev, stats: newStats },
+        activeCharacter
+      );
+
+      // Queue notifications for newly unlocked achievements
+      if (newlyUnlocked.length > 0) {
+        achievementNotificationQueueRef.current.push(...newlyUnlocked);
+        // Trigger notification display if not already showing one
+        if (achievementNotification === null) {
+          const next = achievementNotificationQueueRef.current.shift();
+          if (next) {
+            setAchievementNotification(next);
+            audioService.playSoundEffect('quest_complete');
+          }
+        }
+      }
+
+      return updatedState;
+    });
+  }, [activeCharacter, achievementNotification]);
+
+  // Handle collecting achievement reward
+  const handleCollectAchievementReward = useCallback((achievementId: string) => {
+    if (!activeCharacter) return;
+    
+    const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
+    if (!achievement) return;
+
+    setAchievementState(prev => {
+      const unlocked = prev.unlockedAchievements[achievementId];
+      if (!unlocked || unlocked.collected) return prev;
+      
+      return {
+        ...prev,
+        unlockedAchievements: {
+          ...prev.unlockedAchievements,
+          [achievementId]: { ...unlocked, collected: true }
+        }
+      };
+    });
+
+    // Apply rewards
+    const { reward } = achievement;
+    if (reward.gold) {
+      updateCharacter('gold', (activeCharacter.gold || 0) + reward.gold);
+      showToast(`+${reward.gold} gold`, 'success', { color: '#ffd700', stat: 'gold', amount: reward.gold });
+    }
+    if (reward.xp) {
+      updateCharacter('experience', (activeCharacter.experience || 0) + reward.xp);
+      showToast(`+${reward.xp} XP`, 'success', { color: '#9966ff', stat: 'xp', amount: reward.xp });
+    }
+    if (reward.perkPoint) {
+      const currentPoints = activeCharacter.perkPoints || 0;
+      updateCharacter('perkPoints', currentPoints + reward.perkPoint);
+      showToast(`+${reward.perkPoint} Perk Point`, 'success', { color: '#00ff88' });
+    }
+    if (reward.title) {
+      showToast(`Earned title: ${reward.title}`, 'success', { color: '#00ffff' });
+      // Could store titles in character or achievements state
+    }
+    if (reward.item) {
+      const newItem: InventoryItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        characterId: currentCharacterId || '',
+        name: reward.item.name,
+        type: reward.item.type,
+        rarity: reward.item.rarity || 'rare',
+        quantity: 1,
+        description: `Achievement reward: ${achievement.name}`,
+        createdAt: Date.now()
+      };
+      setItems(prev => [...prev, newItem]);
+      showToast(`Received: ${reward.item.name}`, 'success');
+    }
+  }, [activeCharacter, currentCharacterId, updateCharacter, showToast]);
+
+  // Dismiss achievement notification and show next in queue
+  const dismissAchievementNotification = useCallback(() => {
+    setAchievementNotification(null);
   }, []);
 
   // Initialize audio service on first user interaction
@@ -2089,40 +2309,7 @@ const App: React.FC = () => {
       }
   };
 
-  const updateCharacter = (field: keyof Character, value: any) => {
-      // If someone directly sets `level`, treat it as a level-up when increasing the level
-      if (field === 'level') {
-        setCharacters(prev => prev.map(c => {
-          if (c.id !== currentCharacterId) return c;
-          const oldLevel = c.level || 0;
-          const newLevel = Number(value) || 0;
-          if (newLevel > oldLevel) {
-            // Default choice on manual level bump: increase health and restore all vitals
-            return applyLevelUpToCharacter(c, newLevel, c.experience || 0, 'health');
-          }
-          return { ...c, level: newLevel };
-        }));
-      } else {
-        setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
-      }
 
-      // If we're updating learnedSpells, ensure the local storage copy is kept in sync so
-      // learned spells survive reloads even before a cloud save occurs.
-      try {
-        if (field === 'learnedSpells' && currentCharacterId && Array.isArray(value)) {
-          const existing = getLearnedSpellIds(currentCharacterId);
-          const union = Array.from(new Set([...(existing || []), ...value]));
-          // Persist to local storage (silent on failure)
-          try { storage.setItem(`aetherius:spells:${currentCharacterId}`, JSON.stringify(union)); } catch (e) { /* ignore */ }
-        }
-      } catch (e) {
-        // ignore storage sync failures
-      }
-
-      if (currentCharacterId) {
-        setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
-      }
-  };
 
   const updateStoryChapter = (updatedChapter: StoryChapter) => {
       setStoryChapters(prev => prev.map(c => c.id === updatedChapter.id ? updatedChapter : c));
@@ -2715,8 +2902,7 @@ const App: React.FC = () => {
     return best;
   };
   
-  // Helper to get active data
-  const activeCharacter = characters.find(c => c.id === currentCharacterId);
+
 
   const getCharacterItems = () => items.filter((i: any) => i.characterId === currentCharacterId);
   
@@ -4251,6 +4437,11 @@ const App: React.FC = () => {
       statusEffects,
       companions,
       openCompanions,
+      // Achievements system
+      openAchievements: () => setAchievementsModalOpen(true),
+      achievementState,
+      updateAchievementStats,
+      onCollectAchievementReward: handleCollectAchievementReward,
       colorTheme,
       setColorTheme,
       showQuantityControls,
@@ -4279,6 +4470,15 @@ const App: React.FC = () => {
         onConfirm={(perkIds: string[]) => { applyPerks(perkIds); setPerkModalOpen(false); }}
         onForceUnlock={(id: string) => { forceUnlockPerk(id); setPerkModalOpen(false); }}
         onRefundAll={() => { refundAllPerks(); setPerkModalOpen(false); }}
+      />
+
+      {/* Achievements Modal */}
+      <AchievementsModal
+        open={achievementsModalOpen}
+        onClose={() => setAchievementsModalOpen(false)}
+        achievementState={achievementState}
+        onCollectReward={handleCollectAchievementReward}
+        character={activeCharacter}
       />
 
       <CompanionsModal
@@ -4640,8 +4840,11 @@ const App: React.FC = () => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
               
+              // Scale combat time: real minutes * COMBAT_TIME_SCALE = in-game minutes
+              const scaledTimeAdvance = timeAdvanceMinutes ? Math.round(timeAdvanceMinutes * COMBAT_TIME_SCALE) : undefined;
+              
               // Debug log to verify rewards are being received
-              console.log('[App.onCombatEnd] Combat ended:', { result, rewards, xp: rewards?.xp, gold: rewards?.gold });
+              console.log('[App.onCombatEnd] Combat ended:', { result, rewards, xp: rewards?.xp, gold: rewards?.gold, realMinutes: timeAdvanceMinutes, scaledMinutes: scaledTimeAdvance });
               
               if (result === 'victory' && rewards) {
                 // Debug: log current in-memory character before applying defensive local-apply
@@ -4682,7 +4885,7 @@ const App: React.FC = () => {
                     currentMagicka: finalVitals.magicka - (activeCharacter.currentVitals?.currentMagicka ?? activeCharacter.stats.magicka),
                     currentStamina: finalVitals.stamina - (activeCharacter.currentVitals?.currentStamina ?? activeCharacter.stats.stamina)
                   } : undefined,
-                  timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
+                  timeAdvanceMinutes: scaledTimeAdvance
                 });
 
                 // Debug: after a short delay, print the in-memory character snapshot and recent ledger entries
@@ -4767,7 +4970,7 @@ const App: React.FC = () => {
                     currentHealth: -(activeCharacter.currentVitals?.currentHealth ?? activeCharacter.stats.health) + 1
                   }
                   ,
-                  timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
+                  timeAdvanceMinutes: scaledTimeAdvance
                 });
               } else if (result === 'fled') {
                 handleGameUpdate({
@@ -4780,7 +4983,7 @@ const App: React.FC = () => {
                     currentMagicka: finalVitals.magicka - (activeCharacter.currentVitals?.currentMagicka ?? activeCharacter.stats.magicka),
                     currentStamina: finalVitals.stamina - (activeCharacter.currentVitals?.currentStamina ?? activeCharacter.stats.stamina)
                   } : undefined,
-                  timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
+                  timeAdvanceMinutes: scaledTimeAdvance
                 });
               } else if (result === 'surrendered') {
                 handleGameUpdate({
@@ -4793,7 +4996,7 @@ const App: React.FC = () => {
                     currentMagicka: finalVitals.magicka - (activeCharacter.currentVitals?.currentMagicka ?? activeCharacter.stats.magicka),
                     currentStamina: finalVitals.stamina - (activeCharacter.currentVitals?.currentStamina ?? activeCharacter.stats.stamina)
                   } : undefined,
-                  timeAdvanceMinutes: timeAdvanceMinutes ?? undefined
+                  timeAdvanceMinutes: scaledTimeAdvance
                 });
               }
 
@@ -4908,6 +5111,17 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
         {/* Level Up Notifications (Skyrim-style) */}
         <LevelUpNotificationOverlay notifications={levelUpNotifications} onDismiss={handleLevelUpNotificationDismiss} />
+        {/* Achievement Notification Banner */}
+        {achievementNotification && (
+          <AchievementNotification
+            achievement={achievementNotification}
+            onDismiss={dismissAchievementNotification}
+            onCollect={() => {
+              handleCollectAchievementReward(achievementNotification.id);
+              dismissAchievementNotification();
+            }}
+          />
+        )}
         {/* Update Notification */}
         <UpdateNotification position="bottom" />
 

@@ -294,17 +294,48 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
 
     // Deduct materials if requirements are met
     const reqs = getRequirementsForNextUpgrade(selected);
-    const removedMaterials: { name: string; quantity: number }[] = [];
+    const removedMaterials: { itemId: string; name: string; quantity: number }[] = [];
     if (reqs && reqs.length > 0) {
        reqs.forEach(r => {
            // Find matching item to get name strictly (prioritize ID match, then filename slug match)
            const match = items.find(i => i.id === r.itemId) || 
                          items.find(i => (i.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_') === r.itemId);
            if (match) {
-               removedMaterials.push({ name: match.name, quantity: r.quantity || 1 });
+               removedMaterials.push({ itemId: r.itemId, name: match.name, quantity: r.quantity || 1 });
            }
        });
     }
+
+    // Helper to deduct materials from inventory array (handles multiple stacks)
+    const deductMaterials = (inv: InventoryItem[]): InventoryItem[] => {
+      let result = [...inv];
+      removedMaterials.forEach(rm => {
+        let remaining = rm.quantity;
+        // Find all matching items (by ID or slug)
+        for (let i = 0; i < result.length && remaining > 0; i++) {
+          const it = result[i];
+          const matchById = it.id === rm.itemId;
+          const matchBySlug = (it.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_') === rm.itemId;
+          const matchByName = (it.name || '').trim().toLowerCase() === rm.name.toLowerCase();
+          
+          if (matchById || matchBySlug || matchByName) {
+            const available = it.quantity || 1;
+            const toDeduct = Math.min(available, remaining);
+            const newQty = available - toDeduct;
+            remaining -= toDeduct;
+            
+            if (newQty <= 0) {
+              // Remove the item entirely
+              result.splice(i, 1);
+              i--; // Adjust index since we removed an item
+            } else {
+              result[i] = { ...it, quantity: newQty };
+            }
+          }
+        }
+      });
+      return result;
+    };
 
     // Start spark + sounds and lock input until visual completes
     startSpark();
@@ -329,19 +360,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
         });
         // Add the new upgraded single item
         next.push(upgradedSingle);
-        // Remove materials if any
-        removedMaterials.forEach(rm => {
-          const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
-          if (idx >= 0) {
-            const exist = next[idx];
-            const nextQ = (exist.quantity || 1) - rm.quantity;
-            if (nextQ <= 0) {
-              next.splice(idx, 1);
-            } else {
-              next[idx] = { ...exist, quantity: nextQ };
-            }
-          }
-        });
+        // Deduct materials using the helper
+        next = deductMaterials(next);
         return next;
       });
 
@@ -361,25 +381,14 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
     // Update the local items state directly for immediate UI feedback
     // This is the authoritative update - setItems is passed from parent and updates App.tsx state
     setItems(prev => {
-      const next = prev.map(item => {
+      let next = prev.map(item => {
         if (item.id === selected.id) {
           return updatedWithCharId;
         }
         return item;
       });
-      // Also remove materials if any
-      removedMaterials.forEach(rm => {
-        const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
-        if (idx >= 0) {
-          const exist = next[idx];
-          const nextQ = (exist.quantity || 1) - rm.quantity;
-          if (nextQ <= 0) {
-            next.splice(idx, 1);
-          } else {
-            next[idx] = { ...exist, quantity: nextQ };
-          }
-        }
-      });
+      // Deduct materials using the helper
+      next = deductMaterials(next);
       return next;
     });
 

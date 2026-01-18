@@ -84,6 +84,7 @@ const ActionBar: React.FC = () => {
     colorTheme,
     setColorTheme,
     openCompanions,
+    openAchievements,
     weatherEffect,
     setWeatherEffect,
     weatherIntensity,
@@ -831,6 +832,27 @@ const ActionBar: React.FC = () => {
               </button>
               <p className="text-[10px] text-gray-500 mt-2 italic text-center">
                 Recruit, equip and manage your adventuring party
+              </p>
+            </div>
+
+            {/* Achievements */}
+            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-skyrim-gold">🏆</span>
+                <span className="text-sm font-bold text-skyrim-gold uppercase">Achievements</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  openAchievements();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-amber-600 bg-amber-700/20 text-amber-200 hover:bg-amber-700/40 transition-colors"
+              >
+                <span>🏆</span>
+                <span>View Achievements</span>
+              </button>
+              <p className="text-[10px] text-gray-500 mt-2 italic text-center">
+                Track your progress and collect rewards
               </p>
             </div>
 

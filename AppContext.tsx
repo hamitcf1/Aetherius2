@@ -4,6 +4,7 @@ import type { RestOptions } from './components/SurvivalModals';
 import type { ShopItem } from './components/ShopModal';
 import type { SnowSettings } from './components/SnowEffect';
 import type { UserSettings } from './services/firestore';
+import type { AchievementState, AchievementStats } from './services/achievementsService';
 
 export type WeatherEffectType = 'snow' | 'rain' | 'sandstorm' | 'none';
 export type WeatherIntensity = SnowSettings['intensity'];
@@ -63,6 +64,11 @@ export interface AppContextType {
   setEffectsEnabled: (v: boolean) => void;
   // Companions management
   openCompanions: () => void;
+  // Achievements system
+  openAchievements: () => void;
+  achievementState: AchievementState;
+  updateAchievementStats: (updates: Partial<AchievementStats>) => void;
+  onCollectAchievementReward: (achievementId: string) => void;
   // User settings (Firebase persistent)
   userSettings: UserSettings | null;
   updateUserSettings: ((updates: Partial<UserSettings>) => void) | null;

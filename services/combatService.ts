@@ -44,6 +44,24 @@ export const getCombatPerkBonus = (character: Character | undefined, effectKey: 
 };
 
 /**
+ * Get the total bonus for stat perks (health, magicka, stamina).
+ * Sums up all ranks * effect amount for perks with effect type 'stat'.
+ */
+export const getStatPerkBonus = (character: Character | undefined, statKey: string): number => {
+  if (!character || !character.perks) return 0;
+  
+  let totalBonus = 0;
+  for (const perk of character.perks) {
+    const def = PERK_DEFINITIONS.find(d => d.id === perk.id);
+    if (def && def.effect && def.effect.type === 'stat' && def.effect.key === statKey) {
+      const rank = perk.rank || 1;
+      totalBonus += def.effect.amount * rank;
+    }
+  }
+  return totalBonus;
+};
+
+/**
  * Check if a character has a specific perk (by id) with at least 1 rank.
  */
 export const hasPerk = (character: Character | undefined, perkId: string): boolean => {
@@ -502,13 +520,31 @@ export const calculatePlayerCombatStats = (
   // Generate abilities based on skills and equipment
   const abilities = generatePlayerAbilities(character, equippedItems);
 
+  // Apply stat perk bonuses (Toughness, Vitality for health; Arcane Focus, Mana Mastery for magicka; Endurance, Fleet Foot for stamina)
+  const healthPerkBonus = getStatPerkBonus(character, 'health');
+  const magickaPerkBonus = getStatPerkBonus(character, 'magicka');
+  const staminaPerkBonus = getStatPerkBonus(character, 'stamina');
+
+  const baseHealth = character.stats.health;
+  const baseMagicka = character.stats.magicka;
+  const baseStamina = character.stats.stamina;
+
+  const maxHealth = baseHealth + healthPerkBonus;
+  const maxMagicka = baseMagicka + magickaPerkBonus;
+  const maxStamina = baseStamina + staminaPerkBonus;
+
+  // Scale current vitals proportionally if max stats increased
+  const currentHealth = Math.min(maxHealth, character.currentVitals?.currentHealth ?? maxHealth);
+  const currentMagicka = Math.min(maxMagicka, character.currentVitals?.currentMagicka ?? maxMagicka);
+  const currentStamina = Math.min(maxStamina, character.currentVitals?.currentStamina ?? maxStamina);
+
   return {
-    maxHealth: character.stats.health,
-    currentHealth: character.currentVitals?.currentHealth ?? character.stats.health,
-    maxMagicka: character.stats.magicka,
-    currentMagicka: character.currentVitals?.currentMagicka ?? character.stats.magicka,
-    maxStamina: character.stats.stamina,
-    currentStamina: character.currentVitals?.currentStamina ?? character.stats.stamina,
+    maxHealth,
+    currentHealth,
+    maxMagicka,
+    currentMagicka,
+    maxStamina,
+    currentStamina,
     armor,
     weaponDamage,
     critChance,
@@ -2030,6 +2066,9 @@ export const executePlayerAction = (
         newState.result = 'fled';
         newState.active = false;
         narrative = 'You successfully escape from combat!';
+        // Calculate elapsed combat time for world clock sync
+        const fleeStart = newState.combatStartTime || Date.now();
+        newState.combatElapsedSec = Math.max(0, Math.floor((Date.now() - fleeStart) / 1000));
       } else {
         narrative = 'You failed to escape! The enemies block your path.';
       }
@@ -2051,6 +2090,9 @@ export const executePlayerAction = (
       newState.result = 'surrendered';
       newState.active = false;
       narrative = 'You lay down your arms and surrender...';
+      // Calculate elapsed combat time for world clock sync
+      const surrenderStart = newState.combatStartTime || Date.now();
+      newState.combatElapsedSec = Math.max(0, Math.floor((Date.now() - surrenderStart) / 1000));
       pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',

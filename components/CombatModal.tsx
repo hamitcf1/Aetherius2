@@ -24,7 +24,8 @@ import {
   advanceTurn,
   applyTurnRegen,
   checkCombatEnd,
-  combatHasActiveSummon
+  combatHasActiveSummon,
+  getCombatPerkBonus
 } from '../services/combatService';
 import { LootModal } from './LootModal';
 import { populatePendingLoot, finalizeLoot } from '../services/lootService';

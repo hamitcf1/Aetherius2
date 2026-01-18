@@ -358,17 +358,20 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
     // Sort based on sortOrder with optional direction support (e.g., 'name:asc' or 'name:desc')
     const [key, dir] = (sortOrder || 'name:asc').split(':');
     
-    // Rarity order for sorting (higher = better)
+    // Rarity order for sorting: no rarity -> common -> uncommon -> rare -> mythic -> epic -> legendary
     const RARITY_ORDER: Record<string, number> = {
+      '': 0,
+      'none': 0,
       'common': 1,
       'uncommon': 2,
       'rare': 3,
-      'epic': 4,
-      'legendary': 5,
-      'daedric': 6,
-      'artifact': 7
+      'mythic': 4,
+      'epic': 5,
+      'legendary': 6,
+      'daedric': 7,
+      'artifact': 8
     };
-    const getRarityValue = (it: InventoryItem) => RARITY_ORDER[(it.rarity || 'common').toLowerCase()] || 0;
+    const getRarityValue = (it: InventoryItem) => RARITY_ORDER[(it.rarity || '').toLowerCase()] ?? 0;
     
     return uniqueItems.sort((a, b) => {
       const asc = dir !== 'desc';
