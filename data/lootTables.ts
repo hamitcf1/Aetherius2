@@ -18,7 +18,10 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
     { id: 'hum_gold_small', name: 'Copper Coins', type: 'misc', description: 'Small pouch of coins.', weight: 30, minQty: 5, maxQty: 25, rarity: 'common' },
     { id: 'hum_health_potion', name: 'Minor Health Potion', type: 'potion', description: 'Restores a little health.', weight: 8, minQty: 1, maxQty: 1, rarity: 'common' },
     { id: 'hum_leather', name: 'Leather Scraps', type: 'misc', weight: 15, minQty: 1, maxQty: 3, rarity: 'common' },
+    { id: 'leather_strip', name: 'Leather Strip', type: 'misc', weight: 12, minQty: 1, maxQty: 3, rarity: 'common' },
     // New mid-tier drops (appear on higher-level humanoids / bandit captains)
+    { id: 'mithril_ingot', name: 'Mithril Ingot', type: 'misc', description: 'Rare silvery metal.', weight: 2, minQty: 1, maxQty: 1, rarity: 'rare' },
+
     { id: 'honed_steel_longsword', name: 'Honed Steel Longsword', type: 'weapon', description: 'A serviceable longsword found on veteran fighters.', weight: 2, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'spiked_buckler', name: 'Spiked Buckler', type: 'apparel', description: 'A compact shield used by skirmishers.', weight: 3, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'hunter_cloak', name: "Hunter's Cloak", type: 'apparel', description: 'A rugged cloak dropped by forest hunters.', weight: 4, minQty: 1, maxQty: 1, rarity: 'common' },
@@ -45,7 +48,9 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
   ],
   daedra: [
     { id: 'dae_essence', name: 'Daedric Soul Fragment', type: 'misc', weight: 20, minQty: 1, maxQty: 1, rarity: 'uncommon' },
+    { id: 'ebony_ingot', name: 'Ebony Ingot', type: 'misc', weight: 5, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'dae_uncommon', name: 'Imbued Shard', type: 'misc', weight: 10, minQty: 1, maxQty: 2, rarity: 'rare' },
+    { id: 'daedric_core', name: 'Daedric Core', type: 'misc', description: 'Pulsing core of a daedra.', weight: 2, minQty: 1, maxQty: 1, rarity: 'epic' },
     { id: 'dae_rare', name: 'Daedric Relic', type: 'misc', weight: 2, minQty: 1, maxQty: 1, rarity: 'epic' }
   ],
   dragon: [
@@ -55,7 +60,9 @@ export const LOOT_TABLES: Record<string, LootTableEntry[]> = {
   ],
   automaton: [
     { id: 'aut_gear', name: 'Mechanical Gear', type: 'misc', weight: 30, minQty: 1, maxQty: 4, rarity: 'common' },
+    { id: 'metal_scrap', name: 'Metal Scrap', type: 'misc', weight: 25, minQty: 1, maxQty: 3, rarity: 'common' },
     { id: 'aut_metal', name: 'Refined Metal', type: 'misc', weight: 20, minQty: 1, maxQty: 3, rarity: 'uncommon' },
+    { id: 'mithril_ingot', name: 'Mithril Ingot', type: 'misc', weight: 4, minQty: 1, maxQty: 1, rarity: 'uncommon' },
     { id: 'aut_core', name: 'Power Core', type: 'misc', weight: 3, minQty: 1, maxQty: 1, rarity: 'rare' }
   ]
 };

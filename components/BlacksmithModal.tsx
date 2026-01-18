@@ -2,8 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
 import type { ShopItem } from './ShopModal';
-import upgradeSvc, { getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade, getItemBaseAndBonus } from '../services/upgradeService';
-import { Sword, Shield, Coins } from 'lucide-react';
+import upgradeSvc, { countMaterialInInventory, getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade, getItemBaseAndBonus } from '../services/upgradeService';
+import { Sword, Shield, Coins, Check } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import { audioService } from '../services/audioService';
@@ -131,7 +131,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   items: InventoryItem[];
-  setItems: (items: InventoryItem[]) => void;
+  setItems: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
   gold: number;
   setGold: (g: number) => void;
   // Current shop stock (optional). When provided, certain upgrades will require materials
@@ -174,7 +174,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   // upgrades here (keeps behavior backwards-compatible) but the UI will still
   // surface explicit requirements when present on the item.
   const nextUpgradeRequirements = selected ? getRequirementsForNextUpgrade(selected) : undefined;
-  const shopRequirementsMet = !nextUpgradeRequirements || nextUpgradeRequirements.every(r => (shopItems || []).some(si => si.id === r.itemId));
+  const inventoryRequirementsMet = !nextUpgradeRequirements || nextUpgradeRequirements.every(r => countMaterialInInventory(items, r.itemId) >= (r.quantity || 1));
 
   const startSpark = () => {
     // Clear any existing timeout so repeated starts reset the timer cleanly
@@ -214,11 +214,11 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
       return;
     }
 
-    // Respect shop-material requirements when a shop context is provided.
-    if (!upgradeSvc.canUpgrade(selected, { shopItemIds: shopItems?.map(s => s.id) })) {
+    // Check material requirements in inventory.
+    if (!upgradeSvc.canUpgrade(selected, { inventory: items })) {
       const reqs = getRequirementsForNextUpgrade(selected);
-      if (reqs && reqs.length > 0 && !(shopItems && shopItems.length > 0)) {
-        showToast?.('This upgrade requires specific materials that are not available in the current shop', 'warning');
+      if (reqs && reqs.length > 0) {
+        showToast?.('You are missing required materials for this upgrade', 'warning');
       } else {
         showToast?.('Item cannot be upgraded further', 'warning');
       }
@@ -240,8 +240,37 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
       return;
     }
 
+    // Deduct materials if requirements are met
+    const reqs = getRequirementsForNextUpgrade(selected);
+    const removedMaterials: { name: string; quantity: number }[] = [];
+    if (reqs && reqs.length > 0) {
+       reqs.forEach(r => {
+           // Find matching item to get name strictly (prioritize ID match, then filename slug match)
+           const match = items.find(i => i.id === r.itemId) || 
+                         items.find(i => (i.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_') === r.itemId);
+           if (match) {
+               removedMaterials.push({ name: match.name, quantity: r.quantity || 1 });
+           }
+       });
+    }
+
     // Start spark + sounds and lock input until visual completes
     startSpark();
+
+    // Helper to update local items (mirroring App behavior)
+    const updateLocalItems = (prev: InventoryItem[], removed: typeof removedMaterials) => {
+        const next = [...prev];
+        removed.forEach(rm => {
+             const idx = next.findIndex(it => (it.name || '').trim().toLowerCase() === rm.name.toLowerCase());
+             if (idx >= 0) {
+                 const exist = next[idx];
+                 const nextQ = (exist.quantity || 1) - rm.quantity;
+                 if (nextQ <= 0) next.splice(idx, 1);
+                 else next[idx] = { ...exist, quantity: nextQ };
+             }
+        });
+        return next;
+    };
 
     // Handle stack splitting: if the selected item is part of a stack (quantity > 1), we should
     // decrement the original stack and create a unique upgraded copy instead of upgrading the whole stack.
@@ -250,66 +279,100 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
       const upgradedSingle = { ...updated, id: newId, quantity: 1 } as InventoryItem;
       const originalReduced = { ...selected, quantity: (selected.quantity || 1) - 1 } as InventoryItem;
 
-      // Persist via global handler only (avoid local double-insert).
+      // Persist. Note: we treat originalReduced as 'updated' (quantity changed) and new upgraded as 'new'
       setGold(gold - cost);
-      (window as any).app?.handleGameUpdate?.({ updatedItems: [originalReduced], newItems: [{ ...upgradedSingle, __forceCreate: true }] });
+      
+      (window as any).app?.handleGameUpdate?.({ 
+          updatedItems: [originalReduced], 
+          newItems: [{ ...upgradedSingle, __forceCreate: true }],
+          removedItems: removedMaterials
+      });
+
+      // Local update
+      setItems(prev => {
+          // Reflect stack split
+          const afterSplit = prev.map(i => i.id === selected.id ? originalReduced : i);
+          // Add new item
+          afterSplit.push(upgradedSingle);
+          // Remove materials
+          return updateLocalItems(afterSplit, removedMaterials);
+      });
+
       showToast?.('Upgraded one item from the stack', 'success');
       return;
     }
 
     // Deduct gold and update single item
     setGold(gold - cost);
-    const next = items.map(i => i.id === updated.id ? { ...updated } : i);
-    setItems(next);
-    // Persist by id to avoid name-merge behavior
-    (window as any).app?.handleGameUpdate?.({ updatedItems: [updated] });
+    
+    // Persist
+    (window as any).app?.handleGameUpdate?.({ 
+        updatedItems: [updated],
+        removedItems: removedMaterials
+    });
+
+    // Local update
+    setItems(prev => {
+        const next = prev.map(i => i.id === updated.id ? { ...updated } : i);
+        return updateLocalItems(next, removedMaterials);
+    });
+    
     showToast?.('Upgrade successful', 'success');
   };
 
   return (
     <ModalWrapper open={open} onClose={onClose} zIndex="z-[80]">
-      <div className="bg-skyrim-paper border-2 border-skyrim-border rounded-lg p-4 pr-6 sm:p-6 sm:pr-8 w-full max-w-[920px] h-[min(92vh,calc(100vh-2rem))] sm:max-h-[80vh] overflow-auto" style={{ scrollbarGutter: 'stable both-edges' as any }}>
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-skyrim-paper border-2 border-skyrim-border rounded-lg p-0 w-full max-w-7xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="flex justify-between items-center p-6 pb-4 border-b border-skyrim-border/30 bg-skyrim-paper relative z-10">
           <h2 className="text-2xl font-serif text-skyrim-gold">Blacksmith</h2>
           <div className="flex items-center gap-2 text-sm text-skyrim-text">
             <Coins /> <span className="font-serif text-yellow-400">{gold}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="md:col-span-1 md:min-w-[260px] overflow-hidden">
-            <h3 className="text-sm text-skyrim-text mb-2">Eligible Items</h3>
-
-            {/* Category filter (mirrors Shop/Inventory UX) */}
-            <div className="mb-3 flex gap-2 text-xs">
-              <button data-testid="filter-all" onClick={() => setFilterCategory('all')} className={`px-2 py-1 rounded ${filterCategory === 'all' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>All</button>
-              <button data-testid="filter-weapons" onClick={() => setFilterCategory('weapons')} className={`px-2 py-1 rounded ${filterCategory === 'weapons' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>Weapons</button>
-              <button data-testid="filter-armor" onClick={() => setFilterCategory('armor')} className={`px-2 py-1 rounded ${filterCategory === 'armor' ? 'bg-skyrim-gold/12 border-skyrim-gold' : 'border-skyrim-border'}`}>Armor</button>
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-0 overflow-hidden">
+          {/* Left Column: Item List */}
+          <div className="md:col-span-4 lg:col-span-3 border-r border-skyrim-border/30 flex flex-col h-full bg-skyrim-dark/10">
+            <div className="p-4 flex-shrink-0">
+               <h3 className="text-sm text-skyrim-text mb-3 uppercase tracking-widest opacity-80 decoration-skyrim-gold underline underline-offset-4 decoration-2">Eligible Items</h3>
+               {/* Category filter */}
+               <div className="flex gap-1 text-xs bg-black/20 p-1 rounded-lg">
+                  {(['all', 'weapons', 'armor'] as const).map(cat => (
+                    <button 
+                      key={cat}
+                      data-testid={`filter-${cat}`}
+                      onClick={() => setFilterCategory(cat)} 
+                      className={`flex-1 py-1.5 rounded font-bold transition-all capitalize ${filterCategory === cat ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+               </div>
             </div>
 
-            <div dir="rtl" className="custom-scrollbar space-y-2 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-10" style={{ scrollbarGutter: 'stable both-edges' as any }}>
+            <div dir="rtl" className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-0 custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+              <div dir="ltr" className="space-y-2 pb-4">
               {/* Reserved gutter + RTL places the scrollbar on the LEFT; inner children preserve normal LTR layout */}
               {eligibleSorted.map((it) => {
                 return (
                   <button
-                    dir="ltr"
                     aria-pressed={selectedId === it.id}
                     key={it.id}
                     onClick={() => setSelectedId(it.id)}
-                    className={`w-full text-left p-3 rounded border transition-all relative z-0 ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/12 ring-2 ring-skyrim-gold/30 shadow-[0_8px_30px_rgba(0,0,0,0.45)]' : 'border-skyrim-border hover:border-skyrim-gold/40'}`}
+                    className={`w-full text-left p-3 rounded border transition-all relative z-0 group ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/10 ring-1 ring-skyrim-gold/30' : 'border-skyrim-border/50 bg-skyrim-paper/40 hover:border-skyrim-gold/40 hover:bg-skyrim-paper/60'}`}
                   >
                     <div className="flex items-center justify-between min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`p-2 rounded bg-skyrim-paper/40 text-skyrim-gold ${selectedId === it.id ? 'scale-102' : ''}`}>
-                          {it.type === 'weapon' ? <Sword size={16} /> : <Shield size={16} />}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`p-2 rounded bg-black/30 text-skyrim-gold flex-shrink-0 transition-transform ${selectedId === it.id ? 'scale-110' : 'group-hover:scale-105'}`}>
+                          {it.type === 'weapon' ? <Sword size={18} /> : <Shield size={18} />}
                         </div>
-                        <div className="min-w-0">
-                          <div className="text-skyrim-gold font-serif truncate text-sm md:text-base">{it.name}</div>
-                          <div className="text-xs text-skyrim-text truncate">Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className={`font-serif truncate text-sm md:text-base transition-colors ${selectedId === it.id ? 'text-skyrim-gold' : 'text-gray-300 group-hover:text-skyrim-gold'}`}>{it.name}</div>
+                          <div className="text-xs text-stone-500 truncate flex items-center justify-between mt-0.5">
+                              <span>Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</span>
+                              {selectedId === it.id && <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">Selected</span>}
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-xs text-gray-300 flex items-center gap-2 justify-end">
-                        {selectedId === it.id && <div className="ml-2 text-xs text-yellow-300 font-semibold z-0">Selected</div>}
                       </div>
                     </div>
                   </button>
@@ -317,44 +380,75 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
               })}
 
               {eligibleSorted.length === 0 && (
-                <div className="text-gray-500 italic">No weapons or armor available.</div>
+                <div className="text-gray-500 italic p-4 text-center text-sm border border-dashed border-skyrim-border/30 rounded">No upgradable items found.</div>
               )}
+              </div>
             </div>
+          </div>
 
-          <div className="md:col-span-3 relative z-30">
-            <h3 className="text-sm text-skyrim-text mb-2">Details</h3>
-            {!selected && <div className="text-gray-500 italic">Select an item to view upgrade options.</div>}
-            {selected && (
-              <div className="bg-skyrim-paper/30 p-3 sm:p-4 rounded border border-skyrim-border pl-2">
-                <div className="flex items-start gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-xl font-serif text-skyrim-gold">{selected.name}</h4>
-                        <div className="text-xs text-skyrim-text">Type: {selected.type} {selected.rarity && <span className="inline-block align-middle ml-2"><RarityBadge rarity={String(selected.rarity)} /></span>}</div>
+          {/* Right Column: Details */}
+          <div className="md:col-span-8 lg:col-span-9 h-full flex flex-col min-h-0 bg-skyrim-paper/10 relative">
+             {/* Background decorative elements could go here */}
+             <div className="flex-1 min-h-0 flex flex-col">
+                
+                {!selected && (
+                   <div className="h-full flex flex-col items-center justify-center text-stone-500 opacity-60">
+                      <div className="p-6 rounded-full bg-black/10 mb-4">
+                        <Coins size={48} strokeWidth={1} />
                       </div>
-                      <div className="text-sm text-gray-200">Current Level: <strong>{selected.upgradeLevel || 0}</strong></div>
+                      <p className="font-serif text-xl italic">Select an item from the list to begin smithing.</p>
+                   </div>
+                )}
+                
+                {selected && (
+                  <div className="flex flex-col h-full bg-skyrim-paper/30 backdrop-blur-sm">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8">
+                      <div className="max-w-4xl mx-auto">
+                        <div className="flex items-start justify-between border-b border-skyrim-border/30 pb-6 mb-6">
+                      <div>
+                        <h4 className="text-3xl font-serif text-skyrim-gold tracking-wide drop-shadow-sm">{selected.name}</h4>
+                        <div className="text-sm text-skyrim-text mt-2 flex items-center gap-3">
+                          <span className="bg-black/40 px-2 py-0.5 rounded text-xs uppercase tracking-wider text-stone-400 border border-white/10">{selected.type}</span>
+                          {selected.rarity && <RarityBadge rarity={String(selected.rarity)} />}
+                        </div>
+                      </div>
+                      <div className="text-right pl-6">
+                        <div className="text-[10px] text-gray-400 uppercase tracking-[0.2em] mb-1">Level</div>
+                        <div className="text-2xl font-serif text-skyrim-act flex items-baseline justify-end gap-1">
+                            <span>{selected.upgradeLevel || 0}</span>
+                            <span className="text-base text-gray-600 font-sans font-light">/</span>
+                            <span className="text-lg text-gray-500">{getMaxUpgradeForItem(selected)}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-gray-300">Current Stats</div>
-                        <div className="mt-1 text-skyrim-gold font-serif">
+                    <div className="grid grid-cols-2 gap-6 items-stretch mb-8">
+                      {/* Current Stats */}
+                      <div className="bg-black/20 p-5 rounded-lg border border-skyrim-border/20 shadow-inner">
+                        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span> Current
+                        </div>
+                        <div className="text-skyrim-gold font-serif text-lg">
 {(() => {
 
                               const b = getItemBaseAndBonus(selected as any);
                               return (
                                 <>
-                                  {typeof b.totalDamage === 'number' && <div>Damage: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</div>}
-                                  {typeof b.totalArmor === 'number' && <div>Armor: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</div>}
+                                  {typeof b.totalDamage === 'number' && <div className="flex justify-between items-center"><span className="text-sm font-sans tracking-wide opacity-80">Damage</span> <span className="text-xl">{b.totalDamage}{b.bonusDamage ? <span className="text-sm text-gray-400 ml-1">({b.baseDamage}+{b.bonusDamage})</span> : ''}</span></div>}
+                                  {typeof b.totalArmor === 'number' && <div className="flex justify-between items-center"><span className="text-sm font-sans tracking-wide opacity-80">Armor</span> <span className="text-xl">{b.totalArmor}{b.bonusArmor ? <span className="text-sm text-gray-400 ml-1">({b.baseArmor}+{b.bonusArmor})</span> : ''}</span></div>}
                                 </>
                               );
                             })()}
                         </div>
                       </div>
-                      <div className="mt-4">
-                        <div className="text-xs text-gray-300">After Upgrade</div>
-                        <div className="mt-1 text-skyrim-gold font-serif">
+
+                      {/* Preview Stats */}
+                      <div className="bg-skyrim-gold/5 p-5 rounded-lg border border-skyrim-gold/20 relative overflow-hidden shadow-inner">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-skyrim-gold/50"></div>
+                        <div className="text-[10px] uppercase tracking-widest text-yellow-500/80 mb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> After Upgrade
+                        </div>
+                        <div className="text-skyrim-gold font-serif text-lg">
                           {(() => {
                             const preview = previewUpgradeStats(selected);
                             const b = getItemBaseAndBonus(selected as any);
@@ -362,8 +456,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                             const previewArmor = typeof preview.armor === 'number' ? preview.armor : undefined;
                             return (
                               <>
-                                {typeof previewDamage === 'number' && <div>Damage: {previewDamage}{(b.baseDamage && previewDamage - (b.baseDamage || 0)) ? ` (${b.baseDamage} + ${previewDamage - (b.baseDamage || 0)})` : ''}</div>}
-                                {typeof previewArmor === 'number' && <div>Armor: {previewArmor}{(b.baseArmor && previewArmor - (b.baseArmor || 0)) ? ` (${b.baseArmor} + ${previewArmor - (b.baseArmor || 0)})` : ''}</div>}
+                                {typeof previewDamage === 'number' && <div className="flex justify-between items-center"><span className="text-sm font-sans tracking-wide opacity-80">Damage</span> <span className="text-xl">{previewDamage}{(b.baseDamage && previewDamage - (b.baseDamage || 0)) ? <span className="text-sm text-green-400/90 ml-1 font-bold">({b.baseDamage}+{previewDamage - (b.baseDamage || 0)})</span> : ''}</span></div>}
+                                {typeof previewArmor === 'number' && <div className="flex justify-between items-center"><span className="text-sm font-sans tracking-wide opacity-80">Armor</span> <span className="text-xl">{previewArmor}{(b.baseArmor && previewArmor - (b.baseArmor || 0)) ? <span className="text-sm text-green-400/90 ml-1 font-bold">({b.baseArmor}+{previewArmor - (b.baseArmor || 0)})</span> : ''}</span></div>}
                               </>
                             );
                           })()}
@@ -371,43 +465,65 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                       </div>
                     </div>
 
-                    <div className="mt-4">
-                      <div className="text-xs text-gray-300">Upgrade Cost</div>
-                      <div className="mt-1 text-yellow-400 font-serif text-lg">{getUpgradeCost(selected)}g</div>
-                      <div className="text-xs mt-1 text-skyrim-text">Max Level: {getMaxUpgradeForItem(selected)}</div>
-
-                      {(() => {
-                        const req = getRequiredPlayerLevelForNextUpgrade(selected);
-                        if (req > 0) {
-                          const ok = (characterLevel || 0) >= req;
-                          return (
-                            <div className={`text-xs mt-1 ${ok ? 'text-green-400' : 'text-red-400'}`}>
-                              Requires player level {req} {ok ? '— met' : '— not met'}
+                    <div className="mt-auto space-y-6 flex-shrink-0">
+                      {/* Cost */}
+                      <div className="flex items-center gap-4">
+                         <div className="px-5 py-3 bg-black/30 rounded border border-skyrim-border/30 bg-gradient-to-r from-black/20 to-transparent">
+                            <div className="text-[10px] uppercase tracking-widest text-gray-400">Upgrade Cost</div>
+                            <div className="text-yellow-400 font-serif text-2xl flex items-baseline gap-1 mt-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                               {getUpgradeCost(selected)} <span className="text-sm font-sans text-yellow-500/80">gold</span>
                             </div>
-                          );
-                        }
-                        return null;
-                      })()}
-
-                      {nextUpgradeRequirements && nextUpgradeRequirements.length > 0 && (
-                        <div className="mt-3 text-xs">
-                          <div className="text-gray-300">Material requirements</div>
-                          <ul className="mt-1 space-y-1">
-                            {nextUpgradeRequirements.map(r => {
-                              const present = (shopItems || []).some(s => s.id === r.itemId);
-                              const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
-                              const pretty = shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase());
+                         </div>
+                         
+                         {/* Level Requirement Check */}
+                          {(() => {
+                            const req = getRequiredPlayerLevelForNextUpgrade(selected);
+                            if (req > 0) {
+                              const ok = (characterLevel || 0) >= req;
                               return (
-                                <li key={r.itemId} className={`flex items-center gap-2 ${present ? 'text-green-400' : 'text-red-400'}`}>
-                                  <span className="font-mono text-[13px]">{r.quantity ?? 1}×</span>
-                                  <span className="truncate">{pretty}</span>
-                                  <span className="ml-2 text-xs text-gray-400">{present ? 'available in shop' : 'not available in shop'}</span>
-                                </li>
+                                <div className={`text-xs px-4 py-2.5 rounded border flex items-center gap-2 shadow-sm ${ok ? 'bg-green-900/10 border-green-800 text-green-400' : 'bg-red-900/10 border-red-800 text-red-300'}`}>
+                                  {ok ? <Check size={14} /> : <span className="text-[10px] font-bold">✕</span>} Requires Level {req}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                      </div>
+
+                      {/* Material Requirements */}
+                      {nextUpgradeRequirements && nextUpgradeRequirements.length > 0 && (
+                        <div className="bg-black/20 p-5 rounded border border-skyrim-border/20">
+                          <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-3 ml-1">Required Materials</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {nextUpgradeRequirements.map(r => {
+                              const ownedQty = countMaterialInInventory(items, r.itemId);
+                              const requiredQty = r.quantity || 1;
+                              const met = ownedQty >= requiredQty;
+                              // Try to find name in inventory first, then shop, then fallback formatting
+                              const invMatch = items.find(i => i.id === r.itemId) || items.find(i => (i.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_') === r.itemId);
+                              const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
+                              const pretty = invMatch ? invMatch.name : (shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase()));
+                              
+                              return (
+                                <div key={r.itemId} className={`flex items-center justify-between p-2 rounded relative overflow-hidden transition-colors ${met ? 'bg-green-900/10 border border-green-900/20' : 'bg-red-900/10 border border-red-900/20'}`}>
+                                  {met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-green-500/50"></div>}
+                                  {!met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500/50"></div>}
+                                  
+                                  <div className={`flex items-center gap-2 pl-2 ${met ? 'text-gray-200' : 'text-red-300'}`}>
+                                    <span className="text-sm font-medium">{pretty}</span>
+                                  </div>
+                                  <span className={`font-mono text-sm tracking-tighter ${met ? 'text-green-400' : 'text-red-400'}`}>
+                                    {ownedQty} <span className="text-gray-500 text-xs">/</span> {requiredQty}
+                                  </span>
+                                </div>
                               );
                             })}
-                          </ul>
-                          {!shopRequirementsMet && (
-                            <div className="text-xs mt-2 text-red-400">Upgrade requires materials to be present in the shop</div>
+                          </div>
+                          {!inventoryRequirementsMet && (
+                            <div className="text-xs mt-3 text-red-300/80 italic text-center flex items-center justify-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
+                                Missing required materials
+                            </div>
                           )}
                         </div>
                       )}
@@ -415,17 +531,17 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-col sm:flex-row gap-2 relative">
+                <div className="flex-shrink-0 px-6 md:px-8 py-5 border-t border-skyrim-border/30 bg-black/40 flex justify-end gap-4 relative z-20 backdrop-blur-md">
+                  <button onClick={onClose} data-sfx="button_click" className="px-6 py-2 bg-transparent border border-skyrim-border/60 text-skyrim-text hover:text-white rounded hover:bg-white/5 transition-all font-serif tracking-wide text-sm uppercase">Cancel</button>
                   <button 
                     ref={upgradeButtonRef}
                     onClick={handleConfirm}
                     data-sfx="button_click"
-                    disabled={isUpgrading || !shopRequirementsMet}
-                    className={`px-4 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 ${(isUpgrading || !shopRequirementsMet) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    disabled={isUpgrading || !inventoryRequirementsMet}
+                    className={`px-8 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 font-serif text-lg shadow-lg uppercase tracking-wide flex items-center gap-2 ${(isUpgrading || !inventoryRequirementsMet) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                   >
-                    Confirm Upgrade
+                    <span>Confirm Upgrade</span>
                   </button>
-                  <button onClick={onClose} data-sfx="button_click" className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-all">Cancel</button>
                 </div>
                 {/* Spark particles for upgrade effect */}
                 <SparkParticles active={showSparks} buttonRef={upgradeButtonRef} />
@@ -433,6 +549,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
             )}
           </div>
         </div>
+      </div>
       </div>
     </ModalWrapper>
   );

@@ -140,33 +140,58 @@ export function getRequirementsForNextUpgrade(item: InventoryItem) {
 }
 
 /**
- * Determine whether an item can be upgraded.
- * If `opts.shopItemIds` is provided, any material requirements will be validated
- * against that set (useful for UI that wants to require materials to be present in the shop).
+ * Helper to count quantity of a material in inventory (by ID or normalized name).
  */
-export function canUpgrade(item: InventoryItem, opts?: { shopItemIds?: string[] }): boolean {
+export function countMaterialInInventory(inventory: InventoryItem[], materialId: string): number {
+  let count = 0;
+  for (const item of inventory) {
+    if (item.id === materialId) {
+      count += (item.quantity || 1);
+      continue;
+    }
+    const slug = (item.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (slug === materialId) {
+      count += (item.quantity || 1);
+    }
+  }
+  return count;
+}
+
+/**
+ * Determine whether an item can be upgraded.
+ * Supports validating material requirements against `opts.inventory` (checking quantities)
+ * or `opts.shopItemIds` (checking existence only, legacy/shop mode).
+ */
+export function canUpgrade(item: InventoryItem, opts?: { shopItemIds?: string[]; inventory?: InventoryItem[] }): boolean {
   const max = getMaxUpgradeForItem(item);
   if (max <= 0) return false;
-  // Allow upgrade either when under max OR when at max but a higher rarity is available
+
   const currentLevel = item.upgradeLevel || 0;
-  if (currentLevel < max) {
-    // If there are material requirements and a shop context was provided, ensure they exist in shop
-    const reqs = getRequirementsForNextUpgrade(item);
-    if (reqs && opts?.shopItemIds) {
-      return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
-    }
-    return true;
-  }
-  // If at max, allow a rarity-upgrade if not already at highest rarity
+  // Check if upgrade is possible logic (normal level OR rarity tier up)
   const curR = (item.rarity || 'common') as string;
   const idx = RARITY_ORDER.indexOf(curR as any);
-  const rarityUpgradable = idx >= 0 && idx < RARITY_ORDER.length - 1;
-  if (!rarityUpgradable) return false;
-  // For rarity-upgrades also validate material requirements if provided
+  const isRarityUpgrade = currentLevel >= max && (idx >= 0 && idx < RARITY_ORDER.length - 1);
+  const isLevelUpgrade = currentLevel < max;
+
+  if (!isLevelUpgrade && !isRarityUpgrade) return false;
+
+  // Check material requirements
   const reqs = getRequirementsForNextUpgrade(item);
-  if (reqs && opts?.shopItemIds) {
-    return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
+  if (reqs && reqs.length > 0) {
+    if (opts?.inventory) {
+      // Check player inventory for quantities
+      const hasMaterials = reqs.every(r => {
+        const qtyNeeded = r.quantity || 1;
+        const qtyOwned = countMaterialInInventory(opts.inventory!, r.itemId);
+        return qtyOwned >= qtyNeeded;
+      });
+      if (!hasMaterials) return false;
+    } else if (opts?.shopItemIds) {
+      // Fallback: check shop existence
+      return reqs.every(r => opts.shopItemIds!.includes(r.itemId));
+    }
   }
+
   return true;
 }  
 

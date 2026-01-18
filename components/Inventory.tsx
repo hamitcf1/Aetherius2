@@ -38,7 +38,7 @@ const getDefaultItemWeight = (type: string): number => {
 
 interface InventoryProps {
   items: InventoryItem[];
-  setItems: (items: InventoryItem[]) => void;
+  setItems: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
   gold: number;
   setGold: (amount: number) => void;
   maxCarryWeight?: number;

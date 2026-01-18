@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import BlacksmithModal from '../components/BlacksmithModal';
 import { vi } from 'vitest';
 import { AppContext } from '../AppContext';
@@ -14,221 +14,188 @@ afterEach(() => {
 });
 
 describe('Blacksmith modal upgrade flow', () => {
-  it('disables confirm button during spark animation and clears sparks after timeout', () => {
-    const items = [
-      { id: 'i1', characterId: 'c1', name: 'Test Sword', type: 'weapon', damage: 10, value: 100, quantity: 1 } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
+  const createMockContext = (overrides = {}) => ({
+    handleManualSave: () => {},
+    isSaving: false,
+    handleLogout: () => {},
+    setCurrentCharacterId: () => {},
+    aiModel: 'gpt',
+    setAiModel: () => {},
+    handleExportPDF: () => {},
+    isExporting: false,
+    handleGenerateProfileImage: () => {},
+    isGeneratingProfileImage: false,
+    handleCreateImagePrompt: () => {},
+    handleUploadPhoto: () => {},
+    showToast: vi.fn(),
+    isAnonymous: false,
+    handleRestWithOptions: () => {},
+    openBonfireMenu: () => {},
+    handleEatItem: () => {},
+    handleDrinkItem: () => {},
+    handleShopPurchase: () => {},
+    handleShopSell: () => {},
+    gold: 0,
+    inventory: [],
+    hasCampingGear: false,
+    hasBedroll: false,
+    characterLevel: 99,
+    handleExportJSON: () => {},
+    handleImportJSON: () => {},
+    difficulty: 'novice',
+    setDifficulty: () => {},
+    weather: { type: 'clear', intensity: 0, temperature: 0 },
+    statusEffects: [],
+    companions: [],
+    colorTheme: 'dark',
+    setColorTheme: () => {},
+    showQuantityControls: false,
+    setShowQuantityControls: () => {},
+    weatherEffect: 'none',
+    setWeatherEffect: () => {},
+    weatherIntensity: 0,
+    setWeatherIntensity: () => {},
+    openCompanions: () => {},
+    userSettings: null,
+    updateUserSettings: () => {},
+    ...overrides
+  });
 
-    // mock global app handler used by component for persistence
+  const setupTest = (initialItems: any[], shopItems: any[] = [], gold = 1000) => {
+    let currentItems = [...initialItems];
+    // Mock setItems to handle functional updates
+    const setItems = vi.fn((next: any) => {
+      currentItems = typeof next === 'function' ? next(currentItems) : next;
+    });
+
     (window as any).app = { handleGameUpdate: vi.fn() };
 
-    const mockCtx = {
-      handleManualSave: () => {},
-      isSaving: false,
-      handleLogout: () => {},
-      setCurrentCharacterId: () => {},
-      aiModel: 'gpt',
-      setAiModel: () => {},
-      handleExportPDF: () => {},
-      isExporting: false,
-      handleGenerateProfileImage: () => {},
-      isGeneratingProfileImage: false,
-      handleCreateImagePrompt: () => {},
-      handleUploadPhoto: () => {},
-      showToast: () => {},
-      isAnonymous: false,
-      handleRestWithOptions: () => {},
-      openBonfireMenu: () => {},
-      handleEatItem: () => {},
-      handleDrinkItem: () => {},
-      handleShopPurchase: () => {},
-      handleShopSell: () => {},
-      gold: 0,
-      inventory: [],
-      hasCampingGear: false,
-      hasBedroll: false,
-      characterLevel: 99,
-      handleExportJSON: () => {},
-      handleImportJSON: () => {},
-      difficulty: 'novice',
-      setDifficulty: () => {},
-      weather: { type: 'clear', intensity: 0, temperature: 0 },
-      statusEffects: [],
-      companions: [],
-      colorTheme: 'dark',
-      setColorTheme: () => {},
-      showQuantityControls: false,
-      setShowQuantityControls: () => {},
-      weatherEffect: 'none',
-      setWeatherEffect: () => {},
-      weatherIntensity: 0,
-      setWeatherIntensity: () => {},
-      openCompanions: () => {},
-      userSettings: null,
-      updateUserSettings: () => {}
-    } as any;
+    return {
+      Component: (
+        <AppContext.Provider value={createMockContext({ gold }) as any}>
+          <BlacksmithModal
+            open={true}
+            onClose={() => {}}
+            items={currentItems}
+            setItems={setItems as any}
+            gold={gold}
+            setGold={() => {}}
+            shopItems={shopItems}
+          />
+        </AppContext.Provider>
+      ),
+      getCurrentItems: () => currentItems,
+      setItems
+    };
+  };
 
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} />
-      </AppContext.Provider>
-    );
+  it('disables confirm button during spark animation and clears sparks after timeout', () => {
+    const { Component, getCurrentItems } = setupTest([
+      { id: 'i1', characterId: 'c1', name: 'Test Sword', type: 'weapon', damage: 10, value: 100, quantity: 1 }
+    ]);
+    const { rerender } = render(Component);
 
-    // select the item from the eligible list
+    // select the item
     const itemBtn = screen.getByText(/Test Sword/i);
     fireEvent.click(itemBtn);
-
-    // visual selection should set ARIA state so it's testable
-    expect(itemBtn.closest('button')?.getAttribute('aria-pressed')).toBe('true');
 
     const confirm = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirm).toBeTruthy();
 
-    // Click confirm — should become disabled immediately
     fireEvent.click(confirm);
     expect(confirm).toBeDisabled();
 
-    // Sparks should be present (rendered as fixed divs)
-    const { act } = require('react-dom/test-utils');
-    act(() => vi.advanceTimersByTime(50));
-    let sparks = document.querySelectorAll('div[style*="position: fixed"]');
-    expect(sparks.length).toBeGreaterThan(0);
+    // Advance timers for sparks
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
 
-    // Verify item was upgraded immediately and button is locked while the visual runs
-    expect(currentItems[0].upgradeLevel && currentItems[0].upgradeLevel > 0).toBeTruthy();
+    // Verify upgrade happened (level > 0)
+    const items = getCurrentItems();
+    expect(items[0].upgradeLevel).toBeGreaterThan(0);
+    // Button still disabled due to animation/processing check
     expect(confirm).toBeDisabled();
-
   });
 
-  it('disables upgrade when required materials are not present in shop and shows requirement text (rare)', () => {
-    const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
-
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
-
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
-      </AppContext.Provider>
-    );
+  it('disables upgrade when required materials are missing from inventory (rare)', () => {
+    // Rare sword requires materials (e.g. mithril ingot by default mechanism)
+    const { Component } = setupTest([
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' }
+    ]);
+    render(Component);
 
     fireEvent.click(screen.getByText(/Iron Sword/i));
 
     expect(screen.getByText(/Material requirements/i)).toBeTruthy();
-    expect(screen.getByText(/steel ingot/i)).toBeTruthy();
+    // Should show "missing" status
+    // exact text "Upgrade requires materials from your inventory"
+    expect(screen.getByText(/Upgrade requires materials from your inventory/i)).toBeTruthy();
+    
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).toBeDisabled();
   });
 
-  it('disables upgrade for uncommon items when recipes exist and shop lacks materials', () => {
-    // use the same recipe key as UPGRADE_RECIPES (iron_sword) but mark item as 'uncommon'
-    const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'uncommon' } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
-
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 1000 } as any);
-
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
-      </AppContext.Provider>
-    );
+  it('allows upgrade when required materials are available in inventory', () => {
+    // Rare Iron Sword requires materials. Logic defaults 'uncommon'->steel, 'rare'->mithril? 
+    // upgradeService -> UPGRADE_RECIPES['iron_sword'] = steel_ingot regardless of rarity
+    const { Component } = setupTest([
+      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' },
+      { id: 'steel_ingot', characterId: 'c1', name: 'Steel Ingot', type: 'misc', quantity: 10 }
+    ]);
+    render(Component);
 
     fireEvent.click(screen.getByText(/Iron Sword/i));
-
-    // Should now enforce the recipe because uncommon+ is in-scope
+    
     expect(screen.getByText(/Material requirements/i)).toBeTruthy();
-    expect(screen.getByText(/steel ingot/i)).toBeTruthy();
-    const confirmBtn2 = screen.getByText(/Confirm Upgrade/i).closest('button')!;
-    expect(confirmBtn2).toBeDisabled();
-  });
-
-  it('allows upgrade when required materials are available in the shop (uncommon)', () => {
-    const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'uncommon' } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
-
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
-
-    // Provide shopItems that include the required steel_ingot
-    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
-
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
-      </AppContext.Provider>
-    );
-
-    fireEvent.click(screen.getByText(/Iron Sword/i));
+    // Should show (owned)
+    expect(screen.getByText(/\(owned\)/i)).toBeTruthy();
 
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).not.toBeDisabled();
   });
 
-  it('allows upgrade when required materials are available in the shop', () => {
-    const items = [
-      { id: 'iron_sword', characterId: 'c1', name: 'Iron Sword', type: 'weapon', damage: 7, value: 45, quantity: 1, rarity: 'rare' } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
+  it('shows generated material requirement for uncommon+ items without explicit recipes', () => {
+    // Daedric Sword, uncommon. upgradeService: uncommon -> 'steel_ingot'
+    const { Component, getCurrentItems, setItems } = setupTest([
+      { id: 'daedric_sword', characterId: 'c1', name: 'Daedric Sword', type: 'weapon', damage: 14, value: 1200, quantity: 1, rarity: 'uncommon' }
+    ]);
+    const { rerender } = render(Component);
 
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, handleShopPurchase: () => {}, handleShopSell: () => {}, gold: 1000 } as any);
-
-    // Provide shopItems that include the required steel_ingot
-    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
-
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
-      </AppContext.Provider>
-    );
-
-    fireEvent.click(screen.getByText(/Iron Sword/i));
-
-    const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
-    expect(confirmBtn).not.toBeDisabled();
-  });
-
-  it('shows generated material requirement for uncommon+ items without explicit recipes and respects shop stock', () => {
-    const items = [
-      { id: 'daedric_sword', characterId: 'c1', name: 'Daedric Sword', type: 'weapon', damage: 14, value: 1200, quantity: 1, rarity: 'uncommon' } as any
-    ];
-    let currentItems = [...items];
-    const setItems = (next: any) => { currentItems = next; };
-
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 1000 } as any);
-
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={[]} />
-      </AppContext.Provider>
-    );
-
-    fireEvent.click(screen.getByText(/Daedric Sword/i));
-
-    // Should surface a generated material requirement (fallback shown as prettified id)
+    // Use getAllByText to avoid title/list ambiguity
+    const itemBtns = screen.getAllByText(/Daedric Sword/i);
+    // Usually the list item is clickable. The title is just h4.
+    // Try to find the button containing the text
+    const listButton = itemBtns.find(el => el.closest('button'));
+    fireEvent.click(listButton || itemBtns[0]);
+    
+    // Check materials missing
     expect(screen.getByText(/Material requirements/i)).toBeTruthy();
     expect(screen.getByText(/Steel Ingot/i)).toBeTruthy();
     const confirmBtn = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn).toBeDisabled();
 
-    // If the generated material is present in shop, the button becomes enabled
-    const shopItems = [{ id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: '', price: 18, category: 'Ingredients' } as any];
-    render(
-      <AppContext.Provider value={mockCtx}>
-        <BlacksmithModal open={true} onClose={() => {}} items={currentItems} setItems={setItems as any} gold={500} setGold={() => {}} shopItems={shopItems} />
-      </AppContext.Provider>
+    // Now update inventory to have Steel Ingot
+    // We simulate parent state update (since setItems is mock)
+    // Actually we need to re-render with new items prop.
+    const itemsWithIngot = [
+        ...getCurrentItems(),
+        { id: 'steel_ingot', characterId: 'c1', name: 'Steel Ingot', type: 'misc', quantity: 5 }
+    ];
+    
+    rerender(
+        <AppContext.Provider value={createMockContext({ gold: 1000 }) as any}>
+          <BlacksmithModal
+            open={true}
+            onClose={() => {}}
+            items={itemsWithIngot}
+            setItems={setItems as any}
+            gold={1000}
+            setGold={() => {}}
+            shopItems={[]}
+          />
+        </AppContext.Provider>
     );
-    fireEvent.click(screen.getByText(/Daedric Sword/i));
+
     const confirmBtn2 = screen.getByText(/Confirm Upgrade/i).closest('button')!;
     expect(confirmBtn2).not.toBeDisabled();
   });

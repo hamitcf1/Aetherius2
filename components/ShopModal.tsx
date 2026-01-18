@@ -315,6 +315,11 @@ const SHOP_INVENTORY: ShopItem[] = [
   // Blacksmith materials (available at general stores / smiths)
   { id: 'iron_ingot', name: 'Iron Ingot', type: 'misc', description: 'Smelted iron bar — used for basic smithing and repairs.', price: 8, category: 'Ingredients' },
   { id: 'steel_ingot', name: 'Steel Ingot', type: 'misc', description: 'Refined steel bar used for stronger weapon and armor work.', price: 18, category: 'Ingredients' },
+  { id: 'mithril_ingot', name: 'Mithril Ingot', type: 'misc', description: 'A lightweight, durable silvery metal. Excellent for superior armor.', price: 45, category: 'Ingredients' },
+  { id: 'ebony_ingot', name: 'Ebony Ingot', type: 'misc', description: 'A heavy, dark metal used for high-tier equipment.', price: 150, category: 'Ingredients' },
+  { id: 'daedric_core', name: 'Daedric Core', type: 'misc', description: 'A pulsating heart of Daedric energy. Used for legendary forging.', price: 400, category: 'Ingredients' },
+  { id: 'leather_strip', name: 'Leather Strip', type: 'misc', description: 'Strips of leather used for joining armor pieces.', price: 2, category: 'Ingredients' },
+  { id: 'metal_scrap', name: 'Metal Scrap', type: 'misc', description: 'Bits of salvaged metal. Can be used for basic repairs.', price: 1, category: 'Ingredients' },
   
   // === JEWELRY ===
   { id: 'gold_ring', name: 'Gold Ring', type: 'apparel', description: 'A simple gold ring. Elegant and valuable.', price: 75, category: 'Jewelry' },
