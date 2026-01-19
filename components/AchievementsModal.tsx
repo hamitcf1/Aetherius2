@@ -21,6 +21,7 @@ interface AchievementsModalProps {
   character: Character;
   onCollectReward: (achievementId: string) => void;
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  refreshAchievements?: () => void;
 }
 
 const AchievementsModal: React.FC<AchievementsModalProps> = ({
@@ -110,6 +111,15 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
             <div>
               <h2 className="text-2xl font-serif text-skyrim-gold">Achievements</h2>
               <p className="text-xs text-skyrim-text/60">{unlockedCount}/{totalAchievements} unlocked • {uncollectedCount} rewards pending</p>
+            </div>
+            {/* Refresh achievements manual trigger */}
+            <div className="ml-4">
+              <button
+                onClick={() => { refreshAchievements && refreshAchievements(); showToast && showToast('Achievements refreshed', 'success'); }}
+                className="ml-2 px-3 py-1 bg-skyrim-paper/20 text-skyrim-text/70 rounded text-sm hover:bg-skyrim-paper/30"
+              >
+                Refresh
+              </button>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-skyrim-paper/20 rounded transition-colors">
@@ -326,7 +336,10 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-sm text-skyrim-text mb-4">{achievement.description}</p>
+                    <p className="text-sm text-skyrim-text mb-2">{achievement.description}</p>
+                    {achievement.longDescription && (
+                      <p className="text-xs text-skyrim-text/60 mb-4">{achievement.longDescription}</p>
+                    )}
 
                     {/* Progress */}
                     {!isUnlocked && (

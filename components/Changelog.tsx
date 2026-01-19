@@ -18,6 +18,18 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.2',
+    date: '2026-01-19',
+    title: 'Map Events & Mission Interactivity Improvements',
+    changes: [
+      { type: 'feature', text: 'Events: Dragon sightings and Bandit ambushes now open immediate combat instead of only creating quests' },
+      { type: 'feature', text: 'Missions: Interactive missions can open dedicated systems (mini-game prototype for "Lost Artifact")' },
+      { type: 'improvement', text: 'Map events now pass full objects to app handlers; clicking Investigate/Accept triggers proper game updates' },
+      { type: 'feature', text: 'Mini-Game prototype: basic Minigame modal for interactive mission experiences (prototype for future Doom-like minigame)' },
+      { type: 'improvement', text: 'Added map event handlers and tests to avoid regressions and to route event types to appropriate systems (combat/quest/minigame)' }
+    ]
+  },
+  {
     version: '1.0.1',
     date: '2026-01-18',
     title: 'World Map Expansion - Full Map Page',

@@ -30,6 +30,8 @@ export interface Achievement {
   id: string;
   name: string;
   description: string;
+  // Optional longer description that explains tracking, scope, and edge cases
+  longDescription?: string;
   category: AchievementCategory;
   rarity: AchievementRarity;
   icon: string; // Emoji or icon identifier
@@ -174,8 +176,21 @@ export const getDefaultAchievementStats = (): AchievementStats => ({
 
 export const ACHIEVEMENTS: Achievement[] = [
   // ===== PROGRESSION (20) =====
-  { id: 'first_steps', name: 'First Steps', description: 'Reach level 5', category: 'progression', rarity: 'common', icon: '👶', requirement: { type: 'level_reached', level: 5 }, reward: { gold: 50, xp: 100 } },
+  { id: 'first_steps', name: 'First Steps', description: 'Reach level 5', longDescription: 'Tracked per-character: your character must reach level 5 to unlock this. If you are already past level 5, it will be auto-unlocked on next achievements refresh (load or stat change).', category: 'progression', rarity: 'common', icon: '👶', requirement: { type: 'level_reached', level: 5 }, reward: { gold: 50, xp: 100 } },
   { id: 'apprentice', name: 'Apprentice', description: 'Reach level 10', category: 'progression', rarity: 'common', icon: '📚', requirement: { type: 'level_reached', level: 10 }, reward: { gold: 100, xp: 200 } },
+  { id: 'journeyman', name: 'Journeyman', description: 'Reach level 20', category: 'progression', rarity: 'uncommon', icon: '🎒', requirement: { type: 'level_reached', level: 20 }, reward: { gold: 250, xp: 500 } },
+  { id: 'expert', name: 'Expert', description: 'Reach level 30', category: 'progression', rarity: 'rare', icon: '⭐', requirement: { type: 'level_reached', level: 30 }, reward: { gold: 500, xp: 1000 } },
+  { id: 'master', name: 'Master', description: 'Reach level 40', category: 'progression', rarity: 'epic', icon: '🏆', requirement: { type: 'level_reached', level: 40 }, reward: { gold: 1000, xp: 2000, perkPoint: 1 } },
+  { id: 'legendary_hero', name: 'Legendary Hero', description: 'Reach level 50', category: 'progression', rarity: 'legendary', icon: '👑', requirement: { type: 'level_reached', level: 50 }, reward: { gold: 2500, xp: 5000, perkPoint: 2, title: 'Legendary Hero' } },
+  { id: 'perk_novice', name: 'Perk Novice', description: 'Unlock 5 perks', category: 'progression', rarity: 'common', icon: '🔓', requirement: { type: 'perks_unlocked', count: 5 }, reward: { gold: 50, xp: 100 } },
+  { id: 'perk_collector', name: 'Perk Collector', description: 'Unlock 15 perks', category: 'progression', rarity: 'uncommon', icon: '🗝️', requirement: { type: 'perks_unlocked', count: 15 }, reward: { gold: 150, xp: 300 } },
+  { id: 'perk_master', name: 'Perk Master', description: 'Unlock 30 perks', category: 'progression', rarity: 'rare', icon: '🎯', requirement: { type: 'perks_unlocked', count: 30 }, reward: { gold: 500, xp: 800 } },
+  { id: 'skill_apprentice', name: 'Skill Apprentice', description: 'Reach level 50 in any skill', category: 'progression', rarity: 'uncommon', icon: '📖', requirement: { type: 'skills_mastered', count: 1, minLevel: 50 }, reward: { gold: 100, xp: 250 } },
+  { id: 'skill_expert', name: 'Skill Expert', description: 'Reach level 75 in any skill', category: 'progression', rarity: 'rare', icon: '📕', requirement: { type: 'skills_mastered', count: 1, minLevel: 75 }, reward: { gold: 300, xp: 600 } },
+  { id: 'skill_master', name: 'Skill Master', description: 'Reach level 100 in any skill', category: 'progression', rarity: 'epic', icon: '📗', requirement: { type: 'skills_mastered', count: 1, minLevel: 100 }, reward: { gold: 750, xp: 1500, title: 'Skill Master' } },
+  { id: 'jack_of_trades', name: 'Jack of All Trades', description: 'Reach level 25 in 5 different skills', category: 'progression', rarity: 'rare', icon: '🃏', requirement: { type: 'skills_mastered', count: 5, minLevel: 25 }, reward: { gold: 400, xp: 800 } },
+  { id: 'quest_starter', name: 'Quest Starter', description: 'Complete 5 quests', longDescription: 'Counts quests completed by this character and increments when a quest is marked completed. If you completed quests before achievements were added, run "Refresh Achievements" or reload to evaluate progress.', category: 'progression', rarity: 'common', icon: '📜', requirement: { type: 'quests_completed', count: 5 }, reward: { gold: 75, xp: 150 } },
+
   { id: 'journeyman', name: 'Journeyman', description: 'Reach level 20', category: 'progression', rarity: 'uncommon', icon: '🎒', requirement: { type: 'level_reached', level: 20 }, reward: { gold: 250, xp: 500 } },
   { id: 'expert', name: 'Expert', description: 'Reach level 30', category: 'progression', rarity: 'rare', icon: '⭐', requirement: { type: 'level_reached', level: 30 }, reward: { gold: 500, xp: 1000 } },
   { id: 'master', name: 'Master', description: 'Reach level 40', category: 'progression', rarity: 'epic', icon: '🏆', requirement: { type: 'level_reached', level: 40 }, reward: { gold: 1000, xp: 2000, perkPoint: 1 } },
@@ -297,6 +312,100 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'self_sufficient', name: 'Self Sufficient', description: 'Consume 100 potions, 100 food, rest 50 times', category: 'survival', rarity: 'rare', icon: '🎒', requirement: { type: 'combo', requirements: [{ type: 'potions_consumed', count: 100 }, { type: 'food_consumed', count: 100 }, { type: 'rested_times', count: 50 }] }, reward: { gold: 750, xp: 1500, title: 'Self Sufficient' } },
   { id: 'ultimate_survivor', name: 'Ultimate Survivor', description: 'Master all survival mechanics', category: 'survival', rarity: 'epic', icon: '🦁', requirement: { type: 'combo', requirements: [{ type: 'potions_consumed', count: 250 }, { type: 'food_consumed', count: 200 }, { type: 'rested_times', count: 100 }, { type: 'survival_days', days: 100 }] }, reward: { gold: 2000, xp: 4000, perkPoint: 1, title: 'Ultimate Survivor' } },
 ];
+
+// Ensure every achievement has a helpful longDescription for clarity in the UI
+for (const a of ACHIEVEMENTS) {
+  if (!a.longDescription) {
+    a.longDescription = `${a.description}. This is tracked per-character and is automatically evaluated on character load or when stats change. Use the Achievements modal 'Refresh' to re-evaluate historical progress.`;
+  }
+}
+
+/**
+ * Best-effort audit/migration to reconcile historical gameplay data into achievement stats.
+ * This does not attempt to reconstruct every event; it performs deterministic, idempotent
+ * aggregations from available game state (quests, inventory, transactions, character history).
+ */
+export function auditStatsFromGameData(
+  stats: AchievementStats,
+  character: Character | null,
+  options?: {
+    quests?: Array<any>;
+    inventory?: Array<any>;
+    companions?: Array<any>;
+    transactions?: Array<{ items?: Array<{ name: string; quantity: number; added: boolean }>; type?: string }>; 
+    playTimeMinutes?: number;
+  }
+): AchievementStats {
+  const updated: AchievementStats = { ...stats };
+
+  try {
+    // Quests completed
+    const completedQuests = (options?.quests || []).filter(q => q.status === 'completed').length;
+    updated.questsCompleted = Math.max(updated.questsCompleted || 0, completedQuests);
+
+    // Locations discovered (merge unique)
+    const discoveredFromChar = (character && (character as any).discoveredLocations) || [];
+    const names = new Set([...(updated.locationsDiscovered || []), ...discoveredFromChar.map((l: any) => (typeof l === 'string' ? l : (l.name || l.id || String(l))))]);
+    updated.locationsDiscovered = Array.from(names);
+
+    // Dungeon clears
+    const dungeonClears = (character && (character as any).clearedDungeons) ? (character as any).clearedDungeons.reduce((sum: number, d: any) => sum + (d.clearCount || 0), 0) : 0;
+    updated.dungeonClears = Math.max((updated.dungeonClears || 0), dungeonClears);
+
+    // Items collected (rough upper bound)
+    if (options?.inventory) {
+      const totalItems = options.inventory.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0);
+      updated.itemsCollected = Math.max(updated.itemsCollected || 0, totalItems);
+    }
+
+    // Potions / food consumed: best-effort scan of transaction items for removed entries
+    if (options?.transactions) {
+      const txns = options.transactions || [];
+      let potions = 0;
+      let food = 0;
+      for (const t of txns) {
+        for (const it of (t.items || [])) {
+          if (!it.added) {
+            const n = (it.name || '').toLowerCase();
+            if (n.includes('potion')) potions += it.quantity || 1;
+            if (n.includes('food') || n.includes('meal') || n.includes('meat') || n.includes('stew')) food += it.quantity || 1;
+          }
+        }
+      }
+      updated.potionsConsumed = Math.max(updated.potionsConsumed || 0, potions);
+      updated.foodConsumed = Math.max(updated.foodConsumed || 0, food);
+    }
+
+    // Companions recruited
+    if (options?.companions) {
+      updated.companionsRecruited = Array.from(new Set([...(updated.companionsRecruited || []), ...options.companions.map(c => c.id || c.name)]) as any);
+    }
+
+    // Play time
+    if (options?.playTimeMinutes) {
+      updated.playTimeMinutes = Math.max(updated.playTimeMinutes || 0, options.playTimeMinutes);
+    }
+
+    // Perks unlocked from character
+    if (character && (character.perks || []).length) {
+      updated.perksUnlocked = Math.max(updated.perksUnlocked || 0, character.perks.length);
+    }
+
+    // Skill levels
+    if (character && (character.skills || []).length) {
+      const skillMap = { ...(updated.skillLevels || {}) } as Record<string, number>;
+      for (const s of character.skills) {
+        skillMap[s.name] = Math.max(skillMap[s.name] || 0, s.level || 0);
+      }
+      updated.skillLevels = skillMap;
+    }
+  } catch (e) {
+    // Best effort only
+    console.warn('[Achievements] auditStatsFromGameData failed:', e);
+  }
+
+  return updated;
+}
 
 // =============================================================================
 // ACHIEVEMENT CHECKING LOGIC

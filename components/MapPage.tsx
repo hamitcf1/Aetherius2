@@ -1113,7 +1113,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                       </div>
                       
                       <button 
-                        onClick={() => onStartMission?.(selectedMission.id)}
+                        onClick={() => onStartMission?.(selectedMission)}
                         disabled={selectedMission.levelRequirement > playerLevel}
                         className={`w-full mt-4 py-2 rounded text-sm font-bold ${
                           selectedMission.levelRequirement > playerLevel

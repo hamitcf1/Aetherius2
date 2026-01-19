@@ -59,6 +59,8 @@ import {
   initializeCombat,
   calculatePlayerCombatStats
 } from './services/combatService';
+import { shouldStartCombatForEvent, createCombatStateForEvent } from './services/mapEventHandlers';
+import MiniGameModal from './components/MiniGameModal';
 import { 
   auth,
   onAuthChange, 
@@ -130,6 +132,7 @@ import {
   collectAchievementReward, 
   getDefaultAchievementStats,
   ACHIEVEMENTS,
+  auditStatsFromGameData,
   type AchievementState,
   type AchievementStats,
   type Achievement
@@ -410,6 +413,9 @@ const App: React.FC = () => {
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('adept');
   const [weather, setWeather] = useState<WeatherState>({ type: 'clear', intensity: 0, temperature: 10 });
   const [statusEffects, setStatusEffects] = useState<StatusEffect[]>([]);
+  // Mini-game state (prototype for interactive missions)
+  const [miniGameOpen, setMiniGameOpen] = useState<boolean>(false);
+  const [miniGameMission, setMiniGameMission] = useState<MapMission | null>(null);
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -861,6 +867,38 @@ const App: React.FC = () => {
           unlockedAchievements: parsed.unlockedAchievements || {},
           stats: { ...getDefaultAchievementStats(), ...(parsed.stats || {}) }
         });
+
+        // Reconcile existing quest completions into achievement stats (one-time best-effort)
+        try {
+          const completed = getCharacterQuests().filter(q => q.status === 'completed').length;
+          if (completed > 0) {
+            setAchievementState(prev => ({
+              ...prev,
+              stats: { ...prev.stats, questsCompleted: Math.max(prev.stats.questsCompleted || 0, completed) }
+            }));
+          }
+        } catch (e) {
+          // Non-fatal; best-effort only
+        }
+
+        // Run a broader achievement audit/migration to reconcile historical gameplay data
+        try {
+          const char = characters.find(c => c.id === currentCharacterId) || null;
+          const audited = auditStatsFromGameData(
+            { ...getDefaultAchievementStats(), ...(parsed.stats || {}) },
+            char,
+            {
+              quests: getCharacterQuests(),
+              inventory: items.filter(i => i.characterId === currentCharacterId),
+              companions,
+              transactions: getTransactionLedger().getRecentTransactions(200)
+            }
+          );
+
+          setAchievementState(prev => ({ ...prev, stats: { ...prev.stats, ...audited } }));
+        } catch (e) {
+          console.warn('Achievement audit failed:', e);
+        }
       } else {
         // Reset to defaults when switching characters without saved achievements
         setAchievementState({ unlockedAchievements: {}, stats: getDefaultAchievementStats() });
@@ -893,6 +931,8 @@ const App: React.FC = () => {
       }
     }
   }, [achievementNotification]);
+
+  // (Achievements auto-evaluation moved below `activeCharacter` declaration to avoid ReferenceError)
 
   // Check achievements and update stats
   // (Moved below activeCharacter definition to avoid ReferenceError)
@@ -1362,6 +1402,26 @@ const App: React.FC = () => {
   // Helper to get active data
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const activeCharacter = characters.find(c => c.id === currentCharacterId);
+
+  // Auto-evaluate achievements when the character or achievement stats change (e.g., on load or level-up)
+  useEffect(() => {
+    if (!activeCharacter) return;
+    setAchievementState(prev => {
+      const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
+      if (newlyUnlocked && newlyUnlocked.length > 0) {
+        achievementNotificationQueueRef.current.push(...newlyUnlocked);
+        // Trigger immediate notification display if none showing
+        if (achievementNotification === null) {
+          const next = achievementNotificationQueueRef.current.shift();
+          if (next) {
+            setAchievementNotification(next);
+            audioService.playSoundEffect('quest_complete');
+          }
+        }
+      }
+      return updatedState;
+    });
+  }, [activeCharacter, achievementState.stats]);
 
   const updateCharacter = useCallback((field: keyof Character, value: any) => {
       // If someone directly sets `level`, treat it as a level-up when increasing the level
@@ -2977,6 +3037,9 @@ const App: React.FC = () => {
       xpChange: xpReward,
       goldChange: goldReward
     });
+
+    // Increment quest completion stat for achievements
+    updateAchievementStats({ questsCompleted: 1 });
     
     // Show quest notification
     showQuestNotification({
@@ -3401,6 +3464,13 @@ const App: React.FC = () => {
           // Defer XP to section 6b by adding to xpChange (enables level-up check)
           if (totalXpFromQuests > 0) {
             updates = { ...updates, xpChange: (updates.xpChange || 0) + totalXpFromQuests };
+          }
+
+          // Track quest completion for achievements
+          const completedCount = (updates.updateQuests || []).filter(u => u.status === 'completed').length;
+          if (completedCount > 0) {
+            // Update achievement stats so quest-based achievements progress
+            updateAchievementStats({ questsCompleted: completedCount });
           }
       }
 
@@ -4521,6 +4591,24 @@ const App: React.FC = () => {
         achievementState={achievementState}
         onCollectReward={handleCollectAchievementReward}
         character={activeCharacter}
+        showToast={showToast}
+        refreshAchievements={() => {
+          if (!activeCharacter) return;
+          setAchievementState(prev => {
+            const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
+            if (newlyUnlocked && newlyUnlocked.length > 0) {
+              achievementNotificationQueueRef.current.push(...newlyUnlocked);
+              if (achievementNotification === null) {
+                const next = achievementNotificationQueueRef.current.shift();
+                if (next) {
+                  setAchievementNotification(next);
+                  audioService.playSoundEffect('quest_complete');
+                }
+              }
+            }
+            return updatedState;
+          });
+        }}
       />
 
       <CompanionsModal
@@ -4805,6 +4893,22 @@ const App: React.FC = () => {
                 onEnterDungeon={handleEnterDungeonFromMap}
                 onStartEvent={(ev: MapEvent) => {
                   showToast(`Event started: ${ev.id}`, 'info');
+                  // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
+                  if (currentCharacterId && shouldStartCombatForEvent(ev)) {
+                    try {
+                      const character = activeCharacter;
+                      const comps = companions.filter(c => c.characterId === currentCharacterId);
+                      const combat = createCombatStateForEvent(ev, character?.level || 1, comps || []);
+                      setCombatState(combat as any);
+                      // Record narrative that combat started from map event
+                      handleGameUpdate({ narrative: `Combat started against ${ev.name}` } as any);
+                      return;
+                    } catch (e) {
+                      console.warn('Failed to start combat from event:', e);
+                    }
+                  }
+
+                  // Fallback: create an investigation quest
                   handleGameUpdate({
                     newQuests: [{
                       title: `Investigate: ${ev.name}`,
@@ -4818,6 +4922,28 @@ const App: React.FC = () => {
                 }}
                 onStartMission={(mission: MapMission) => {
                   showToast(`Mission accepted: ${mission.id}`, 'success');
+                  // For some missions, trigger direct combat or a mini-game
+                  if (mission.id === 'mission_dragon_bounty' && currentCharacterId) {
+                    try {
+                      const character = activeCharacter;
+                      const comps = companions.filter(c => c.characterId === currentCharacterId);
+                      const combat = createCombatStateForEvent(mission as any, character?.level || 1, comps || []);
+                      setCombatState(combat as any);
+                      handleGameUpdate({ narrative: `Bounty mission: engaged ${mission.name}` } as any);
+                      return;
+                    } catch (e) {
+                      console.warn('Failed to start bounty combat:', e);
+                    }
+                  }
+
+                  // Example interactive mission: open prototype mini-game for "Lost Artifact"
+                  if (mission.id === 'mission_retrieve_artifact') {
+                    setMiniGameMission(mission);
+                    setMiniGameOpen(true);
+                    return;
+                  }
+
+                  // Default behaviour: create a quest
                   handleGameUpdate({
                     newQuests: [{
                       title: mission.name,
@@ -5193,6 +5319,26 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <ToastNotification messages={toastMessages} onClose={handleToastClose} />
         {/* Quest Notifications (Skyrim-style) */}
         <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
+
+        {/* Mini-Game Prototype for interactive missions */}
+        {miniGameOpen && (
+          <MiniGameModal
+            open={miniGameOpen}
+            missionId={miniGameMission?.id}
+            missionName={miniGameMission?.name}
+            showToast={showToast}
+            onClose={(result) => {
+              setMiniGameOpen(false);
+              if (result?.success) {
+                // Apply rewards through canonical update path
+                handleGameUpdate({ narrative: `Mini-game completed: ${miniGameMission?.name}`, xpChange: (result.rewards?.xp || 0), goldChange: (result.rewards?.gold || 0) } as any);
+              } else {
+                showToast && showToast('Mini-game canceled', 'warning');
+              }
+              setMiniGameMission(null);
+            }}
+          />
+        )}
         {/* Level Up Notifications (Skyrim-style) */}
         <LevelUpNotificationOverlay notifications={levelUpNotifications} onDismiss={handleLevelUpNotificationDismiss} />
         {/* Achievement Notification Banner */}
