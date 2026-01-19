@@ -16,7 +16,7 @@ import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
-import MapPage from './components/MapPage';
+import MapPage, { MapEvent, MapMission } from './components/MapPage';
 import { listDungeons, getDungeonById } from './data/dungeonDefinitions';
 import { SKYRIM_LOCATIONS } from './components/MapPage';
 import dungeonService from './services/dungeonService';
@@ -4803,13 +4803,33 @@ const App: React.FC = () => {
                 discoveredLocations={activeCharacter.discoveredLocations || []}
                 clearedDungeons={activeCharacter.clearedDungeons || []}
                 onEnterDungeon={handleEnterDungeonFromMap}
-                onStartEvent={(eventId) => {
-                  showToast(`Event started: ${eventId}`, 'info');
-                  // TODO: Implement event handling
+                onStartEvent={(ev: MapEvent) => {
+                  showToast(`Event started: ${ev.id}`, 'info');
+                  handleGameUpdate({
+                    newQuests: [{
+                      title: `Investigate: ${ev.name}`,
+                      description: ev.description || `${ev.type} event`,
+                      objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
+                      xpReward: ev.rewards?.xp?.min || 25,
+                      goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
+                      difficulty: ev.levelRequirement > 20 ? 'dangerous' : 'moderate'
+                    }]
+                  });
                 }}
-                onStartMission={(missionId) => {
-                  showToast(`Mission accepted: ${missionId}`, 'success');
-                  // TODO: Implement mission handling
+                onStartMission={(mission: MapMission) => {
+                  showToast(`Mission accepted: ${mission.id}`, 'success');
+                  handleGameUpdate({
+                    newQuests: [{
+                      title: mission.name,
+                      description: mission.objective,
+                      location: mission.locationId,
+                      objectives: [{ description: mission.objective, completed: false }],
+                      xpReward: mission.rewards?.xp?.min || 100,
+                      goldReward: mission.rewards?.gold?.min || 200,
+                      difficulty: mission.difficulty as any || 'moderate',
+                      questType: 'bounty'
+                    }]
+                  });
                 }}
                 showToast={showToast}
               />

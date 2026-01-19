@@ -106,8 +106,8 @@ interface MapPageProps {
   discoveredLocations?: DiscoveredLocation[];
   clearedDungeons?: ClearedDungeon[];
   onEnterDungeon?: (locationName: string) => void;
-  onStartEvent?: (eventId: string) => void;
-  onStartMission?: (missionId: string) => void;
+  onStartEvent?: (event: MapEvent) => void;
+  onStartMission?: (mission: MapMission) => void;
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
@@ -1040,7 +1040,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                       showToast?.(`Requires Level ${selectedEvent.levelRequirement}`, 'warning');
                       return;
                     }
-                    onStartEvent?.(selectedEvent.id);
+                    onStartEvent?.(selectedEvent);
                   }}
                   disabled={selectedEvent.levelRequirement > playerLevel}
                   className={`w-full py-2 rounded text-sm font-bold transition-colors ${
