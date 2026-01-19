@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
-    DifficultyLevel, WeatherState, StatusEffect, Companion
+    DifficultyLevel, WeatherState, StatusEffect, Companion,
+    DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
 import ActionBar, { ActionBarToggle } from './components/ActionBar';
@@ -16,6 +17,8 @@ import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
+import { LockpickingMinigame, LockDifficulty } from './components/LockpickingMinigame';
+import { BlessingModal, Blessing } from './components/BlessingModal';
 import MapPage, { MapEvent, MapMission } from './components/MapPage';
 import { listDungeons, getDungeonById } from './data/dungeonDefinitions';
 import { SKYRIM_LOCATIONS } from './components/MapPage';
@@ -103,6 +106,9 @@ import {
   loadUserLoadouts,
   saveUserLoadout,
   deleteUserLoadout,
+  // Dynamic Events
+  saveDynamicEventState,
+  loadDynamicEventState,
 } from './services/firestore';
 import {
   setUserOnline,
@@ -120,6 +126,7 @@ import { getRateLimitStats, generateAdventureResponse } from './services/geminiS
 import { learnSpell, getSpellById, mergeLearnedSpellsFromCharacter, getLearnedSpellIds } from './services/spells';
 import { storage } from './services/storage';
 import { applyCompanionXp } from './services/companionsService';
+import { ShopModal, SHOP_INVENTORY } from './components/ShopModal';
 import type { ShopItem } from './components/ShopModal';
 import { getDefaultSlotForItem } from './components/EquipmentHUD';
 import BonfireMenu from './components/BonfireMenu';
@@ -148,6 +155,16 @@ import CompanionDialogueModal from './components/CompanionDialogueModal';
 import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
 import { useLocalization } from './services/localization';
+// Dynamic Events System
+import {
+  initializeEventState,
+  shouldGenerateNewEvents,
+  processExpiredEvents,
+  startEvent,
+  completeEvent,
+  getEventAdventureContext,
+} from './services/eventService';
+import { EventNotificationOverlay } from './components/EventNotification';
 
 const uniqueId = () => Math.random().toString(36).substr(2, 9);
 
@@ -386,6 +403,8 @@ const App: React.FC = () => {
 
   // Combat State
   const [combatState, setCombatState] = useState<CombatState | null>(null);
+  // Track which dynamic event triggered combat (for completing event on victory)
+  const [activeCombatEventId, setActiveCombatEventId] = useState<string | null>(null);
 
   // Onboarding (shown to new users)
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
@@ -416,6 +435,20 @@ const App: React.FC = () => {
   // Mini-game state (prototype for interactive missions)
   const [miniGameOpen, setMiniGameOpen] = useState<boolean>(false);
   const [miniGameMission, setMiniGameMission] = useState<MapMission | null>(null);
+  
+  // Lockpicking minigame state (for treasure events)
+  const [lockpickingOpen, setLockpickingOpen] = useState<boolean>(false);
+  const [lockpickingEventId, setLockpickingEventId] = useState<string | null>(null);
+  const [lockpickingDifficulty, setLockpickingDifficulty] = useState<LockDifficulty>('novice');
+  
+  // Blessing modal state (for shrine events)
+  const [blessingModalOpen, setBlessingModalOpen] = useState<boolean>(false);
+  const [blessingEventId, setBlessingEventId] = useState<string | null>(null);
+  const [blessingShrineName, setBlessingShrineName] = useState<string>('Divine Shrine');
+  
+  // Merchant shop state (for merchant events)
+  const [merchantShopOpen, setMerchantShopOpen] = useState<boolean>(false);
+  const [merchantEventId, setMerchantEventId] = useState<string | null>(null);
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -435,6 +468,40 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [statusEffects.length]);
   const [companions, setCompanions] = useState<Companion[]>([]);
+  
+  // Dynamic Events System State
+  const [dynamicEventState, setDynamicEventState] = useState<DynamicEventState | null>(null);
+  const [eventNotifications, setEventNotifications] = useState<EventNotificationData[]>([]);
+  const handleEventNotificationDismiss = useCallback((id: string) => {
+    setEventNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+  const showEventNotification = useCallback((notification: Omit<EventNotificationData, 'id'>) => {
+    const id = uniqueId();
+    // Prevent duplicate notifications for same event within 2 seconds
+    setEventNotifications(prev => {
+      const isDuplicate = prev.some(n => 
+        n.eventId === notification.eventId && 
+        n.type === notification.type &&
+        (Date.now() - n.timestamp) < 2000
+      );
+      if (isDuplicate) return prev;
+      
+      // Auto-dismiss after 5 seconds
+      const notifWithDefaults: EventNotificationData = {
+        ...notification,
+        id,
+        autoDismissSeconds: notification.autoDismissSeconds ?? 5,
+      };
+      return [...prev.slice(-2), notifWithDefaults];
+    });
+    // Play appropriate sound
+    if (notification.type === 'tier-unlock' || notification.type === 'new-event') {
+      audioService.playSoundEffect('quest_start');
+    } else if (notification.type === 'event-complete' || notification.type === 'chain-complete') {
+      audioService.playSoundEffect('quest_complete');
+    }
+  }, []);
+  
   const [colorTheme, setColorTheme] = useState('default');
   const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'sandstorm' | 'none'>(() => {
     // Load from localStorage
@@ -744,6 +811,61 @@ const App: React.FC = () => {
       }
     })();
   }, [companions, currentUser?.uid, currentCharacterId]);
+
+  // Dynamic Events: Load state when character changes
+  useEffect(() => {
+    // Clear dynamic event state when character changes
+    setDynamicEventState(null);
+    
+    if (!currentUser?.uid || !currentCharacterId) return;
+    
+    // Find the character from the loaded characters array
+    const character = characters.find(c => c.id === currentCharacterId);
+    if (!character) return; // Wait until character is loaded
+    
+    (async () => {
+      try {
+        // Try loading from Firebase first
+        const remote = await loadDynamicEventState(currentUser.uid, currentCharacterId);
+        if (remote) {
+          setDynamicEventState(remote);
+        } else {
+          // Initialize new state for this character
+          const initial = initializeEventState(currentCharacterId, character);
+          setDynamicEventState(initial);
+          // Save the initial state
+          await saveDynamicEventState(currentUser.uid, currentCharacterId, initial);
+        }
+      } catch (e) {
+        console.warn('Failed to load dynamic event state:', e);
+        // Fallback: initialize locally
+        const initial = initializeEventState(currentCharacterId, character);
+        setDynamicEventState(initial);
+      }
+    })();
+  }, [currentUser?.uid, currentCharacterId, characters]);
+
+  // Dynamic Events: Persist state changes to Firebase
+  const saveDynamicEventStateDebounced = useCallback(
+    async (state: DynamicEventState) => {
+      if (!currentUser?.uid || !state.characterId) return;
+      try {
+        await saveDynamicEventState(currentUser.uid, state.characterId, state);
+      } catch (e) {
+        console.warn('Failed to save dynamic event state:', e);
+      }
+    },
+    [currentUser?.uid]
+  );
+
+  // Save dynamic event state when it changes
+  useEffect(() => {
+    if (!dynamicEventState || !currentUser?.uid) return;
+    const timeout = setTimeout(() => {
+      saveDynamicEventStateDebounced(dynamicEventState);
+    }, 2000); // Debounce 2 seconds
+    return () => clearTimeout(timeout);
+  }, [dynamicEventState, currentUser?.uid, saveDynamicEventStateDebounced]);
 
   const openCompanions = () => setCompanionsModalOpen(true);
   const closeCompanions = () => setCompanionsModalOpen(false);
@@ -1402,6 +1524,248 @@ const App: React.FC = () => {
   // Helper to get active data
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const activeCharacter = characters.find(c => c.id === currentCharacterId);
+
+  // ===== DYNAMIC EVENTS HANDLERS =====
+  
+  // Helper to get game time in hours for event expiration
+  const currentGameTimeHours = activeCharacter?.time 
+    ? getGameTimeInHours(activeCharacter.time) 
+    : 0;
+
+  // Handle starting a dynamic event
+  const handleStartDynamicEvent = useCallback((event: DynamicEvent) => {
+    if (!dynamicEventState || !activeCharacter) return;
+    
+    // Check if event is already active (prevent duplicate starts)
+    if (event.status === 'active') {
+      showToast(`Event "${event.name}" is already active`, 'info');
+      return;
+    }
+    
+    // Check if player meets level requirement
+    const playerLvl = activeCharacter.level || 1;
+    if (playerLvl < event.levelRequirement) {
+      showToast(`You must be level ${event.levelRequirement} to start this event`, 'warning');
+      return;
+    }
+    
+    // Check if already at max active events
+    const activeCount = dynamicEventState.activeEvents.filter(
+      e => e.status === 'active'
+    ).length;
+    if (activeCount >= 5) {
+      showToast('You already have 5 active events. Complete or wait for some to expire.', 'warning');
+      return;
+    }
+    
+    // Start the event
+    const updatedState = startEvent(dynamicEventState, event.id);
+    setDynamicEventState(updatedState);
+    
+    showEventNotification({
+      type: 'new-event',
+      title: 'Event Started',
+      message: event.name,
+      eventId: event.id,
+      timestamp: Date.now(),
+      dismissed: false,
+    });
+    
+    showToast(`Event started: ${event.name}`, 'success');
+    
+    // Create a quest for tracking
+    const difficultyMap: Record<number, 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary'> = {
+      1: 'easy',
+      2: 'easy',
+      3: 'medium',
+      4: 'medium',
+      5: 'hard',
+      6: 'legendary',
+    };
+    
+    handleGameUpdate({
+      narrative: { title: 'Event Started', content: `You've begun: ${event.name}` },
+      newQuests: [{
+        title: event.name,
+        description: event.description,
+        objectives: event.progress?.objectives?.map(o => ({ description: o.description, completed: o.completed })) || [{ description: event.adventurePrompt, completed: false }],
+        xpReward: event.rewards.xp?.min || 0,
+        goldReward: event.rewards.gold?.min || 0,
+        difficulty: difficultyMap[event.levelTier] || 'medium',
+      }]
+    });
+    
+    // Combat-type events should trigger CombatModal immediately
+    const combatEventTypes = ['combat', 'dragon', 'bandit', 'rescue'];
+    if (combatEventTypes.includes(event.type)) {
+      try {
+        const comps = companions.filter(c => c.characterId === currentCharacterId);
+        // Create a MapEvent-like object for the combat handler (includes required fields)
+        const mapEventLike = {
+          id: event.id,
+          name: event.name,
+          type: event.type as any,
+          levelRequirement: event.levelRequirement,
+          rewards: event.rewards,
+          // Required by MapEvent type but not used by createCombatStateForEvent
+          x: 0,
+          y: 0,
+          description: event.description,
+          isActive: true
+        };
+        const combat = createCombatStateForEvent(mapEventLike, activeCharacter.level || 1, comps || []);
+        setActiveCombatEventId(event.id); // Track which event spawned this combat
+        setCombatState(combat as any);
+        showToast(`Combat initiated: ${event.name}`, 'info');
+      } catch (e) {
+        console.warn('[handleStartDynamicEvent] Failed to start combat from event:', e);
+      }
+    }
+    
+    // Treasure events should trigger lockpicking minigame
+    if (event.type === 'treasure') {
+      // Map level tier to lock difficulty
+      const difficultyMap: Record<number, LockDifficulty> = {
+        1: 'novice',
+        2: 'apprentice', 
+        3: 'adept',
+        4: 'expert',
+        5: 'master',
+        6: 'master'
+      };
+      setLockpickingDifficulty(difficultyMap[event.levelTier] || 'novice');
+      setLockpickingEventId(event.id);
+      setLockpickingOpen(true);
+      showToast(`You found a locked chest: ${event.name}`, 'info');
+    }
+    
+    // Shrine events should open blessing modal
+    if (event.type === 'shrine') {
+      setBlessingShrineName(event.name || 'Divine Shrine');
+      setBlessingEventId(event.id);
+      setBlessingModalOpen(true);
+      showToast(`You approach ${event.name}...`, 'info');
+    }
+    
+    // Merchant events should open the shop
+    if (event.type === 'merchant') {
+      setMerchantEventId(event.id);
+      setMerchantShopOpen(true);
+      showToast(`A traveling merchant greets you: ${event.name}`, 'info');
+    }
+    // eslint-disable-next-line react-hooks-exhaustive-deps
+  }, [dynamicEventState, showToast, showEventNotification, companions, currentCharacterId]);
+
+  // Handle completing a dynamic event
+  const handleCompleteDynamicEvent = useCallback((eventId: string) => {
+    if (!dynamicEventState || !activeCharacter) return;
+    
+    const event = dynamicEventState.activeEvents.find(e => e.id === eventId);
+    
+    if (!event) {
+      showToast('Event not found', 'error');
+      return;
+    }
+    
+    // Complete the event
+    const result = completeEvent(dynamicEventState, eventId, activeCharacter.time);
+    if (!result) {
+      showToast('Failed to complete event', 'error');
+      return;
+    }
+    
+    setDynamicEventState(result.updatedState);
+    
+    // Show completion notification
+    showEventNotification({
+      type: 'event-complete',
+      title: 'Event Completed!',
+      message: event.name,
+      eventId: event.id,
+      timestamp: Date.now(),
+      dismissed: false,
+    });
+    
+    // Apply rewards
+    handleGameUpdate({
+      xpChange: event.rewards.xp?.max || event.rewards.xp?.min || 0,
+      goldChange: event.rewards.gold?.max || event.rewards.gold?.min || 0,
+      narrative: { title: 'Event Completed', content: `You have completed: ${event.name}` },
+    });
+    
+    showToast(`Event completed: ${event.name}`, 'success');
+    
+    // Handle notifications from result
+    result.notifications.forEach(notif => {
+      showEventNotification(notif);
+    });
+    
+    // Check if chain was completed
+    if (event.chainId) {
+      const chain = dynamicEventState.eventChains.find(c => c.id === event.chainId);
+      if (chain && chain.status === 'completed') {
+        // Apply chain bonus rewards
+        if (chain.rewards) {
+          handleGameUpdate({
+            xpChange: chain.rewards.bonusXp || 0,
+            goldChange: chain.rewards.bonusGold || 0,
+          });
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dynamicEventState, showToast, showEventNotification]);
+
+  // Check for expired events periodically
+  useEffect(() => {
+    if (!dynamicEventState || !activeCharacter) return;
+    
+    const interval = setInterval(() => {
+      const gameTimeHrs = getGameTimeInHours(activeCharacter.time);
+      const result = processExpiredEvents(dynamicEventState, gameTimeHrs);
+      if (result.expiredEvents.length > 0) {
+        setDynamicEventState(result.updatedState);
+        showToast(`${result.expiredEvents.length} event(s) have expired`, 'warning');
+      }
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [dynamicEventState, activeCharacter?.time, showToast]);
+
+  // Generate new events on level up when tier is completed
+  const checkAndGenerateNewEvents = useCallback(async (newLevel: number) => {
+    if (!dynamicEventState || !activeCharacter) return;
+    
+    const { shouldGenerate, reason, newTier } = shouldGenerateNewEvents(dynamicEventState, activeCharacter);
+    
+    if (shouldGenerate && newTier) {
+      showEventNotification({
+        type: 'tier-unlock',
+        title: `Tier ${newTier} Unlocked!`,
+        message: reason || 'New events are now available!',
+        tier: newTier,
+        timestamp: Date.now(),
+        dismissed: false,
+      });
+      
+      // Update tier progress
+      setDynamicEventState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentTier: newTier,
+          tierProgress: {
+            ...prev.tierProgress,
+            [newTier]: {
+              ...prev.tierProgress[newTier],
+              unlocked: true,
+              unlockedAt: Date.now(),
+            }
+          }
+        };
+      });
+    }
+  }, [dynamicEventState, activeCharacter, showEventNotification]);
 
   // Auto-evaluate achievements when the character or achievement stats change (e.g., on load or level-up)
   useEffect(() => {
@@ -4086,6 +4450,9 @@ const App: React.FC = () => {
       return updated;
     }));
 
+    // Check for new tier unlock and generate events
+    checkAndGenerateNewEvents(p.newLevel);
+
     setPendingLevelUp(null);
     // Remove any available-level entry for this character (applied now)
     setAvailableLevelUps(prev => {
@@ -4891,6 +5258,10 @@ const App: React.FC = () => {
                 discoveredLocations={activeCharacter.discoveredLocations || []}
                 clearedDungeons={activeCharacter.clearedDungeons || []}
                 onEnterDungeon={handleEnterDungeonFromMap}
+                // Dynamic Events Integration
+                dynamicEventState={dynamicEventState || undefined}
+                onStartDynamicEvent={handleStartDynamicEvent}
+                onCompleteDynamicEvent={handleCompleteDynamicEvent}
                 onStartEvent={(ev: MapEvent) => {
                   showToast(`Event started: ${ev.id}`, 'info');
                   // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
@@ -4916,7 +5287,7 @@ const App: React.FC = () => {
                       objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
                       xpReward: ev.rewards?.xp?.min || 25,
                       goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
-                      difficulty: ev.levelRequirement > 20 ? 'dangerous' : 'moderate'
+                      difficulty: ev.levelRequirement > 20 ? 'hard' : 'medium'
                     }]
                   });
                 }}
@@ -5049,6 +5420,16 @@ const App: React.FC = () => {
             onCombatEnd={(result, rewards, finalVitals, timeAdvanceMinutes, combatResult) => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
+              
+              // If combat was triggered by a dynamic event, complete it on victory
+              if (activeCombatEventId && result === 'victory') {
+                console.log('[App.onCombatEnd] Completing dynamic event:', activeCombatEventId);
+                handleCompleteDynamicEvent(activeCombatEventId);
+                setActiveCombatEventId(null);
+              } else if (activeCombatEventId && result !== 'victory') {
+                // Combat lost/fled - reset the tracking but don't complete event
+                setActiveCombatEventId(null);
+              }
               
               // Scale combat time: real minutes * COMBAT_TIME_SCALE = in-game minutes
               const scaledTimeAdvance = timeAdvanceMinutes ? Math.round(timeAdvanceMinutes * COMBAT_TIME_SCALE) : undefined;
@@ -5319,6 +5700,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <ToastNotification messages={toastMessages} onClose={handleToastClose} />
         {/* Quest Notifications (Skyrim-style) */}
         <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
+        {/* Dynamic Event Notifications */}
+        <EventNotificationOverlay notifications={eventNotifications} onDismiss={handleEventNotificationDismiss} />
 
         {/* Doom-Style Dungeon Crawler Mini-Game */}
         {miniGameOpen && (
@@ -5356,6 +5739,115 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
+        
+        {/* Lockpicking Minigame for Treasure Events */}
+        {lockpickingOpen && activeCharacter && (
+          <LockpickingMinigame
+            isOpen={lockpickingOpen}
+            onClose={() => {
+              setLockpickingOpen(false);
+              setLockpickingEventId(null);
+            }}
+            difficulty={lockpickingDifficulty}
+            lockpickCount={getCharacterItems().filter(i => i.name.toLowerCase().includes('lockpick')).reduce((sum, i) => sum + (i.quantity || 1), 0) || 5}
+            lockpickingSkill={activeCharacter.skills?.lockpicking || 15}
+            lockName="Treasure Chest"
+            onSuccess={() => {
+              setLockpickingOpen(false);
+              if (lockpickingEventId) {
+                handleCompleteDynamicEvent(lockpickingEventId);
+                showToast('Chest unlocked! Treasure collected.', 'success');
+              }
+              setLockpickingEventId(null);
+            }}
+            onFailure={(lockpicksBroken) => {
+              showToast(`Lockpick broke! (${lockpicksBroken} used)`, 'warning');
+              // Optionally remove lockpicks from inventory
+            }}
+            onNoLockpicks={() => {
+              setLockpickingOpen(false);
+              setLockpickingEventId(null);
+              showToast('No lockpicks! Find some lockpicks first.', 'error');
+            }}
+          />
+        )}
+        
+        {/* Blessing Modal for Shrine Events */}
+        <BlessingModal
+          open={blessingModalOpen}
+          onClose={() => {
+            setBlessingModalOpen(false);
+            setBlessingEventId(null);
+          }}
+          shrineName={blessingShrineName}
+          onSelectBlessing={(blessing: Blessing) => {
+            // Apply the blessing as a status effect
+            setStatusEffects(prev => {
+              // Remove any existing blessings first (only one at a time)
+              const withoutBlessings = prev.filter(e => !e.id.startsWith('blessing_'));
+              return [...withoutBlessings, blessing.effect];
+            });
+            showToast(`Received: ${blessing.name}`, 'success');
+            
+            // Complete the shrine event
+            if (blessingEventId) {
+              handleCompleteDynamicEvent(blessingEventId);
+            }
+            setBlessingEventId(null);
+          }}
+        />
+        
+        {/* Merchant Shop Modal for Merchant Events */}
+        {merchantShopOpen && activeCharacter && (
+          <ShopModal
+            open={merchantShopOpen}
+            onClose={() => {
+              setMerchantShopOpen(false);
+              // Complete merchant event when shop is closed
+              if (merchantEventId) {
+                handleCompleteDynamicEvent(merchantEventId);
+                showToast('The merchant waves farewell and continues their journey.', 'info');
+              }
+              setMerchantEventId(null);
+            }}
+            gold={activeCharacter.gold || 0}
+            onPurchase={(item: ShopItem, qty: number) => {
+              const cost = item.price * qty;
+              if ((activeCharacter.gold || 0) < cost) {
+                showToast('Not enough gold!', 'error');
+                return;
+              }
+              // Create inventory item from shop item
+              const newItem: InventoryItem = {
+                id: `${item.id}_${Date.now()}`,
+                characterId: currentCharacterId!,
+                name: item.name,
+                type: item.type,
+                description: item.description,
+                value: item.price,
+                quantity: qty,
+                rarity: item.rarity || 'common',
+                equipped: false
+              };
+              handleGameUpdate({
+                goldChange: -cost,
+                newItems: [newItem]
+              });
+              showToast(`Purchased ${qty}x ${item.name} for ${cost} gold`, 'success');
+            }}
+            inventory={getCharacterItems()}
+            onSell={(item: InventoryItem, qty: number) => {
+              const value = Math.floor((item.value || 10) * 0.4) * qty; // 40% sell value
+              handleGameUpdate({
+                goldChange: value,
+                removedItems: [{ name: item.name, quantity: qty }]
+              });
+              showToast(`Sold ${qty}x ${item.name} for ${value} gold`, 'success');
+            }}
+            characterLevel={activeCharacter.level || 1}
+          />
+        )}
+        
         {/* Level Up Notifications (Skyrim-style) */}
         <LevelUpNotificationOverlay notifications={levelUpNotifications} onDismiss={handleLevelUpNotificationDismiss} />
         {/* Achievement Notification Banner */}

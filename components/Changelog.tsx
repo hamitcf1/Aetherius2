@@ -18,6 +18,22 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.3',
+    date: '2025-01-27',
+    title: 'Dynamic Events System - Level-Gated Adventures',
+    changes: [
+      { type: 'feature', text: 'Dynamic Events: New level-gated events unlock every 5 levels when current tier is completed' },
+      { type: 'feature', text: 'Event Tiers: 6 tiers (1-5, 6-10, 11-15, 16-25, 26-35, 36+) with progressively challenging content' },
+      { type: 'feature', text: 'Event Expiration: Events expire after 24 in-game hours - stay active in the world!' },
+      { type: 'feature', text: 'Event Notifications: Skyrim-style notifications for new events, tier unlocks, and completions' },
+      { type: 'feature', text: 'Chain System: Connected storylines where completing one event unlocks the next chapter' },
+      { type: 'feature', text: 'Firebase Persistence: Events save to Firebase per-character and sync across devices' },
+      { type: 'improvement', text: 'Map Page Events Tab: New dedicated panel showing active dynamic events with expiry timers' },
+      { type: 'improvement', text: 'Event Types: Combat, treasure hunts, mysteries, merchants, shrines, dragons, and bandits' },
+      { type: 'improvement', text: 'Tier Rewards: Higher tiers offer better gold, XP, and unique item rewards' },
+    ]
+  },
+  {
     version: '1.0.2',
     date: '2026-01-19',
     title: 'Map Events & Mission Interactivity Improvements',

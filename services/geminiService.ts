@@ -1334,3 +1334,231 @@ Return ONLY valid JSON.`;
     };
   }
 };
+
+// ============================================================================
+// DYNAMIC EVENT GENERATION (AI-powered)
+// ============================================================================
+
+export interface GeneratedEventData {
+  name: string;
+  type: 'combat' | 'treasure' | 'mystery' | 'merchant' | 'shrine' | 'escort' | 'rescue' | 'investigation' | 'dragon' | 'bandit';
+  description: string;
+  location: {
+    name: string;
+    x: number;
+    y: number;
+    hold?: string;
+  };
+  rewards: {
+    gold: { min: number; max: number };
+    xp: { min: number; max: number };
+    items?: string[];
+  };
+  durationHours: number;
+  adventurePrompt: string;
+  // Chain info (optional)
+  chainName?: string;
+  chainDescription?: string;
+  isChainStart?: boolean;
+  chainOrder?: number;
+  totalChainEvents?: number;
+}
+
+/**
+ * Generate dynamic events using AI based on player level and context
+ */
+export const generateDynamicEvents = async (
+  playerLevel: number,
+  currentLocation: string,
+  completedEventNames: string[],
+  count: number = 3,
+  options?: { model?: PreferredAIModel | string; forceChain?: boolean }
+): Promise<GeneratedEventData[]> => {
+  const preferredModel = String(options?.model || 'gemini-2.5-flash-lite');
+
+  // Calculate tier and reward caps
+  const tier = playerLevel <= 5 ? 1 : playerLevel <= 10 ? 2 : playerLevel <= 15 ? 3 : playerLevel <= 25 ? 4 : playerLevel <= 35 ? 5 : 6;
+  const tierNames = ['Novice', 'Apprentice', 'Adept', 'Expert', 'Master', 'Legendary'];
+  const tierName = tierNames[tier - 1];
+  
+  const rewardCaps: Record<number, { maxGold: number; maxXp: number }> = {
+    1: { maxGold: 200, maxXp: 150 },
+    2: { maxGold: 500, maxXp: 350 },
+    3: { maxGold: 1000, maxXp: 600 },
+    4: { maxGold: 2500, maxXp: 1200 },
+    5: { maxGold: 5000, maxXp: 2000 },
+    6: { maxGold: 10000, maxXp: 4000 },
+  };
+  const { maxGold, maxXp } = rewardCaps[tier];
+
+  const enemyTypesByTier: Record<number, string> = {
+    1: 'bandits, wolves, skeevers, mudcrabs',
+    2: 'bears, frostbite spiders, necromancers, witches',
+    3: 'dragons, vampires, giants, trolls, hagravens',
+    4: 'dragon priests, draugr deathlords, dremora, Forsworn briarhearts',
+    5: 'Falmer, Dwemer centurions, legendary creatures, ancient vampires',
+    6: 'legendary dragons, Daedric lords, world-ending threats',
+  };
+  const enemies = enemyTypesByTier[tier];
+
+  const prompt = `You are a Skyrim Game Master generating dynamic world events for a player.
+
+=== PLAYER CONTEXT ===
+- Player Level: ${playerLevel}
+- Current Tier: ${tier} (${tierName})
+- Current Location: ${currentLocation}
+- Already Completed Events: ${completedEventNames.length > 0 ? completedEventNames.join(', ') : 'None'}
+
+=== GENERATION RULES (CRITICAL) ===
+1. Generate exactly ${count} unique events that fit the player's level tier
+2. Events MUST be appropriate for level ${playerLevel} (Tier ${tier}: ${tierName})
+3. Reward caps for this tier:
+   - Gold: min 10, max ${maxGold}
+   - XP: min 25, max ${maxXp}
+4. Enemy types appropriate for this tier: ${enemies}
+5. Event types: combat, treasure, mystery, merchant, shrine, escort, rescue, investigation, dragon, bandit
+6. Duration: 12-72 hours (in-game time)
+7. DO NOT repeat event names from the completed list
+8. Locations should be actual Skyrim locations with x/y coordinates (0-100 percentage on map)
+9. adventurePrompt must be a compelling hook for the adventure AI to use
+${options?.forceChain ? `10. REQUIRED: Make these events a connected chain story with chainName, chainDescription, isChainStart, chainOrder, and totalChainEvents` : ''}
+
+=== SKYRIM LOCATION REFERENCE (x, y coordinates) ===
+- Whiterun area: x 40-50, y 50-60
+- Windhelm area: x 80-90, y 25-35  
+- Solitude area: x 10-20, y 15-25
+- Riften area: x 85-95, y 70-85
+- Markarth area: x 5-15, y 40-55
+- Morthal area: x 25-35, y 22-32
+- Falkreath area: x 28-38, y 75-85
+- Dawnstar area: x 42-52, y 8-18
+- Winterhold area: x 70-80, y 8-18
+
+=== OUTPUT FORMAT ===
+Return a JSON array of event objects. Each event must have:
+{
+  "name": "string (unique, evocative name)",
+  "type": "combat|treasure|mystery|merchant|shrine|escort|rescue|investigation|dragon|bandit",
+  "description": "string (2-3 sentences describing the event)",
+  "location": {
+    "name": "string (actual Skyrim location name)",
+    "x": number (0-100),
+    "y": number (0-100),
+    "hold": "string (Skyrim hold name)"
+  },
+  "rewards": {
+    "gold": { "min": number, "max": number },
+    "xp": { "min": number, "max": number },
+    "items": ["optional array of item names"]
+  },
+  "durationHours": number (12-72),
+  "adventurePrompt": "string (compelling narrative hook for adventure AI)"${options?.forceChain ? `,
+  "chainName": "string (name of the quest chain)",
+  "chainDescription": "string (overall chain story)",
+  "isChainStart": boolean (true only for first event),
+  "chainOrder": number (1-based position in chain),
+  "totalChainEvents": number (total events in this chain)` : ''}
+}
+
+Return ONLY the JSON array, no other text.`;
+
+  try {
+    return await executeWithFallback(async (model, apiKey) => {
+      const ai = getClientForModel(model, apiKey);
+
+      const run = async (useJsonMode: boolean) => {
+        const config = useJsonMode
+          ? { responseMimeType: 'application/json' as const }
+          : undefined;
+        return await ai.models.generateContent({
+          model: model,
+          contents: prompt,
+          ...(config ? { config } : {})
+        });
+      };
+
+      let response: any;
+      try {
+        response = await run(supportsJsonMimeType(model));
+      } catch (e) {
+        if (isJsonModeNotEnabledError(e)) {
+          response = await run(false);
+        } else {
+          throw e;
+        }
+      }
+
+      const text = response.text || "[]";
+      const json = extractJsonObject(text) || "[]";
+      const events: GeneratedEventData[] = JSON.parse(json);
+      
+      // Validate and sanitize events
+      return events.map(event => ({
+        name: String(event.name || 'Unknown Event'),
+        type: (['combat', 'treasure', 'mystery', 'merchant', 'shrine', 'escort', 'rescue', 'investigation', 'dragon', 'bandit'].includes(event.type) ? event.type : 'combat') as GeneratedEventData['type'],
+        description: String(event.description || 'A mysterious event awaits.'),
+        location: {
+          name: String(event.location?.name || currentLocation || 'Skyrim'),
+          x: Math.min(100, Math.max(0, Number(event.location?.x) || 50)),
+          y: Math.min(100, Math.max(0, Number(event.location?.y) || 50)),
+          hold: String(event.location?.hold || 'Skyrim'),
+        },
+        rewards: {
+          gold: {
+            min: Math.min(maxGold, Math.max(10, Number(event.rewards?.gold?.min) || 50)),
+            max: Math.min(maxGold, Math.max(10, Number(event.rewards?.gold?.max) || 100)),
+          },
+          xp: {
+            min: Math.min(maxXp, Math.max(25, Number(event.rewards?.xp?.min) || 50)),
+            max: Math.min(maxXp, Math.max(25, Number(event.rewards?.xp?.max) || 100)),
+          },
+          items: Array.isArray(event.rewards?.items) ? event.rewards.items.map(String) : undefined,
+        },
+        durationHours: Math.min(72, Math.max(12, Number(event.durationHours) || 24)),
+        adventurePrompt: String(event.adventurePrompt || event.description || 'Investigate this event.'),
+        ...(event.chainName ? {
+          chainName: String(event.chainName),
+          chainDescription: String(event.chainDescription || ''),
+          isChainStart: Boolean(event.isChainStart),
+          chainOrder: Number(event.chainOrder) || 1,
+          totalChainEvents: Number(event.totalChainEvents) || 1,
+        } : {}),
+      }));
+    }, { preferredModel, fallbackChain: TEXT_MODEL_FALLBACK_CHAIN });
+  } catch (error) {
+    console.error("Dynamic event generation error:", error);
+    // Return fallback events based on tier
+    return [{
+      name: tier <= 2 ? 'Bandit Ambush' : tier <= 4 ? 'Dragon Sighting' : 'Ancient Evil Stirs',
+      type: tier <= 2 ? 'bandit' : tier <= 4 ? 'dragon' : 'combat',
+      description: `A threat appropriate for a level ${playerLevel} adventurer emerges.`,
+      location: {
+        name: currentLocation || 'Whiterun Hold',
+        x: 45,
+        y: 52,
+        hold: 'Whiterun Hold',
+      },
+      rewards: {
+        gold: { min: Math.floor(maxGold * 0.2), max: Math.floor(maxGold * 0.5) },
+        xp: { min: Math.floor(maxXp * 0.3), max: Math.floor(maxXp * 0.6) },
+      },
+      durationHours: 24,
+      adventurePrompt: 'A dangerous threat awaits your attention.',
+    }];
+  }
+};
+
+/**
+ * Generate a chain of connected events (quest line)
+ */
+export const generateEventChain = async (
+  playerLevel: number,
+  currentLocation: string,
+  chainLength: number = 3,
+  options?: { model?: PreferredAIModel | string; theme?: string }
+): Promise<GeneratedEventData[]> => {
+  return generateDynamicEvents(playerLevel, currentLocation, [], chainLength, {
+    ...options,
+    forceChain: true,
+  });
+};

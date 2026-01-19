@@ -854,3 +854,214 @@ export interface DungeonState {
   // Result tracking
   result?: 'in_progress' | 'cleared' | 'fled' | 'defeated';
 }
+
+// ============================================================================
+// DYNAMIC EVENTS & MISSIONS SYSTEM
+// ============================================================================
+
+/**
+ * Level tiers for event/mission unlock system
+ * New content unlocks every 5 levels AND when all current tier events are completed
+ */
+export type LevelTier = 1 | 2 | 3 | 4 | 5 | 6;
+
+export const LEVEL_TIER_THRESHOLDS: Record<LevelTier, { minLevel: number; maxLevel: number; name: string }> = {
+  1: { minLevel: 1, maxLevel: 5, name: 'Novice' },
+  2: { minLevel: 6, maxLevel: 10, name: 'Apprentice' },
+  3: { minLevel: 11, maxLevel: 15, name: 'Adept' },
+  4: { minLevel: 16, maxLevel: 25, name: 'Expert' },
+  5: { minLevel: 26, maxLevel: 35, name: 'Master' },
+  6: { minLevel: 36, maxLevel: 100, name: 'Legendary' },
+};
+
+export const TIER_REWARD_CAPS: Record<LevelTier, { maxGold: number; maxXp: number }> = {
+  1: { maxGold: 200, maxXp: 150 },
+  2: { maxGold: 500, maxXp: 350 },
+  3: { maxGold: 1000, maxXp: 600 },
+  4: { maxGold: 2500, maxXp: 1200 },
+  5: { maxGold: 5000, maxXp: 2000 },
+  6: { maxGold: 10000, maxXp: 4000 },
+};
+
+export type DynamicEventType = 'combat' | 'treasure' | 'mystery' | 'merchant' | 'shrine' | 'escort' | 'rescue' | 'investigation' | 'dragon' | 'bandit';
+
+export interface DynamicEvent {
+  id: string;
+  characterId: string;
+  name: string;
+  type: DynamicEventType;
+  description: string;
+  levelTier: LevelTier;
+  levelRequirement: number;
+  location: {
+    name: string;
+    x: number; // 0-100 percentage on map
+    y: number;
+    hold?: string;
+  };
+  rewards: {
+    gold: { min: number; max: number };
+    xp: { min: number; max: number };
+    items?: string[];
+  };
+  // In-game time duration (hours) before event expires
+  durationHours: number;
+  // Game time when event was created (day * 24 + hour)
+  createdAtGameTime: number;
+  // Event status
+  status: 'available' | 'active' | 'completed' | 'failed' | 'expired';
+  // Progress tracking
+  progress?: {
+    currentStep: number;
+    totalSteps: number;
+    objectives: Array<{ description: string; completed: boolean }>;
+  };
+  // Adventure integration - prompt for AI context
+  adventurePrompt: string;
+  // Chain system - if this event is part of a chain
+  chainId?: string;
+  chainOrder?: number;
+  nextEventId?: string; // Next event in chain (unlocked on completion)
+  // Timestamps
+  createdAt: number; // Real timestamp
+  completedAt?: number;
+  // Firebase document ID
+  firestoreId?: string;
+}
+
+export interface DynamicMission {
+  id: string;
+  characterId: string;
+  name: string;
+  objective: string;
+  description: string;
+  levelTier: LevelTier;
+  levelRequirement: number;
+  location: {
+    name: string;
+    locationId?: string;
+    x: number;
+    y: number;
+    hold?: string;
+  };
+  rewards: {
+    gold: { min: number; max: number };
+    xp: { min: number; max: number };
+    items?: string[];
+  };
+  durationHours: number;
+  createdAtGameTime: number;
+  difficulty: 'safe' | 'moderate' | 'dangerous' | 'deadly' | 'legendary';
+  status: 'available' | 'active' | 'completed' | 'failed' | 'expired';
+  progress?: {
+    currentStep: number;
+    totalSteps: number;
+    objectives: Array<{ description: string; completed: boolean }>;
+  };
+  adventurePrompt: string;
+  // Chain system
+  chainId?: string;
+  chainOrder?: number;
+  nextMissionId?: string;
+  // Timestamps
+  createdAt: number;
+  completedAt?: number;
+  firestoreId?: string;
+}
+
+export interface EventChain {
+  id: string;
+  characterId: string;
+  name: string;
+  description: string;
+  levelTier: LevelTier;
+  eventIds: string[]; // Ordered list of event IDs in this chain
+  currentEventIndex: number;
+  status: 'available' | 'in_progress' | 'completed' | 'failed';
+  totalRewards: {
+    gold: number;
+    xp: number;
+    items?: string[];
+  };
+  createdAt: number;
+  completedAt?: number;
+}
+
+export interface DynamicEventState {
+  characterId: string;
+  // Active events (max 5)
+  activeEvents: DynamicEvent[];
+  // Active missions
+  activeMissions: DynamicMission[];
+  // Completed event/mission IDs (for history and chain unlocking)
+  completedEventIds: string[];
+  completedMissionIds: string[];
+  // Event chains
+  eventChains: EventChain[];
+  // Tier tracking
+  lastSeenTier: LevelTier;
+  currentTier: LevelTier;
+  tierProgress: Record<LevelTier, { total: number; completed: number }>;
+  // Notification queue
+  pendingNotifications: EventNotificationData[];
+  // Last generation timestamp (game time)
+  lastEventGenerationGameTime: number;
+  // Firebase sync
+  lastSyncedAt?: number;
+}
+
+export interface EventNotificationData {
+  id: string;
+  type: 'tier-unlock' | 'new-event' | 'new-mission' | 'event-expiring' | 'event-complete' | 'chain-complete' | 'chain-unlocked';
+  title: string;
+  message: string;
+  eventId?: string;
+  missionId?: string;
+  chainId?: string;
+  tier?: LevelTier;
+  timestamp: number;
+  dismissed: boolean;
+  // Auto-dismiss after this many seconds (0 = manual dismiss only)
+  autoDismissSeconds?: number;
+}
+
+// Helper to calculate current level tier
+export const getLevelTier = (level: number): LevelTier => {
+  if (level <= 5) return 1;
+  if (level <= 10) return 2;
+  if (level <= 15) return 3;
+  if (level <= 25) return 4;
+  if (level <= 35) return 5;
+  return 6;
+};
+
+// Helper to calculate game time in hours from GameTime
+export const getGameTimeInHours = (time: GameTime): number => {
+  return (time.day - 1) * 24 + time.hour + time.minute / 60;
+};
+
+// Check if an event has expired based on game time
+export const isEventExpired = (event: DynamicEvent, currentGameTime: number): boolean => {
+  return currentGameTime >= event.createdAtGameTime + event.durationHours;
+};
+
+// Default empty state
+export const DEFAULT_DYNAMIC_EVENT_STATE: Omit<DynamicEventState, 'characterId'> = {
+  activeEvents: [],
+  activeMissions: [],
+  completedEventIds: [],
+  completedMissionIds: [],
+  eventChains: [],
+  lastSeenTier: 1,
+  currentTier: 1,
+  tierProgress: {
+    1: { total: 0, completed: 0 },
+    2: { total: 0, completed: 0 },
+    3: { total: 0, completed: 0 },
+    4: { total: 0, completed: 0 },
+    5: { total: 0, completed: 0 },
+    6: { total: 0, completed: 0 },
+  },
+  pendingNotifications: [],
+  lastEventGenerationGameTime: 0,
+};

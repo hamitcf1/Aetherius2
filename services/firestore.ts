@@ -17,7 +17,7 @@ import {
   QueryConstraint
 } from 'firebase/firestore';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { Character, CustomQuest, InventoryItem, JournalEntry, StoryChapter, UserProfile, GameStateUpdate } from '../types';
+import { Character, CustomQuest, InventoryItem, JournalEntry, StoryChapter, UserProfile, GameStateUpdate, DynamicEvent, DynamicMission, DynamicEventState, EventChain, DEFAULT_DYNAMIC_EVENT_STATE } from '../types';
 
 export interface AdventureMessage {
   id: string;
@@ -845,6 +845,224 @@ export const deleteUserLoadout = async (uid: string, loadoutId: string): Promise
     await deleteDoc(docRef);
   } catch (err) {
     console.warn('Failed to delete loadout from Firestore:', err);
+    throw err;
+  }
+};
+
+// ===== DYNAMIC EVENTS =====
+
+/**
+ * Save entire dynamic event state for a character
+ */
+export const saveDynamicEventState = async (uid: string, characterId: string, state: DynamicEventState): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId);
+    await setDoc(docRef, {
+      ...state,
+      lastSyncedAt: Date.now(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save dynamic event state to Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Load dynamic event state for a character
+ */
+export const loadDynamicEventState = async (uid: string, characterId: string): Promise<DynamicEventState | null> => {
+  if (!uid || !characterId) return null;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId);
+    const snapshot = await getDoc(docRef);
+    if (snapshot.exists()) {
+      return snapshot.data() as DynamicEventState;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to load dynamic event state from Firestore:', err);
+    return null;
+  }
+};
+
+/**
+ * Save a single dynamic event
+ */
+export const saveDynamicEvent = async (uid: string, characterId: string, event: DynamicEvent): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId, 'events', event.id);
+    await setDoc(docRef, {
+      ...event,
+      firestoreId: event.id,
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save dynamic event to Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Load all dynamic events for a character
+ */
+export const loadDynamicEvents = async (uid: string, characterId: string): Promise<DynamicEvent[]> => {
+  if (!uid || !characterId) return [];
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'events') as CollectionReference<DocumentData>;
+    const snapshot = await getDocs(collRef);
+    return snapshot.docs.map(d => d.data() as DynamicEvent);
+  } catch (err) {
+    console.warn('Failed to load dynamic events from Firestore:', err);
+    return [];
+  }
+};
+
+/**
+ * Delete a dynamic event
+ */
+export const deleteDynamicEvent = async (uid: string, characterId: string, eventId: string): Promise<void> => {
+  if (!uid || !characterId || !eventId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId, 'events', eventId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('Failed to delete dynamic event from Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Save a dynamic mission
+ */
+export const saveDynamicMission = async (uid: string, characterId: string, mission: DynamicMission): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId, 'missions', mission.id);
+    await setDoc(docRef, {
+      ...mission,
+      firestoreId: mission.id,
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save dynamic mission to Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Load all dynamic missions for a character
+ */
+export const loadDynamicMissions = async (uid: string, characterId: string): Promise<DynamicMission[]> => {
+  if (!uid || !characterId) return [];
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'missions') as CollectionReference<DocumentData>;
+    const snapshot = await getDocs(collRef);
+    return snapshot.docs.map(d => d.data() as DynamicMission);
+  } catch (err) {
+    console.warn('Failed to load dynamic missions from Firestore:', err);
+    return [];
+  }
+};
+
+/**
+ * Save an event chain
+ */
+export const saveEventChain = async (uid: string, characterId: string, chain: EventChain): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'users', uid, 'dynamicEvents', characterId, 'chains', chain.id);
+    await setDoc(docRef, chain, { merge: true });
+  } catch (err) {
+    console.warn('Failed to save event chain to Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Load all event chains for a character
+ */
+export const loadEventChains = async (uid: string, characterId: string): Promise<EventChain[]> => {
+  if (!uid || !characterId) return [];
+  try {
+    const db = getDb();
+    const collRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'chains') as CollectionReference<DocumentData>;
+    const snapshot = await getDocs(collRef);
+    return snapshot.docs.map(d => d.data() as EventChain);
+  } catch (err) {
+    console.warn('Failed to load event chains from Firestore:', err);
+    return [];
+  }
+};
+
+/**
+ * Batch save multiple events and update state
+ */
+export const batchSaveDynamicEvents = async (
+  uid: string, 
+  characterId: string, 
+  events: DynamicEvent[], 
+  state: Partial<DynamicEventState>
+): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    const batch = writeBatch(db);
+    
+    // Save state document
+    const stateRef = doc(db, 'users', uid, 'dynamicEvents', characterId);
+    batch.set(stateRef, { ...state, lastSyncedAt: Date.now() }, { merge: true });
+    
+    // Save each event
+    events.forEach(event => {
+      const eventRef = doc(db, 'users', uid, 'dynamicEvents', characterId, 'events', event.id);
+      batch.set(eventRef, { ...event, firestoreId: event.id }, { merge: true });
+    });
+    
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to batch save dynamic events to Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Delete all dynamic events for a character (used when deleting character)
+ */
+export const deleteAllDynamicEvents = async (uid: string, characterId: string): Promise<void> => {
+  if (!uid || !characterId) return;
+  try {
+    const db = getDb();
+    
+    // Delete events subcollection
+    const eventsRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'events') as CollectionReference<DocumentData>;
+    const eventsSnapshot = await getDocs(eventsRef);
+    const eventDeletes = eventsSnapshot.docs.map(d => deleteDoc(d.ref));
+    
+    // Delete missions subcollection
+    const missionsRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'missions') as CollectionReference<DocumentData>;
+    const missionsSnapshot = await getDocs(missionsRef);
+    const missionDeletes = missionsSnapshot.docs.map(d => deleteDoc(d.ref));
+    
+    // Delete chains subcollection
+    const chainsRef = collection(db, 'users', uid, 'dynamicEvents', characterId, 'chains') as CollectionReference<DocumentData>;
+    const chainsSnapshot = await getDocs(chainsRef);
+    const chainDeletes = chainsSnapshot.docs.map(d => deleteDoc(d.ref));
+    
+    await Promise.all([...eventDeletes, ...missionDeletes, ...chainDeletes]);
+    
+    // Delete main state document
+    const stateRef = doc(db, 'users', uid, 'dynamicEvents', characterId);
+    await deleteDoc(stateRef);
+  } catch (err) {
+    console.warn('Failed to delete all dynamic events from Firestore:', err);
     throw err;
   }
 };
