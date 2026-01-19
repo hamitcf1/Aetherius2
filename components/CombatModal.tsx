@@ -219,6 +219,7 @@ const TurnList: React.FC<{
           return (
             <div 
               key={`${p.id}-${idx}`} 
+              data-testid={`participant-${p.id}`}
               className={`${baseClasses} ${typeClasses} ${stateClasses} border`}
               title={`${p.name} (${p.healthPercent}% HP)`}
             >
@@ -275,6 +276,7 @@ const EnemyCard: React.FC<{
   return (
     <div 
       ref={containerRef}
+      data-testid={`enemy-card-${enemy.id}`}
       onClick={isDead ? undefined : onClick}
       className={`
         relative p-3 rounded-lg border-2 transition-all duration-300
@@ -305,7 +307,7 @@ const EnemyCard: React.FC<{
       {/* Enemy name and type */}
       <div className="mb-2">
         <div className="flex items-center gap-2">
-          <h4 className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
+          <h4 data-testid={`enemy-name-${enemy.id}`} className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
             {enemy.name}
           </h4>
           {/* Companion auto-control badge - clickable to toggle (SKY-55) */}

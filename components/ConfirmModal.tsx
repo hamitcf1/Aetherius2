@@ -28,7 +28,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ open, title = 'Confirm', de
 
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onCancel} className="px-3 py-2 rounded border border-skyrim-border bg-skyrim-paper/40">{cancelLabel}</button>
-          <button onClick={onConfirm} className={`px-3 py-2 rounded font-bold ${danger ? 'bg-red-600 text-white' : 'bg-amber-500 text-black'}`}>{confirmLabel}</button>
+          <button data-testid="confirm-modal-confirm" onClick={onConfirm} className={`px-3 py-2 rounded font-bold ${danger ? 'bg-red-600 text-white' : 'bg-amber-500 text-black'}`}>{confirmLabel}</button>
         </div>
       </div>
     </ModalWrapper>

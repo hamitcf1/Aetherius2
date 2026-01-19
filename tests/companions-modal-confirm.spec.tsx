@@ -18,7 +18,7 @@ describe('CompanionsModal — confirm dismissal', () => {
     expect(screen.getByText(/Are you sure you want to dismiss/i)).toBeTruthy();
 
     // Confirm
-    const confirm = screen.getByRole('button', { name: /Dismiss/i });
+    const confirm = screen.getByTestId('confirm-modal-confirm');
     fireEvent.click(confirm);
 
     await waitFor(() => expect(onRemove).toHaveBeenCalledWith('c1'));

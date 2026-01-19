@@ -169,7 +169,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setConfirmRemoveId(c.id); setConfirmRemoveName(c.name); }} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
+                <button data-testid={`companion-dismiss-${c.id}`} onClick={() => { setConfirmRemoveId(c.id); setConfirmRemoveName(c.name); }} className="px-2 py-1 rounded border border-red-600 text-red-500" title="Dismiss"><Trash2 size={14} /></button>
                 <button onClick={() => onUpdate({ ...c, behavior: c.behavior === 'follow' ? 'guard' : 'follow' })} className="px-2 py-1 rounded bg-skyrim-paper/30 text-skyrim-text text-xs" title="Toggle Follow/Guard">{c.behavior === 'follow' ? 'Following' : c.behavior === 'guard' ? 'Guarding' : 'Idle'}</button>
                 {!c.isAnimal && (
                   <button onClick={() => onUpdate({ ...c, autoLoot: !c.autoLoot })} className={`px-2 py-1 rounded text-xs ${c.autoLoot ? 'bg-yellow-400 text-black' : 'bg-skyrim-paper/30 text-skyrim-text'}`} title="Toggle Auto-loot">{c.autoLoot ? 'Auto-loot: On' : 'Auto-loot: Off'}</button>

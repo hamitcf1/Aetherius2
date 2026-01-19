@@ -87,7 +87,7 @@ describe('Combat ability targeting UI', () => {
     container?.appendChild(fake);
 
     // Ensure initial selected target is the enemy
-    const bandit = await screen.findByText('Bandit');
+    const bandit = await screen.findByTestId('enemy-name-enemy1');
     let enemyEl = bandit.parentElement as HTMLElement | null;
     while (enemyEl && !enemyEl.className.includes('rounded-lg')) enemyEl = enemyEl.parentElement as HTMLElement | null;
     expect(enemyEl).toBeTruthy();
@@ -96,7 +96,7 @@ describe('Combat ability targeting UI', () => {
     expect(enemyEl!.className.includes('ring-2') || enemyEl!.className.includes('ring-red-400')).toBeTruthy();
 
     // Click the Buddy card and assert selection moves
-    const buddy = await screen.findByText('Buddy');
+    const buddy = await screen.findByTestId('enemy-name-ally1');
     // Find the actual Buddy card container (has rounded-lg class)
     let el = buddy.parentElement as HTMLElement | null;
     while (el && !el.className.includes('rounded-lg')) el = el.parentElement as HTMLElement | null;
