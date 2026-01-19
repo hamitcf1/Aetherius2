@@ -17,7 +17,8 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
 import MapPage from './components/MapPage';
-import { listDungeons } from './data/dungeonDefinitions';
+import { listDungeons, getDungeonById } from './data/dungeonDefinitions';
+import { SKYRIM_LOCATIONS } from './components/MapPage';
 import dungeonService from './services/dungeonService';
 import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
@@ -3064,16 +3065,45 @@ const App: React.FC = () => {
 
 
   // Open dungeon modal from map or explicit action
+  const normalizeKey = (s: string) => (s || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\b(the|of|a|an|mine|cave|camp|ruins|ruin|barrow|fort|den|lair|dungeon|hall|temple|shrine|mineshaft|abyss|depths)\b/g, '').replace(/\s+/g, ' ').trim();
+
   const handleEnterDungeonFromMap = (locationName: string) => {
-    const normalized = (locationName || '').toLowerCase().trim();
-    const d = listDungeons().find(dd => (dd.location || '').toLowerCase() === normalized || (dd.name || '').toLowerCase() === normalized || (dd.name || '').toLowerCase().includes(normalized) || (dd.location || '').toLowerCase().includes(normalized));
+    const raw = (locationName || '').trim();
+    if (!raw) { showToast('No dungeon found at this location.', 'warning'); return; }
+
+    // Try direct map -> dungeonId linkage first
+    const foundMap = SKYRIM_LOCATIONS.find(l => normalizeKey(l.name) === normalizeKey(raw) || (l.id || '').toLowerCase() === raw.toLowerCase());
+    if (foundMap?.dungeonId) {
+      const dd = getDungeonById(foundMap.dungeonId);
+      if (dd) {
+        setDungeonId(dd.id);
+        setDungeonOpen(true);
+        audioService.pauseMusic();
+        return;
+      }
+    }
+
+    // Fallback fuzzy matching against dungeon names and locations
+    const normalized = normalizeKey(raw);
+    const d = listDungeons().find(dd => {
+      const ddName = normalizeKey(dd.name || dd.location || '');
+      if (ddName === normalized) return true;
+      if (ddName.includes(normalized) || normalized.includes(ddName)) return true;
+      const nameWords = new Set(ddName.split(' ').filter(Boolean));
+      const locWords = new Set(normalized.split(' ').filter(Boolean));
+      for (const w of nameWords) {
+        if (locWords.has(w)) return true;
+      }
+      return false;
+    });
+
     if (!d) {
       showToast('No dungeon found at this location.', 'warning');
       return;
     }
+
     setDungeonId(d.id);
     setDungeonOpen(true);
-    // Pause ambient music and narration to avoid overlap with the dungeon experience
     audioService.pauseMusic();
   };
 

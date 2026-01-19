@@ -1059,6 +1059,29 @@ export const initializeCombat = (
     loot: Array.isArray(enemy.loot) && enemy.loot.length ? enemy.loot : (BASE_ENEMY_TEMPLATES[(enemy.type || '').toLowerCase()]?.possibleLoot || enemy.loot || [])
   }));
 
+  // Normalize duplicate enemy names so identical base names are disambiguated with numeric suffixes
+  // e.g. multiple 'Skeever' entries will become 'Skeever 1', 'Skeever 2', etc.
+  // This also strips an existing trailing numeric suffix before counting so already-numbered names behave sensibly.
+  const nameCounts: Record<string, number> = {};
+  initializedEnemies.forEach(e => {
+    const base = e.name.replace(/\s+\d+$/,'');
+    nameCounts[base] = (nameCounts[base] || 0) + 1;
+  });
+
+  const nameSeen: Record<string, number> = {};
+  Object.keys(nameCounts).forEach(base => {
+    if (nameCounts[base] > 1) {
+      // apply numbering in encounter order so order is deterministic
+      initializedEnemies.forEach(e => {
+        const ebase = e.name.replace(/\s+\d+$/,'');
+        if (ebase === base) {
+          nameSeen[base] = (nameSeen[base] || 0) + 1;
+          e.name = `${ebase} ${nameSeen[base]}`;
+        }
+      });
+    }
+  });
+
 
   // If companions are provided, include companions as allied combatants when their behavior indicates participation
   // Filter out invalid companions (must have id, name, and be active - behavior of 'follow' or 'guard')
@@ -1289,9 +1312,15 @@ export const executePlayerAction = (
   const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
 
   // EARLY-EXIT: if the player is stunned they must skip their turn (no dice, no action)
-  const playerStunned = (newState.playerActiveEffects || []).some((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
-  if (playerStunned) {
-    const stNarr = 'You are stunned and skip your turn.';
+  const playerStun = (newState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+  if (playerStun) {
+    const remainingBefore = playerStun.turnsRemaining || 0;
+    // Decrement all player active effects durations (applies even when stunned)
+    newState.playerActiveEffects = (newState.playerActiveEffects || [])
+      .map((pe: any) => ({ ...pe, turnsRemaining: (pe.turnsRemaining || 0) - 1 }))
+      .filter((pe: any) => pe.turnsRemaining > 0);
+    const remainingAfter = Math.max(0, remainingBefore - 1);
+    const stNarr = `You are stunned and skip your turn.${remainingAfter > 0 ? ` (${remainingAfter} turns remaining)` : ''}`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'stunned', narrative: stNarr, timestamp: Date.now() });
     return { newState, newPlayerStats, narrative: stNarr, aoeSummary };
   }
@@ -2871,6 +2900,11 @@ export const executeCompanionAction = (
   // If companion is stunned, skip their action and log it
   const compStunned = (ally.activeEffects || []).some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
   if (compStunned) {
+    // Decrement effect durations (stun applies and should be decremented when causing a skip)
+    ally.activeEffects = (ally.activeEffects || [])
+      .map((ae: any) => ({ ...ae, turnsRemaining: (ae.turnsRemaining || 0) - 1 }))
+      .filter((ae: any) => ae.turnsRemaining > 0);
+
     const sn = `${ally.name} is stunned and skips their turn.`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'stunned', narrative: sn, timestamp: Date.now() });
     return { newState, narrative: sn, success: false };
@@ -3119,7 +3153,44 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
       fatigue: Math.round(minutes * fatiguePerMinute * 10) / 10
     };
   }
-  
+
+  // === CLEANUP: Dead summoned companions should not remain active or block new conjures ===
+  try {
+    // Remove pendingSummons entries that point to companions that have died
+    if (newState.pendingSummons && newState.pendingSummons.length) {
+      const alivePending = newState.pendingSummons.filter((s: any) => {
+        const ally = (newState.allies || []).find(a => a.id === s.companionId);
+        // Keep pending if it still has playerTurnsRemaining > 0 AND (ally does not exist yet OR ally is alive)
+        const playerTurns = (s as any).playerTurnsRemaining !== undefined ? (s as any).playerTurnsRemaining : (s as any).turnsRemaining;
+        if (!playerTurns || playerTurns <= 0) return false;
+        if (!ally) return true; // still pending spawn
+        return (ally.currentHealth || 0) > 0;
+      });
+      if (alivePending.length !== newState.pendingSummons.length) {
+        newState.pendingSummons = alivePending.map((s: any) => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: s.playerTurnsRemaining }));
+      }
+    }
+
+    // For allies that are summons and dead, clear their summon flags and any decay markers
+    if (newState.allies && newState.allies.length) {
+      newState.allies = newState.allies.map(a => {
+        if ((a as any).companionMeta?.isSummon && (a.currentHealth || 0) <= 0) {
+          const meta = { ...(a as any).companionMeta };
+          // Remove decayActive and isSummon so player can conjure again
+          delete meta.decayActive;
+          meta.isSummon = false;
+          const filteredEffects = (a.activeEffects || []).filter((ae: any) => !(ae.effect && ae.effect.name && ae.effect.name.toLowerCase().includes('decay')));
+          // Log the cleanup
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_removed', narrative: `${a.name} has been defeated and is no longer active. You may summon again.`, timestamp: Date.now() });
+          return { ...a, companionMeta: meta, activeEffects: filteredEffects } as any;
+        }
+        return a;
+      });
+    }
+  } catch (e) {
+    console.warn('[combat] cleanup dead summons failed', e);
+  }
+
   return newState;
 };
 

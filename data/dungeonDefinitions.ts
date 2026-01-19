@@ -334,8 +334,305 @@ export const DUNGEON_DEFINITIONS: DungeonDefinition[] = [
       { id: 'ms_reward2', type: 'reward', name: 'Mining Cache', x: 75, y: 75, connections: ['ms_boss'], rewards: { gold: 85, items: [{ name: 'Corundum Ore', type: 'misc', quantity: 2, rarity: 'uncommon' }] } },
       { id: 'ms_boss', type: 'boss', name: 'Bandit Chief', x: 95, y: 50, connections: [], enemies: [simpleEnemy('msboss','Bandit Chief','humanoid',8,340,38,600,120,true), simpleEnemy('msboss2','Bandit Marauder','humanoid',6,180,24,320,60), simpleEnemy('msboss3','Bandit Thug','humanoid',5,130,18,200,40)] }
     ]
+  },
+
+
+  // Additional smaller/placeholder dungeon definitions added for map linkage
+  {
+    id: 'dustmans_cairn_dg',
+    name: 'Dustmans Cairn',
+    description: 'An ancient Nordic barrow infested by Silver Hand hunters.',
+    location: "Dustman's Cairn",
+    difficulty: 'medium',
+    recommendedLevel: 10,
+    theme: 'nordic_tomb',
+    startNodeId: 'dc_start',
+    bossNodeId: 'dc_boss',
+    completionRewards: { gold: 420, xp: 900, items: [{ name: 'Silver Dagger', type: 'weapon', quantity: 1, rarity: 'rare' as LootRarity }] },
+    nodes: [
+      { id: 'dc_start', type: 'start', name: 'Collapsed Entrance', x: 5, y: 50, connections: ['dc_combat1'] },
+      { id: 'dc_combat1', type: 'combat', name: 'Silver Hand Patrol', x: 50, y: 50, connections: ['dc_boss'], enemies: [simpleEnemy('sh1','Silver Hand Hunter','humanoid',8,220,28,600,120)] },
+      { id: 'dc_boss', type: 'boss', name: 'Silver Hand Captain', x: 95, y: 50, connections: [], enemies: [simpleEnemy('dcb','Silver Hand Captain','humanoid',12,600,50,1500,300,true)] }
+    ]
+  },
+
+  {
+    id: 'silent_moons_camp_dg',
+    name: 'Silent Moons Camp',
+    description: 'Nordic ruins where a lunar forge can enchant weapons under moonlight.',
+    location: 'Silent Moons Camp',
+    difficulty: 'medium',
+    recommendedLevel: 12,
+    theme: 'nordic_tomb',
+    startNodeId: 'sm_start',
+    bossNodeId: 'sm_boss',
+    completionRewards: { gold: 380, xp: 850, items: [{ name: 'Lunar Blade', type: 'weapon', quantity: 1, rarity: 'rare' as LootRarity }] },
+    nodes: [
+      { id: 'sm_start', type: 'start', name: 'Moonlit Gate', x: 5, y: 50, connections: ['sm_combat1'] },
+      { id: 'sm_combat1', type: 'combat', name: 'Ruins Guardians', x: 50, y: 50, connections: ['sm_boss'], enemies: [simpleEnemy('rg1','Cultist Guardian','humanoid',9,260,30,700,140)] },
+      { id: 'sm_boss', type: 'boss', name: 'Lunar Smith', x: 95, y: 50, connections: [], enemies: [simpleEnemy('smb','Lunar Smith','humanoid',13,680,54,1700,360,true)] }
+    ]
+  },
+
+  {
+    id: 'shroud_hearth_barrow_dg',
+    name: 'Shroud Hearth Barrow',
+    description: 'A haunted barrow with restless spirits near Ivarstead.',
+    location: 'Shroud Hearth Barrow',
+    difficulty: 'medium',
+    recommendedLevel: 14,
+    theme: 'nordic_tomb',
+    startNodeId: 'sh_start',
+    bossNodeId: 'sh_boss',
+    completionRewards: { gold: 460, xp: 1000 },
+    nodes: [
+      { id: 'sh_start', type: 'start', name: 'Fogged Vestibule', x: 5, y: 50, connections: ['sh_combat1'] },
+      { id: 'sh_combat1', type: 'combat', name: 'Restless Dead', x: 50, y: 50, connections: ['sh_boss'], enemies: [simpleEnemy('rd1','Restless Wight','undead',10,300,32,800,160)] },
+      { id: 'sh_boss', type: 'boss', name: 'Guardian Specter', x: 95, y: 50, connections: [], enemies: [simpleEnemy('shboss','Guardian Specter','undead',14,720,56,1800,380,true)] }
+    ]
+  },
+
+  {
+    id: 'broken_fang_cave_dg',
+    name: 'Broken Fang Cave',
+    description: 'A vampire den and lair for nocturnal predators.',
+    location: 'Broken Fang Cave',
+    difficulty: 'medium',
+    recommendedLevel: 16,
+    theme: 'vampire_lair',
+    startNodeId: 'bf_start',
+    bossNodeId: 'bf_boss',
+    completionRewards: { gold: 520, xp: 1100 },
+    nodes: [
+      { id: 'bf_start', type: 'start', name: 'Moonlit Mouth', x: 5, y: 50, connections: ['bf_combat1'] },
+      { id: 'bf_combat1', type: 'combat', name: 'Nightstalkers', x: 50, y: 50, connections: ['bf_boss'], enemies: [simpleEnemy('ns1','Nightstalker Vampire','undead',11,340,36,900,200)] },
+      { id: 'bf_boss', type: 'boss', name: 'Vampire Matron', x: 95, y: 50, connections: [], enemies: [simpleEnemy('bfboss','Vampire Matron','undead',16,900,68,2200,480,true)] }
+    ]
+  },
+
+  {
+    id: 'forelhost_dg',
+    name: 'Forelhost',
+    description: 'Dragon cult temple high in the Jerall Mountains.',
+    location: 'Forelhost',
+    difficulty: 'hard',
+    recommendedLevel: 22,
+    theme: 'dragon_lair',
+    startNodeId: 'fh_start',
+    bossNodeId: 'fh_boss',
+    completionRewards: { gold: 1200, xp: 2400 },
+    nodes: [
+      { id: 'fh_start', type: 'start', name: 'High Gate', x: 5, y: 50, connections: ['fh_combat1'] },
+      { id: 'fh_combat1', type: 'combat', name: 'Cultists', x: 50, y: 50, connections: ['fh_boss'], enemies: [simpleEnemy('rc1','Dragon Cultist','humanoid',18,700,60,1600,320)] },
+      { id: 'fh_boss', type: 'boss', name: 'Cult Warlord', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fhboss','Cult Warlord','humanoid',26,2000,110,4200,900,true)] }
+    ]
+  },
+
+  {
+    id: 'nchuand_zel_dg',
+    name: 'Nchuand-Zel',
+    description: 'Dwemer ruin beneath Markarth.',
+    location: 'Nchuand-Zel',
+    difficulty: 'hard',
+    recommendedLevel: 25,
+    theme: 'dwemer_ruin',
+    startNodeId: 'nz_start',
+    bossNodeId: 'nz_boss',
+    completionRewards: { gold: 1800, xp: 2600 },
+    nodes: [
+      { id: 'nz_start', type: 'start', name: 'Ruined Gate', x: 5, y: 50, connections: ['nz_combat1'] },
+      { id: 'nz_combat1', type: 'combat', name: 'Falmer Patrol', x: 50, y: 50, connections: ['nz_boss'], enemies: [simpleEnemy('fp1','Falmer Hunter','humanoid',20,820,64,1800,380)] },
+      { id: 'nz_boss', type: 'boss', name: 'Dwemer Guardian', x: 95, y: 50, connections: [], enemies: [simpleEnemy('nzb','Dwemer Guardian','automaton',28,2500,120,5600,1200,true)] }
+    ]
+  },
+
+  {
+    id: 'volunruud_dg',
+    name: 'Volunruud',
+    description: 'An ancient Nordic tomb with powerful shouts.',
+    location: 'Volunruud',
+    difficulty: 'hard',
+    recommendedLevel: 28,
+    theme: 'nordic_tomb',
+    startNodeId: 'vv_start',
+    bossNodeId: 'vv_boss',
+    completionRewards: { gold: 1400, xp: 2600 },
+    nodes: [
+      { id: 'vv_start', type: 'start', name: 'Frozen Gate', x: 5, y: 50, connections: ['vv_combat1'] },
+      { id: 'vv_combat1', type: 'combat', name: 'Undead Guards', x: 50, y: 50, connections: ['vv_boss'], enemies: [simpleEnemy('ug1','Undead Guardian','undead',22,920,72,2000,420)] },
+      { id: 'vv_boss', type: 'boss', name: 'Shout Warden', x: 95, y: 50, connections: [], enemies: [simpleEnemy('vvboss','Shout Warden','undead',30,3200,140,7200,1400,true)] }
+    ]
+  },
+
+  {
+    id: 'skuldafn_dg',
+    name: 'Skuldafn',
+    description: 'Temple that serves as a portal to Sovngarde.',
+    location: 'Skuldafn',
+    difficulty: 'legendary',
+    recommendedLevel: 40,
+    theme: 'nordic_tomb',
+    startNodeId: 'sk_start',
+    bossNodeId: 'sk_boss',
+    completionRewards: { gold: 5000, xp: 6000 },
+    nodes: [
+      { id: 'sk_start', type: 'start', name: 'High Stair', x: 5, y: 50, connections: ['sk_combat1'] },
+      { id: 'sk_combat1', type: 'combat', name: 'Dragon Guards', x: 50, y: 50, connections: ['sk_boss'], enemies: [simpleEnemy('dg1','Dragon Priest Guard','humanoid',34,1800,96,4200,900)] },
+      { id: 'sk_boss', type: 'boss', name: 'Portal Warden', x: 95, y: 50, connections: [], enemies: [simpleEnemy('skboss','Portal Warden','humanoid',46,5200,220,12000,2400,true)] }
+    ]
+  },
+
+  {
+    id: 'forgotten_vale_dg',
+    name: 'Forgotten Vale',
+    description: 'Hidden glacial valley with ancient Snow Elf holdings.',
+    location: 'Forgotten Vale',
+    difficulty: 'legendary',
+    recommendedLevel: 45,
+    theme: 'ice_cave',
+    startNodeId: 'fv_start',
+    bossNodeId: 'fv_boss',
+    completionRewards: { gold: 6000, xp: 10000 },
+    nodes: [
+      { id: 'fv_start', type: 'start', name: 'Icy Gate', x: 5, y: 50, connections: ['fv_combat1'] },
+      { id: 'fv_combat1', type: 'combat', name: 'Snow Elf Sentinels', x: 50, y: 50, connections: ['fv_boss'], enemies: [simpleEnemy('se1','Snow Elf Sentinel','humanoid',36,1600,88,3600,760)] },
+      { id: 'fv_boss', type: 'boss', name: 'Auriel\'s Guardian', x: 95, y: 50, connections: [], enemies: [simpleEnemy('fvboss','Auriel\'s Guardian','humanoid',50,8000,300,20000,4000,true)] }
+    ]
+  },
+
+  {
+    id: 'soul_cairn_dg',
+    name: 'Soul Cairn',
+    description: 'A plane of Oblivion filled with trapped souls.',
+    location: 'Soul Cairn',
+    difficulty: 'legendary',
+    recommendedLevel: 50,
+    theme: 'daedric_shrine',
+    startNodeId: 'sc_start',
+    bossNodeId: 'sc_boss',
+    completionRewards: { gold: 8000, xp: 14000 },
+    nodes: [
+      { id: 'sc_start', type: 'start', name: 'Phantom Gate', x: 5, y: 50, connections: ['sc_combat1'] },
+      { id: 'sc_combat1', type: 'combat', name: 'Lost Shades', x: 50, y: 50, connections: ['sc_boss'], enemies: [simpleEnemy('ls1','Lost Shade','undead',40,2400,120,4800,900)] },
+      { id: 'sc_boss', type: 'boss', name: 'Archon of Souls', x: 95, y: 50, connections: [], enemies: [simpleEnemy('scboss','Archon of Souls','undead',60,12000,420,40000,8000,true)] }
+    ]
   }
 ];
+
+// Enrichment: convert minimal (start-middle-boss) placeholder dungeons into richer three-stage branching layouts
+// This keeps the data authoring simple while making map dungeons feel more like Bleak Falls Barrow.
+(function enrichSmallDungeons() {
+  const makeEnemy = (prefix: string, idx: number, level: number, type?: CombatEnemy['type'], theme?: string) => {
+    // Infer type from explicit type or dungeon theme
+    const inferredType: CombatEnemy['type'] = type || (
+      theme === 'bandit_hideout' ? 'humanoid' :
+      theme === 'nordic_tomb' ? 'undead' :
+      theme === 'ice_cave' ? 'beast' :
+      theme === 'dwemer_ruin' ? 'automaton' :
+      theme === 'daedric_shrine' ? 'daedra' :
+      theme === 'vampire_lair' ? 'undead' :
+      'humanoid'
+    );
+
+    const namePools: Record<CombatEnemy['type'], string[]> = {
+      humanoid: ['Bandit', 'Raider', 'Guard', 'Cultist'],
+      undead: ['Draugr', 'Wight', 'Shade', 'Restless Dead'],
+      beast:  ['Wolf', 'Skeever', 'Chaurus', 'Bear'],
+      daedra: ['Scamp', 'Atronach', 'Lurker'],
+      dragon: ['Drake', 'Wyrmling'],
+      automaton: ['Dwemer Sphere', 'Dwemer Spider', 'Centurion']
+    };
+
+    const pool = namePools[inferredType] || ['Foe'];
+    const baseName = pool[idx % pool.length];
+    const name = `${baseName} ${idx}`;
+    const id = `${prefix}_${baseName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${idx}`;
+
+    return simpleEnemy(id, name, inferredType, Math.max(1, level + Math.floor(Math.random()*2)), 40 + level * 10, 6 + level * 2, 40 + level * 20);
+  };
+
+  DUNGEON_DEFINITIONS.forEach(def => {
+    if (!def.nodes || def.nodes.length > 3) return; // already rich
+
+    const base = def.id.replace(/_dg$/,'');
+    const lvl = Math.max(1, Math.floor((def.recommendedLevel || 1)));
+
+    // find or create boss node
+    let boss = def.nodes.find(n => n.type === 'boss');
+    if (!boss) {
+      boss = { id: `${base}_boss`, type: 'boss', name: `${def.name} Boss`, x: 95, y: 50, connections: [], enemies: [simpleEnemy(`${base}boss`, `${def.name} Boss`, 'humanoid', lvl+4, 300 + lvl*40, 30 + lvl*6, 800, true)] };
+    }
+
+    const start = { id: `${base}_start`, type: 'start', name: 'Entrance Hall', x: 5, y: 50, connections: [`${base}_event1`, `${base}_combat1`, `${base}_empty1`] };
+
+    const event1 = { id: `${base}_event1`, type: 'event', name: 'Strange Marker', x: 20, y: 20, connections: [`${base}_combat2`, `${base}_rest1`], eventText: 'An odd marker glows faintly.', eventChoices: [{ label: 'Inspect', outcome: 'reward', value: 30 }] };
+
+    const combat1 = { id: `${base}_combat1`, type: 'combat', name: 'Ambush Party', x: 20, y: 50, connections: [`${base}_rest1`, `${base}_combat2`, `${base}_reward1`], enemies: [makeEnemy(base,1,lvl, undefined, def.theme)] };
+
+    const empty1 = { id: `${base}_empty1`, type: 'empty', name: 'Dusty Corridor', x: 20, y: 80, connections: [`${base}_reward1`, `${base}_combat3`] };
+
+    const combat2 = { id: `${base}_combat2`, type: 'combat', name: 'Guard Patrol', x: 40, y: 20, connections: [`${base}_elite1`, `${base}_rest2`], enemies: [makeEnemy(base,2,lvl+1, undefined, def.theme)] };
+
+    const rest1 = { id: `${base}_rest1`, type: 'rest', name: 'Hidden Alcove', x: 40, y: 35, connections: [`${base}_elite1`, `${base}_event2`], restAmount: { health: 20, stamina: 15 } };
+
+    const reward1 = { id: `${base}_reward1`, type: 'reward', name: 'Loot Cache', x: 40, y: 65, connections: [`${base}_event2`, `${boss.id}`], rewards: { gold: Math.max(20, lvl * 20), items: [{ name: 'Curious Trinket', type: 'misc', quantity: 1, rarity: 'common' as LootRarity }] } };
+
+    const combat3 = { id: `${base}_combat3`, type: 'combat', name: 'Lurkers', x: 40, y: 85, connections: [`${base}_combat4`, `${base}_rest2`], enemies: [makeEnemy(base,3,lvl, undefined, def.theme)] };
+
+    const elite1 = { id: `${base}_elite1`, type: 'elite', name: 'Veteran Guard', x: 60, y: 25, connections: [`${base}_event3`, boss.id], enemies: [makeEnemy(base,4,lvl+2, undefined, def.theme), makeEnemy(base,5,lvl+1, undefined, def.theme)] };
+
+    const event2 = { id: `${base}_event2`, type: 'event', name: 'Collapsed Niche', x: 60, y: 45, connections: [`${base}_event3`, `${base}_combat4`], eventText: 'Rubble suggests something valuable hid here.', eventChoices: [{ label: 'Search', outcome: 'reward', value: 40 }] };
+
+    const combat4 = { id: `${base}_combat4`, type: 'combat', name: 'Pre-Boss Guard', x: 60, y: 65, connections: [boss.id], enemies: [makeEnemy(base,6,lvl+1, undefined, def.theme)] };
+
+    const event3 = { id: `${base}_event3`, type: 'event', name: 'Ancient Inscription', x: 75, y: 30, connections: [boss.id], eventText: 'An inscription hums with old magic.', eventChoices: [{ label: 'Translate', outcome: 'reward', value: 60 }] };
+
+    // assign new nodes (keep boss but ensure it is present)
+    def.nodes = [start, event1, combat1, empty1, combat2, rest1, reward1, combat3, elite1, event2, combat4, event3, boss];
+
+    def.startNodeId = start.id;
+    def.bossNodeId = boss.id;
+  });
+})();
+
+// Auto-fix: ensure all referenced connection IDs exist by inserting placeholder 'empty' nodes
+// This keeps the runtime map generator and dev UI from breaking due to typos or incomplete data
+(function patchMissingDungeonNodes() {
+  DUNGEON_DEFINITIONS.forEach(def => {
+    if (!def.nodes) return;
+    const nodeMap = new Map(def.nodes.map(n => [n.id, n]));
+    const missing = new Set<string>();
+
+    def.nodes.forEach(n => {
+      if (!n || !Array.isArray(n.connections)) return;
+      n.connections.forEach(cid => {
+        if (!nodeMap.has(cid)) missing.add(cid);
+      });
+    });
+
+    if (missing.size === 0) return;
+
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn(`[DungeonDefs] auto-adding ${missing.size} placeholder node(s) for dungeon '${def.name || def.id}': ${Array.from(missing).join(', ')}`);
+    }
+
+    missing.forEach(cid => {
+      // Only add if truly missing (race-safety)
+      if (nodeMap.has(cid)) return;
+      const placeholder: any = {
+        id: cid,
+        type: 'empty',
+        name: `Placeholder (${cid})`,
+        x: 75, // place near end so it typically sits before the boss
+        y: 50,
+        connections: def.bossNodeId ? [def.bossNodeId] : []
+      };
+      def.nodes.push(placeholder);
+      nodeMap.set(cid, placeholder);
+    });
+  });
+})();
 
 export const getDungeonById = (id: string) => DUNGEON_DEFINITIONS.find(d => d.id === id);
 export const listDungeons = () => DUNGEON_DEFINITIONS.map(d => ({ id: d.id, name: d.name, location: d.location, difficulty: d.difficulty, recommendedLevel: d.recommendedLevel }));

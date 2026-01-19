@@ -20,6 +20,9 @@ describe('combat — enemy critical stun behavior', () => {
     expect(skipped.narrative).toMatch(/stun/i);
     const natEntries = (skipped.newState.combatLog || []).filter((e: any) => e.nat !== undefined);
     expect(natEntries.length).toBe(0);
+    // Ensure stun was consumed/removed after the skip
+    const stillStunned = (skipped.newState.playerActiveEffects || []).some((pe: any) => pe.effect && pe.effect.type === 'stun');
+    expect(stillStunned).toBe(false);
   });
 
   it('enemy critical hit can stun an allied companion (50% chance) and companion skips their turn', () => {

@@ -8,7 +8,7 @@
  */
 
 // Admin user IDs (Firebase UIDs) - only these accounts can see admin features
-const ADMIN_UIDS: string[] = ['6bmF8elZmJai6F5XCxeWoM7zTZv1'
+const ADMIN_UIDS: string[] = ['42VwiqAFNpfzUYHjFj992gEdxCz1'
   // Add your Firebase UID here, e.g.:
   // 'abc123xyz456',
 ];

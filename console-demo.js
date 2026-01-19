@@ -216,7 +216,7 @@ window.demo.addPerkPoints = function(amount = 1) {
 };
 
 // Admin helper utilities (only allowed for admin uids)
-const ADMIN_IDS = ['6bmF8elZmJai6F5XCxeWoM7zTZv1'];
+const ADMIN_IDS = ['42VwiqAFNpfzUYHjFj992gEdxCz1'];
 function _isAdmin() {
   const app = window.app;
   if (!app) return false;

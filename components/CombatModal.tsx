@@ -259,7 +259,7 @@ const TurnList: React.FC<{
 
 // Enemy card component
 const EnemyCard: React.FC<{
-  enemy: CombatEnemy;
+  enemy: CombatEnemy & { pendingTurns?: number };
   isTarget: boolean;
   onClick: () => void;
   containerRef?: (el: HTMLDivElement | null) => void;
@@ -269,6 +269,7 @@ const EnemyCard: React.FC<{
 }> = ({ enemy, isTarget, onClick, containerRef, isHighlighted, isCurrentTurn, onToggleAutoControl }) => {
   const healthPercent = (enemy.currentHealth / enemy.maxHealth) * 100;
   const isDead = enemy.currentHealth <= 0;
+  const isDecaying = !!(enemy as any).companionMeta?.decayActive;
   
   return (
     <div 
@@ -308,20 +309,29 @@ const EnemyCard: React.FC<{
           </h4>
           {/* Companion auto-control badge - clickable to toggle (SKY-55) */}
           {enemy.isCompanion && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleAutoControl?.();
-              }}
-              className={`text-xs px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                (enemy as any).companionMeta?.autoControl !== false
-                  ? 'bg-sky-600 text-white hover:bg-sky-500' 
-                  : 'bg-amber-600 text-white hover:bg-amber-500'
-              }`}
-              title={`Click to ${(enemy as any).companionMeta?.autoControl !== false ? 'enable manual control' : 'enable auto control'}`}
-            >
-              {(enemy as any).companionMeta?.autoControl !== false ? 'Auto' : 'Manual'}
-            </button>
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleAutoControl?.();
+                }}
+                className={`text-xs px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                  (enemy as any).companionMeta?.autoControl !== false
+                    ? 'bg-sky-600 text-white hover:bg-sky-500' 
+                    : 'bg-amber-600 text-white hover:bg-amber-500'
+                }`}
+                title={`Click to ${(enemy as any).companionMeta?.autoControl !== false ? 'enable manual control' : 'enable auto control'}`}
+              >
+                {(enemy as any).companionMeta?.autoControl !== false ? 'Auto' : 'Manual'}
+              </button>
+              {/* Show pending-turns or decaying state for summoned companions */}
+              {(enemy as any).pendingTurns !== undefined && (enemy as any).pendingTurns > 0 && (
+                <span className="ml-2 text-xs px-2 py-0.5 rounded bg-amber-700 text-white">⏳ {(enemy as any).pendingTurns}</span>
+              )}
+              {isDecaying && (
+                <span className="ml-2 text-xs px-2 py-0.5 rounded bg-red-700 text-white">⚠️ Decaying</span>
+              )}
+            </>
           )}
         </div>
         <span className="text-xs text-stone-400 capitalize">{enemy.type} • Lv.{enemy.level}</span>
@@ -1307,6 +1317,31 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return;
     }
 
+    // Pre-check: if the player is stunned, skip the roll and let engine handle the skip immediately (prevents UX roll animation when stunned)
+    const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+    if (playerStun) {
+      // Execute the action immediately without a natural roll so the engine can decrement the effect and advance
+      const execRes = executePlayerAction(combatState, playerStats, action, targetToUse, abilityId, itemId, localInventory, undefined, character);
+      if (execRes.narrative && onNarrativeUpdate) onNarrativeUpdate(execRes.narrative);
+
+      // Check combat end and advance turn if combat still active
+      let finalState = checkCombatEnd(execRes.newState, execRes.newPlayerStats);
+      if (finalState.active) {
+        finalState = advanceTurn(finalState);
+        if (finalState.currentTurnActor === 'player') {
+          const regenRes = applyTurnRegen(finalState, execRes.newPlayerStats);
+          finalState = regenRes.newState;
+          execRes.newPlayerStats = regenRes.newPlayerStats;
+        }
+      }
+
+      setCombatState(finalState);
+      setPlayerStats(execRes.newPlayerStats);
+      if (showToast) showToast(execRes.narrative, 'warning');
+      waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
+      return;
+    }
+
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
@@ -1608,6 +1643,27 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           <div>
             <h2 className="text-lg sm:text-2xl font-bold text-amber-100 tracking-wider">⚔️ COMBAT</h2>
             <p className="text-xs sm:text-sm text-stone-400 truncate max-w-[150px] sm:max-w-none">{combatState.location} • T{combatState.turn} • {String(Math.floor(elapsedSecDisplay/60)).padStart(2,'0')}:{String(elapsedSecDisplay%60).padStart(2,'0')}</p>
+            {(() => {
+              // Player stun indicator
+              const stun = (combatState.playerActiveEffects || []).find(pe => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+              if (stun) return <p className="text-xs text-red-300 mt-1">⚡ Stunned ({stun.turnsRemaining})</p>;
+
+              // Pending summons indicator (show each pending summon and remaining player turns)
+              const pending = (combatState.pendingSummons || []).map((s: any) => {
+                const ally = (combatState.allies || []).find((a: any) => a.id === s.companionId);
+                return { name: ally?.name || s.companionId, remaining: s.playerTurnsRemaining };
+              });
+              if (pending.length > 0) {
+                const list = pending.slice(0,3).map(p => `${p.name} (${p.remaining})`).join(', ');
+                return <p className="text-xs text-amber-300 mt-1">⚔️ Summons pending: {list}{pending.length > 3 ? ` +${pending.length - 3} more` : ''}</p>;
+              }
+
+              // Decaying summoned ally indicator
+              const decaying = (combatState.allies || []).filter((a: any) => a.companionMeta?.isSummon && a.companionMeta?.decayActive).map((a: any) => a.name);
+              if (decaying.length > 0) return <p className="text-xs text-red-300 mt-1">⚡ Decaying summon: {decaying.join(', ')}</p>;
+
+              return null;
+            })() }
           </div>
           <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
             {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
@@ -1644,10 +1700,23 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           <span className="text-[10px] text-red-300">{playerStats.currentHealth}/{playerStats.maxHealth}</span>
         </div>
         {
-          // Show shielded status with remaining rounds when Tactical Guard is active
+          // Show stunned/shielded and summon status with remaining rounds on mobile
           (() => {
+            const stun = (combatState.playerActiveEffects || []).find(pe => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+            if (stun) return <div className="mt-1 text-[10px] text-red-300">⚡ Stunned ({stun.turnsRemaining})</div>;
             const guard = (combatState.playerActiveEffects || []).find(pe => pe.effect && pe.effect.stat === 'guard' && pe.turnsRemaining > 0);
             if (guard) return <div className="mt-1 text-[10px] text-blue-300">🛡️ Shielded ({guard.turnsRemaining})</div>;
+
+            // mobile: show pending summons and decaying succinctly
+            const pending = (combatState.pendingSummons || []).map((s: any) => {
+              const ally = (combatState.allies || []).find((a: any) => a.id === s.companionId);
+              return { name: ally?.name || s.companionId, remaining: s.playerTurnsRemaining };
+            });
+            if (pending.length > 0) return <div className="mt-1 text-[10px] text-amber-300">⚔️ Summons: {pending[0].name} ({pending[0].remaining}){pending.length > 1 ? ` +${pending.length - 1}` : ''}</div>;
+
+            const decaying = (combatState.allies || []).filter((a: any) => a.companionMeta?.isSummon && a.companionMeta?.decayActive).map((a: any) => a.name);
+            if (decaying.length > 0) return <div className="mt-1 text-[10px] text-red-300">⚡ Decaying: {decaying[0]}{decaying.length > 1 ? ` +${decaying.length - 1}` : ''}</div>;
+
             if (combatState.playerDefending) return <div className="mt-1 text-[10px] text-blue-300">🛡️ Defending</div>;
             return null;
           })()
@@ -1799,10 +1868,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             <div className="bg-stone-900/40 rounded-lg p-3 border border-stone-700 mb-3">
               <h3 className="text-sm font-bold text-stone-400 mb-2">ALLIES</h3>
               <div className="grid grid-cols-2 gap-2">
-                {combatState.allies.map(ally => (
+                {combatState.allies.map(ally => {
+                  const pending = (combatState.pendingSummons || []).find((s: any) => s.companionId === ally.id);
+                  const pendingTurns = pending ? pending.playerTurnsRemaining : undefined;
+                  const isDecaying = !!(ally as any).companionMeta?.decayActive;
+                  return (
                   <div key={ally.id} className="p-1">
                     <EnemyCard
-                      enemy={ally}
+                      enemy={{ ...ally, pendingTurns }}
                       isTarget={selectedTarget === ally.id}
                       isHighlighted={recentlyHighlighted === ally.id}
                       isCurrentTurn={combatState.currentTurnActor === ally.id}
@@ -1855,7 +1928,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       containerRef={(el) => { enemyRefs.current[ally.id] = el; }}
                     />
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}

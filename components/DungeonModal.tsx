@@ -45,12 +45,15 @@ interface MapNode {
 }
 
 function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: string[], currentNodeId: string): { nodes: MapNode[]; rows: number; cols: number } {
-  const originalNodes = dungeon.nodes;
+  const originalNodes = dungeon.nodes || [];
   const nodeMap = new Map<string, DungeonNode>();
-  originalNodes.forEach(n => nodeMap.set(n.id, n));
+  originalNodes.forEach(n => n && n.id && nodeMap.set(n.id, n));
+
+  // Defensive: ensure we have a valid start node
+  const startNode = originalNodes.find(n => n && n.id === dungeon.startNodeId) || originalNodes[0];
+  if (!startNode) return { nodes: [], rows: 0, cols: 0 };
 
   // BFS to assign rows based on distance from start
-  const startNode = originalNodes.find(n => n.id === dungeon.startNodeId) || originalNodes[0];
   const visited = new Set<string>();
   const rowAssignment = new Map<string, number>();
   const queue: { id: string; row: number }[] = [{ id: startNode.id, row: 0 }];
@@ -62,8 +65,17 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
     rowAssignment.set(id, row);
     
     const node = nodeMap.get(id);
-    if (node) {
+    if (node && Array.isArray(node.connections)) {
       for (const connId of node.connections) {
+        // Skip references to nodes that don't exist (data hygiene)
+        if (!nodeMap.has(connId)) {
+          // Helpful debug in dev but avoid noisy logs in production
+          if (process.env.NODE_ENV !== 'production') {
+            // eslint-disable-next-line no-console
+            console.warn(`[DungeonMap] Node '${id}' references missing connection '${connId}' in dungeon '${dungeon.name || dungeon.id}'`);
+          }
+          continue;
+        }
         if (!visited.has(connId)) {
           queue.push({ id: connId, row: row + 1 });
         }
@@ -78,8 +90,13 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
     rowGroups.get(row)!.push(id);
   });
 
+  if (rowGroups.size === 0) {
+    // Fallback to single-row layout containing the start node
+    rowGroups.set(0, [startNode.id]);
+  }
+
   const rows = Math.max(...Array.from(rowGroups.keys())) + 1;
-  const maxCols = Math.max(...Array.from(rowGroups.values()).map(g => g.length));
+  const maxCols = Math.max(1, ...Array.from(rowGroups.values()).map(g => g.length));
 
   // Determine which nodes are revealed (fog-of-war logic):
   // - Current node and completed nodes are always revealed
@@ -91,8 +108,8 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
   
   // Reveal immediate connections from current node
   const currentNode = nodeMap.get(currentNodeId);
-  if (currentNode) {
-    currentNode.connections.forEach(id => revealedSet.add(id));
+  if (currentNode && Array.isArray(currentNode.connections)) {
+    currentNode.connections.forEach(id => { if (nodeMap.has(id)) revealedSet.add(id); });
   }
 
   // Create map nodes with column positions and reveal state
@@ -100,13 +117,15 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
   rowGroups.forEach((nodeIds, row) => {
     const colSpacing = maxCols / (nodeIds.length + 1);
     nodeIds.forEach((id, idx) => {
-      const original = nodeMap.get(id)!;
+      const original = nodeMap.get(id);
+      if (!original) return; // skip unknown ids (already warned above)
+
       mapNodes.push({
         id,
         row,
         col: Math.floor((idx + 1) * colSpacing),
         type: original.type,
-        connections: original.connections,
+        connections: original.connections || [],
         original,
         revealed: revealedSet.has(id),
       });
@@ -535,15 +554,21 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           title={isRevealed ? `${node.name} (${style.label})` : 'Unknown'}
         >
           {isCompleted ? (
-            <CheckCircle size={18} className="text-green-400" />
+            <>
+              <CheckCircle size={18} className="text-green-400" />
+              <span className="sr-only">{node.name || style.label}</span>
+            </>
           ) : (
-            <span className="text-lg">{style.emoji}</span>
+            <>
+              <span className="text-lg">{style.emoji}</span>
+              <span className="sr-only">{node.name || style.label}</span>
+            </>
           )}
         </button>
         {/* Show node name below for current/selected/accessible nodes */}
-        {isRevealed && (isCurrent || isSelected) && (
+        {isRevealed && (isCurrent || isSelected || isAccessible) && (
           <span className={`text-[10px] mt-1 text-center max-w-[60px] truncate ${style.color}`}>
-            {node.name}
+            {node.name || style.label}
           </span>
         )}
       </div>

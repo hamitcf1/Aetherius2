@@ -15,6 +15,9 @@ describe('combat — stun skip behavior', () => {
     // Ensure no nat entries were added (no dice rolled)
     const natEntries = (res.newState.combatLog || []).filter((e: any) => e.nat !== undefined);
     expect(natEntries.length).toBe(0);
+    // After skipping, stun should have been decremented/removed (not permanent)
+    const stillStunned = (res.newState.playerActiveEffects || []).some((pe: any) => pe.effect && pe.effect.type === 'stun');
+    expect(stillStunned).toBe(false);
   });
 
   it('stunned companion should skip their action and not roll', () => {
@@ -30,5 +33,9 @@ describe('combat — stun skip behavior', () => {
     expect(res.narrative).toMatch(/stun/i);
     const natEntries = (res.newState.combatLog || []).filter((e: any) => e.nat !== undefined);
     expect(natEntries.length).toBe(0);
+    // Ensure the stun was decremented/removed after the skip
+    const allyAfter = (res.newState.allies || []).find((a: any) => a.id === 'ally_a1');
+    const stillStunned = allyAfter?.activeEffects?.some((ae: any) => ae.effect && ae.effect.type === 'stun');
+    expect(stillStunned).toBeFalsy();
   });
 });
