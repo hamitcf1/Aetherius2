@@ -1564,7 +1564,7 @@ export const executePlayerAction = (
           const hpPerLevel = (ef as any).hpPerLevel || 11;
           const maxHealth = Math.max(8, Math.floor((baseHealth + (level * hpPerLevel)) * conjOutcome.multiplier));
 
-          const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+          const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substring(2, 8)}`;
           const companion: CombatEnemy = {
             id: summonId,
             name: summonName,
@@ -2062,7 +2062,7 @@ export const executePlayerAction = (
                 return; // inside forEach callback: return to proceed to next effect
               }
 
-              const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+              const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substring(2, 8)}`;
               const baseLevel = Math.max(1, actor.level ? Math.floor(actor.level / 2) : 1);
               const level = Math.max(1, Math.floor(baseLevel * conjOutcome.multiplier));
 
@@ -2491,7 +2491,7 @@ export const executeEnemyTurn = (
     let narrativeLocal = `${actor.name} casts ${chosenAbility.name}`;
     for (const ef of summonEffects) {
       const summonName = ef.name || 'Summoned Ally';
-      const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
+      const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substring(2, 8)}`;
       const level = Math.max(1, actor.level || 1);
       const maxHealth = 30 + (level * 8);
       const companion: CombatEnemy = {
@@ -3095,9 +3095,6 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
     const xp = newState.enemies.reduce((sum, e) => sum + (e.xpReward || 0), 0);
     const gold = newState.enemies.reduce((sum, e) => sum + (e.goldReward || 0), 0);
 
-    // Debug log to verify rewards are being calculated
-    console.log('[checkCombatEnd] Victory! Calculated rewards:', { xp, gold, enemyCount: newState.enemies.length });
-
     // Create per-enemy loot snapshots based on drop chances
     const pendingLoot: typeof newState.pendingLoot = [];
     const items: Array<{ name: string; type: string; description: string; quantity: number }> = [];
@@ -3688,7 +3685,7 @@ export const createEnemyFromTemplate = (
     // Scale ability damage with level
     damage: Math.max(1, Math.floor(ability.damage * levelScale * (isElite ? 1.2 : 1))),
     // Unique ID for this instance
-    id: `${ability.id}_${Math.random().toString(36).substr(2, 5)}`
+    id: `${ability.id}_${Math.random().toString(36).substring(2, 7)}`
   }));
 
   // Calculate rewards with variation
@@ -3707,7 +3704,7 @@ export const createEnemyFromTemplate = (
   const personality = randomChoice(ENEMY_PERSONALITY_TRAITS);
 
   return {
-    id: `${templateId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `${templateId}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     name: isElite ? `${name} (Elite)` : name,
     type: template.type,
     level,

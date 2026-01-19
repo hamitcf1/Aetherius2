@@ -16,7 +16,7 @@
 window.demo = window.demo || {};
 
 // Utility function for unique IDs
-const uniqueId = () => Math.random().toString(36).substr(2, 9);
+const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 // ============================================================================
 // CHARACTER MANAGEMENT
@@ -317,7 +317,7 @@ window.demo.giveItem = function(name, type = 'misc', quantity = 1, characterId =
   if (!name) return { ok: false, message: 'name required' };
   const app = window.app; if (!app) return { ok: false, message: 'no app' };
   const charId = characterId || app.currentCharacterId; if (!charId) return { ok: false, message: 'no character' };
-  const item = { id: Math.random().toString(36).substr(2,9), characterId: charId, name, type, description: '', quantity: Math.max(1, Number(quantity)||1), equipped: false, createdAt: Date.now() };
+  const item = { id: Math.random().toString(36).substring(2, 11), characterId: charId, name, type, description: '', quantity: Math.max(1, Number(quantity)||1), equipped: false, createdAt: Date.now() };
   if (app.handleGameUpdate) { app.handleGameUpdate({ newItems: [item] }); console.log(`Gave ${quantity}x ${name} to character.`); return { ok: true }; }
   return { ok: false, message: 'no handleGameUpdate' };
 };

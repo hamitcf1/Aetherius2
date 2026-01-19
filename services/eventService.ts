@@ -444,7 +444,7 @@ export const createEventFromTemplate = (
   const gameTimeHours = getGameTimeInHours(gameTime);
   return {
     ...template,
-    id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `event_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     characterId,
     createdAt: Date.now(),
     createdAtGameTime: gameTimeHours,

@@ -18,6 +18,25 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.4',
+    date: '2026-01-19',
+    title: 'Event Gameplay Integration - Real Consequences',
+    changes: [
+      { type: 'feature', text: 'Combat Events: Dragon, Bandit, Combat, Rescue, Escort events now trigger actual combat encounters' },
+      { type: 'feature', text: 'Treasure Events: Now open lockpicking minigame with difficulty based on event tier' },
+      { type: 'feature', text: 'Shrine Events: New Blessing Modal with 6 divine blessings that grant 8-hour status buffs' },
+      { type: 'feature', text: 'Merchant Events: Now open traveling merchant shop for buying/selling' },
+      { type: 'feature', text: 'Event Completion: Combat victory, lockpick success, or blessing received auto-completes events' },
+      { type: 'improvement', text: 'Dungeon → Event Link: Clearing a dungeon completes any active events at that location' },
+      { type: 'improvement', text: 'Quest → Event Link: AI-completed quests now also complete their associated events' },
+      { type: 'improvement', text: 'Map Panel: Event type hints show what will happen when starting each event type' },
+      { type: 'improvement', text: 'Manual Complete: Mystery/Investigation events can be marked complete from map panel' },
+      { type: 'fix', text: 'Duplicate notifications: 2-second dedup window prevents rapid-fire notifications' },
+      { type: 'fix', text: 'Auto-dismiss: Event notifications now auto-dismiss after 5 seconds' },
+      { type: 'fix', text: 'Map performance: requestAnimationFrame throttling for smoother pan/zoom' },
+    ]
+  },
+  {
     version: '1.0.3',
     date: '2025-01-27',
     title: 'Dynamic Events System - Level-Gated Adventures',

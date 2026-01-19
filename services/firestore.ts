@@ -56,7 +56,6 @@ export const initializeFirestoreDb = async () => {
       try {
         await enableIndexedDbPersistence(db);
         persistenceEnabled = true;
-        console.log('Firestore persistence enabled');
       } catch (err: any) {
         if (err.code === 'failed-precondition') {
           console.warn('Multiple tabs open, persistence disabled');
@@ -67,8 +66,6 @@ export const initializeFirestoreDb = async () => {
         }
       }
     }
-
-    console.log('Firestore initialized successfully');
     return db;
   } catch (error) {
     console.error('Failed to initialize Firestore:', error);

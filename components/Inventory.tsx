@@ -19,7 +19,7 @@ import { resolvePotionEffect } from '../services/potionResolver';
 import { audioService } from '../services/audioService';
 import { LoadoutManager } from './LoadoutManager';
 
-const uniqueId = () => Math.random().toString(36).substr(2, 9);
+const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 // Default weights by item type
 const getDefaultItemWeight = (type: string): number => {

@@ -72,6 +72,19 @@ export interface AppContextType {
   // User settings (Firebase persistent)
   userSettings: UserSettings | null;
   updateUserSettings: ((updates: Partial<UserSettings>) => void) | null;
+  // New Feature Modals
+  openAlchemy?: () => void;
+  openCooking?: () => void;
+  openTravel?: () => void;
+  openFactions?: () => void;
+  // Extended Game Systems Modals
+  openShouts?: () => void;
+  openEnchanting?: () => void;
+  openStandingStones?: () => void;
+  openBounty?: () => void;
+  openTraining?: () => void;
+  openTransformation?: () => void;
+  openHousing?: () => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);

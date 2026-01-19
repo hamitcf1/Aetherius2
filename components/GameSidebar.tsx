@@ -1,0 +1,240 @@
+/**
+ * GameSidebar - Collapsible sidebar for game features
+ * Contains: Crafting, Magic & Powers, World, Companions, Achievements
+ */
+
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Users, 
+  Trophy,
+  Flame,
+  Sparkles,
+  Map,
+  X
+} from 'lucide-react';
+import { useAppContext } from '../AppContext';
+
+interface SidebarSection {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  items: SidebarItem[];
+}
+
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: string;
+  onClick: () => void;
+  color: string;
+}
+
+const GameSidebar: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  const {
+    openCompanions,
+    openAchievements,
+    openAlchemy,
+    openCooking,
+    openTravel,
+    openFactions,
+    openShouts,
+    openEnchanting,
+    openStandingStones,
+    openBounty,
+    openTraining,
+    openTransformation,
+    openHousing,
+  } = useAppContext();
+
+  // Check for mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Close sidebar on escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isOpen]);
+
+  const handleItemClick = (onClick: () => void) => {
+    onClick();
+    if (isMobile) setIsOpen(false);
+  };
+
+  const sections: SidebarSection[] = [
+    {
+      id: 'crafting',
+      title: 'Crafting',
+      icon: <Flame size={16} className="text-orange-400" />,
+      items: [
+        { id: 'alchemy', label: 'Alchemy', icon: '🧪', onClick: () => openAlchemy?.(), color: 'green' },
+        { id: 'cooking', label: 'Cooking', icon: '🍳', onClick: () => openCooking?.(), color: 'orange' },
+        { id: 'enchanting', label: 'Enchanting', icon: '✨', onClick: () => openEnchanting?.(), color: 'purple' },
+      ],
+    },
+    {
+      id: 'magic',
+      title: 'Magic & Powers',
+      icon: <Sparkles size={16} className="text-cyan-400" />,
+      items: [
+        { id: 'shouts', label: 'Shouts', icon: '🗣️', onClick: () => openShouts?.(), color: 'cyan' },
+        { id: 'stones', label: 'Standing Stones', icon: '🪨', onClick: () => openStandingStones?.(), color: 'indigo' },
+        { id: 'transform', label: 'Transformations', icon: '🐺', onClick: () => openTransformation?.(), color: 'red' },
+      ],
+    },
+    {
+      id: 'world',
+      title: 'World',
+      icon: <Map size={16} className="text-blue-400" />,
+      items: [
+        { id: 'travel', label: 'Travel', icon: '🏰', onClick: () => openTravel?.(), color: 'blue' },
+        { id: 'factions', label: 'Factions', icon: '⚔️', onClick: () => openFactions?.(), color: 'red' },
+        { id: 'bounty', label: 'Bounty', icon: '⚖️', onClick: () => openBounty?.(), color: 'yellow' },
+        { id: 'training', label: 'Training', icon: '📚', onClick: () => openTraining?.(), color: 'emerald' },
+        { id: 'housing', label: 'Housing', icon: '🏠', onClick: () => openHousing?.(), color: 'amber' },
+      ],
+    },
+    {
+      id: 'social',
+      title: 'Social',
+      icon: <Users size={16} className="text-purple-400" />,
+      items: [
+        { id: 'companions', label: 'Companions', icon: '👥', onClick: openCompanions, color: 'purple' },
+      ],
+    },
+    {
+      id: 'progress',
+      title: 'Progress',
+      icon: <Trophy size={16} className="text-amber-400" />,
+      items: [
+        { id: 'achievements', label: 'Achievements', icon: '🏆', onClick: openAchievements, color: 'amber' },
+      ],
+    },
+  ];
+
+  const getColorClasses = (color: string) => {
+    const colors: Record<string, string> = {
+      green: 'border-green-600 bg-green-700/20 text-green-200 hover:bg-green-700/40',
+      orange: 'border-orange-600 bg-orange-700/20 text-orange-200 hover:bg-orange-700/40',
+      purple: 'border-purple-600 bg-purple-700/20 text-purple-200 hover:bg-purple-700/40',
+      cyan: 'border-cyan-600 bg-cyan-700/20 text-cyan-200 hover:bg-cyan-700/40',
+      indigo: 'border-indigo-600 bg-indigo-700/20 text-indigo-200 hover:bg-indigo-700/40',
+      red: 'border-red-600 bg-red-700/20 text-red-200 hover:bg-red-700/40',
+      blue: 'border-blue-600 bg-blue-700/20 text-blue-200 hover:bg-blue-700/40',
+      yellow: 'border-yellow-600 bg-yellow-700/20 text-yellow-200 hover:bg-yellow-700/40',
+      emerald: 'border-emerald-600 bg-emerald-700/20 text-emerald-200 hover:bg-emerald-700/40',
+      amber: 'border-amber-600 bg-amber-700/20 text-amber-200 hover:bg-amber-700/40',
+    };
+    return colors[color] || colors.purple;
+  };
+
+  // Toggle button (always visible)
+  const toggleButton = (
+    <button
+      onClick={() => setIsOpen(!isOpen)}
+      className={`fixed top-20 z-50 p-2 rounded-r-lg transition-all duration-300 ${
+        isOpen 
+          ? 'left-64 bg-skyrim-paper border border-l-0 border-skyrim-gold' 
+          : 'left-0 bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400'
+      }`}
+      aria-label={isOpen ? 'Close sidebar' : 'Open sidebar'}
+    >
+      {isOpen ? (
+        <ChevronLeft size={20} className="text-skyrim-gold" />
+      ) : (
+        <ChevronRight size={20} />
+      )}
+    </button>
+  );
+
+  // Sidebar content
+  const sidebarContent = (
+    <div
+      className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-skyrim-paper/98 backdrop-blur-md border-r border-skyrim-gold z-40 transform transition-transform duration-300 overflow-hidden ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-skyrim-border bg-gradient-to-r from-skyrim-dark/30 to-transparent">
+        <h2 className="text-lg font-serif text-skyrim-gold tracking-wide">Game Menu</h2>
+        {isMobile && (
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-1 text-skyrim-text hover:text-skyrim-gold transition-colors"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+
+      {/* Scrollable sections */}
+      <div className="h-[calc(100%-4rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-skyrim-gold/30 scrollbar-track-transparent">
+        {sections.map((section) => (
+          <div key={section.id} className="p-3 border-b border-skyrim-border/50">
+            {/* Section header */}
+            <div className="flex items-center gap-2 mb-2">
+              {section.icon}
+              <span className="text-xs font-bold text-skyrim-gold uppercase tracking-wider">
+                {section.title}
+              </span>
+            </div>
+
+            {/* Section items */}
+            <div className="grid gap-1.5">
+              {section.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleItemClick(item.onClick)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${getColorClasses(item.color)}`}
+                >
+                  <span className="text-base">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Footer */}
+        <div className="p-4 text-center">
+          <p className="text-[10px] text-gray-500 italic">
+            Access crafting, magic, and world features
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Mobile overlay backdrop
+  const backdrop = isMobile && isOpen ? (
+    <div
+      className="fixed inset-0 bg-black/50 z-30"
+      onClick={() => setIsOpen(false)}
+    />
+  ) : null;
+
+  return createPortal(
+    <>
+      {backdrop}
+      {sidebarContent}
+      {toggleButton}
+    </>,
+    document.body
+  );
+};
+
+export default GameSidebar;

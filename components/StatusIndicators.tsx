@@ -307,7 +307,7 @@ export const queueOfflineChange = (change: Omit<QueuedChange, 'id' | 'timestamp'
     const queue: QueuedChange[] = JSON.parse(localStorage.getItem('aetherius:offlineQueue') || '[]');
     queue.push({
       ...change,
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       timestamp: Date.now()
     });
     localStorage.setItem('aetherius:offlineQueue', JSON.stringify(queue));

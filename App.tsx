@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { 
     INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
     DifficultyLevel, WeatherState, StatusEffect, Companion,
@@ -6,6 +6,7 @@ import {
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
 import ActionBar, { ActionBarToggle } from './components/ActionBar';
+import GameSidebar from './components/GameSidebar';
 import { AppContext } from './AppContext';
 import { QuestLog } from './components/QuestLog';
 import { Journal } from './components/Journal';
@@ -154,6 +155,17 @@ import CompanionsModal from './components/CompanionsModal';
 import CompanionDialogueModal from './components/CompanionDialogueModal';
 import PERK_BALANCE from './data/perkBalance';
 import PERK_DEFINITIONS from './data/perkDefinitions';
+// New Feature Modals
+import AlchemyModal from './components/AlchemyModal';
+import CookingModal from './components/CookingModal';
+import TravelModal from './components/TravelModal';
+import FactionModal from './components/FactionModal';
+import WeatherHUD from './components/WeatherHUD';
+// Additional Feature Modals
+import ShoutsModal from './components/ShoutsModal';
+import EnchantingModal from './components/EnchantingModal';
+import StandingStonesModal from './components/StandingStonesModal';
+import BountyModal from './components/BountyModal';
 import { useLocalization } from './services/localization';
 // Dynamic Events System
 import {
@@ -165,8 +177,29 @@ import {
   getEventAdventureContext,
 } from './services/eventService';
 import { EventNotificationOverlay } from './components/EventNotification';
+// New Feature Services
+import { brewPotion, INGREDIENTS, getAvailableRecipes, cookRecipe } from './services/craftingService';
+import { getReputationLevel, applyReputationChanges, canJoinFaction, getInitialReputation, FACTIONS, FactionReputation } from './services/factionService';
+import { generateWeather, getWeatherEffects, formatWeatherDescription, WEATHER_DATA, Region } from './services/weatherService';
+import { calculateTravelCost, getAvailableDestinations, checkTravelEncounter, SKYRIM_LOCATIONS as TRAVEL_LOCATIONS } from './services/fastTravelService';
+import { shouldTriggerDragonAttack, generateDragonEncounter, dragonEncounterToEvent } from './services/dragonService';
+// Extended Game Systems
+import { ShoutState, initializeShoutState, getShoutState, useShout, absorbDragonSoul, learnShoutWord, unlockShoutWord, SHOUTS } from './services/shoutsService';
+import { EnchantingState, initializeEnchantingState, getEnchantingState, enchantItem, disenchantItem, ENCHANTMENTS } from './services/enchantingService';
+import { StandingStoneState, initializeStandingStoneState, getStandingStoneState, activateStandingStone, STANDING_STONES } from './services/standingStoneService';
+import { BountyState, initializeBountyState, getBountyState, commitCrime, payBounty, bribeGuard, goToJail, serveJailTime, attemptJailEscape, HoldName, HOLDS } from './services/bountyService';
+// Training, Transformation, Housing Services
+import { TrainingState, getInitialTrainingState, canTrainSkill, getTrainingCost, trainSkill, getTrainersForCategory, getTrainerByName, TRAINERS, TrainerData } from './services/trainingService';
+import { TransformationState, getInitialTransformationState, contractLycanthropy, contractVampirism, transformToWerewolf, revertFromBeastForm, feedAsWerewolf, transformToVampireLord, revertFromVampireLord, feedAsVampire, cureLycanthropy, cureVampirism, getVampireStageEffects, canUnlockWerewolfPerk, canUnlockVampirePerk, unlockWerewolfPerk, unlockVampirePerk, WEREWOLF_PERKS, VAMPIRE_PERKS, VAMPIRE_STAGE_EFFECTS } from './services/transformationService';
+import { HousingState, getInitialHousingState, canPurchaseHouse, purchaseHouse, upgradeHouseRoom, getHouseBenefits, proposeMarriage, getMarryableNPCs, canMarry, adoptChild, collectSpouseIncome, HOUSES, SPOUSES } from './services/housingService';
+// Training Modal
+import TrainingModal from './components/TrainingModal';
+// Transformation Modal  
+import TransformationModal from './components/TransformationModal';
+// Housing Modal
+import HousingModal from './components/HousingModal';
 
-const uniqueId = () => Math.random().toString(36).substr(2, 9);
+const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
@@ -449,6 +482,57 @@ const App: React.FC = () => {
   // Merchant shop state (for merchant events)
   const [merchantShopOpen, setMerchantShopOpen] = useState<boolean>(false);
   const [merchantEventId, setMerchantEventId] = useState<string | null>(null);
+
+  // ========== NEW FEATURE MODAL STATES ==========
+  // Alchemy modal state
+  const [alchemyModalOpen, setAlchemyModalOpen] = useState<boolean>(false);
+  
+  // Cooking modal state
+  const [cookingModalOpen, setCookingModalOpen] = useState<boolean>(false);
+  
+  // Travel modal state
+  const [travelModalOpen, setTravelModalOpen] = useState<boolean>(false);
+  
+  // Faction modal state
+  const [factionModalOpen, setFactionModalOpen] = useState<boolean>(false);
+  
+  // Faction reputation state
+  const [factionReputation, setFactionReputation] = useState<FactionReputation[]>(() => getInitialReputation());
+  
+  // Dynamic weather state
+  const [currentWeather, setCurrentWeather] = useState(() => generateWeather('whiterun', 8));
+  
+  // Weather HUD visibility
+  const [weatherHUDVisible, setWeatherHUDVisible] = useState<boolean>(true);
+  
+  // ========== EXTENDED GAME SYSTEMS STATES ==========
+  // Shouts Modal
+  const [shoutsModalOpen, setShoutsModalOpen] = useState<boolean>(false);
+  const [shoutState, setShoutState] = useState<ShoutState>(() => initializeShoutState());
+  
+  // Enchanting Modal
+  const [enchantingModalOpen, setEnchantingModalOpen] = useState<boolean>(false);
+  const [enchantingState, setEnchantingState] = useState<EnchantingState>(() => initializeEnchantingState());
+  
+  // Standing Stones Modal
+  const [standingStonesModalOpen, setStandingStonesModalOpen] = useState<boolean>(false);
+  const [standingStoneState, setStandingStoneState] = useState<StandingStoneState>(() => initializeStandingStoneState());
+  
+  // Bounty Modal
+  const [bountyModalOpen, setBountyModalOpen] = useState<boolean>(false);
+  const [bountyState, setBountyState] = useState<BountyState>(() => initializeBountyState());
+
+  // Training Modal
+  const [trainingModalOpen, setTrainingModalOpen] = useState<boolean>(false);
+  const [trainingState, setTrainingState] = useState<TrainingState>(() => getInitialTrainingState());
+
+  // Transformation Modal (Werewolf/Vampire)
+  const [transformationModalOpen, setTransformationModalOpen] = useState<boolean>(false);
+  const [transformationState, setTransformationState] = useState<TransformationState>(() => getInitialTransformationState());
+
+  // Housing Modal
+  const [housingModalOpen, setHousingModalOpen] = useState<boolean>(false);
+  const [housingState, setHousingState] = useState<HousingState>(() => getInitialHousingState());
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -733,7 +817,6 @@ const App: React.FC = () => {
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
     // (no-change) helper kept here for context; Bonfire uses same toast flow
 
-    console.log('showToast called:', message, type, opts);
     const id = uniqueId();
     setToastMessages(prev => {
       // Allow repeated messages so repeated consumptions show toasts; keep last 3 messages
@@ -1298,10 +1381,7 @@ const App: React.FC = () => {
         }
       });
 
-      console.log('🔧 Database utils available via window.aetheriusUtils');
-      console.log('  - removeDuplicateItems() - removes items with duplicate names');
-      console.log('  - reloadItems() - reloads inventory from database');
-      console.log('🎮 Demo commands available via window.demo (see CONSOLE_COMMANDS.md)');
+      // Debug utils available via browser console - see CONSOLE_COMMANDS.md
     }
   }, [currentUser?.uid, currentCharacterId, characters, items, companions]);
 
@@ -1315,14 +1395,12 @@ const App: React.FC = () => {
       if (user) {
         try {
           // Initialize Firestore (must happen before any queries)
-          console.log('Initializing Firestore for user:', user.uid);
           await initializeFirestoreDb();
 
           // Set user online status in Realtime DB
           await setUserOnline(user.uid);
 
           // Load all data from Firestore in parallel
-          console.log('Loading user data from Firestore...');
           // Prefer loading inventory for the last selected character (if available)
           let preferredCharacterId: string | undefined;
           try { preferredCharacterId = localStorage.getItem(`aetherius:lastCharacter:${user.uid}`) || undefined; } catch { preferredCharacterId = undefined; }
@@ -1337,7 +1415,6 @@ const App: React.FC = () => {
             loadUserSettings(user.uid)
           ]);
 
-          console.log('Data loaded successfully:', { userProfiles, userCharacters, userItems });
           // Ensure there is always at least one profile so we can go straight to character selection.
           // Profiles remain as an internal grouping, but we no longer show a profile selection screen.
           let nextProfiles = userProfiles || [];
@@ -1390,7 +1467,6 @@ const App: React.FC = () => {
               // Legacy character: XP doesn't match level. Normalize XP to match level baseline.
               normalizedXP = xpRequiredForCurrentLevel;
               xpWasNormalized = true;
-              console.log(`[XP Normalization] Character "${c.name}" (level ${currentLevel}) had ${currentXP} XP but needs ${xpRequiredForCurrentLevel} XP to be level ${currentLevel}. Normalized XP to ${normalizedXP}.`);
             }
             
             // Ensure character has all default skills (adds missing skills introduced in new releases)
@@ -1521,9 +1597,17 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Helper to get active data
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const activeCharacter = characters.find(c => c.id === currentCharacterId);
+  // Helper to get active data - memoized to avoid recalculation on every render
+  const activeCharacter = useMemo(
+    () => characters.find(c => c.id === currentCharacterId),
+    [characters, currentCharacterId]
+  );
+
+  // Memoized character items to avoid array recreation on every render
+  const characterItems = useMemo(
+    () => items.filter((i: any) => i.characterId === currentCharacterId),
+    [items, currentCharacterId]
+  );
 
   // ===== DYNAMIC EVENTS HANDLERS =====
   
@@ -1596,7 +1680,7 @@ const App: React.FC = () => {
     });
     
     // Combat-type events should trigger CombatModal immediately
-    const combatEventTypes = ['combat', 'dragon', 'bandit', 'rescue'];
+    const combatEventTypes = ['combat', 'dragon', 'bandit', 'rescue', 'escort'];
     if (combatEventTypes.includes(event.type)) {
       try {
         const comps = companions.filter(c => c.characterId === currentCharacterId);
@@ -2002,12 +2086,9 @@ const App: React.FC = () => {
       // Start with exploration or night music (will queue if not ready)
       const initialTrack = isNight ? 'night' : 'exploration';
       playMusic(initialTrack, true);
-      
-      console.log(`🎵 Requested ${initialTrack} music for ${char.name} (hour: ${hour})`);
     } else if (!currentCharacterId) {
       // Play main menu music when no character selected (will queue if not ready)
       playMusic('main_menu', true);
-      console.log('🎵 Requested main menu music');
     }
   }, [currentCharacterId, characters]);
 
@@ -2759,7 +2840,6 @@ const App: React.FC = () => {
     try {
       await deleteStoryChapter(currentUser.uid, chapterId);
       setStoryChapters(prev => prev.filter(c => c.id !== chapterId));
-      console.log(`Story chapter ${chapterId} deleted from Firestore`);
     } catch (error) {
       console.error('Failed to delete story chapter:', error);
     }
@@ -2771,7 +2851,6 @@ const App: React.FC = () => {
     try {
       await deleteJournalEntry(currentUser.uid, entryId);
       // Local state is already updated by Journal component
-      console.log(`Journal entry ${entryId} deleted from Firestore`);
     } catch (error) {
       console.error('Failed to delete journal entry:', error);
     }
@@ -3338,10 +3417,8 @@ const App: React.FC = () => {
     }
     return best;
   };
-  
 
-
-  const getCharacterItems = () => items.filter((i: any) => i.characterId === currentCharacterId);
+  const getCharacterItems = () => characterItems;
   
   const setCharacterItems = (newCharItemsOrUpdater: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
       const currentCharItems = items.filter((i: any) => i.characterId === currentCharacterId);
@@ -3555,15 +3632,7 @@ const App: React.FC = () => {
       // Filter duplicate transactions (e.g., combat rewards already applied)
       let processedUpdates = updates as any;
       if (updates.transactionId) {
-        const { filteredUpdate, wasFiltered, reason } = filterDuplicateTransactions(updates as any);
-        if (wasFiltered) {
-          console.log(`[TransactionLedger] Filtered duplicate update: ${reason}`);
-        }
-        // Debug: log before/after so we can see if xpChange was removed
-        try {
-          console.log('[App] Before filtering:', { transactionId: updates.transactionId, xpChange: updates.xpChange, goldChange: updates.goldChange });
-          console.log('[App] After filtering:', { xpChange: (filteredUpdate as any).xpChange, goldChange: (filteredUpdate as any).goldChange });
-        } catch (e) {}
+        const { filteredUpdate, wasFiltered } = filterDuplicateTransactions(updates as any);
         processedUpdates = filteredUpdate;
       }
 
@@ -3816,10 +3885,8 @@ const App: React.FC = () => {
               return { ...c, gold: (c.gold || 0) + totalGoldFromQuests };
             }));
           }
-          // Log quest reward application
+          // Show toast for quest rewards
           if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
-            console.log(`Quest rewards applied: +${totalXpFromQuests} XP, +${totalGoldFromQuests} gold`);
-            // Show immediate toast summarizing quest rewards
             const parts: string[] = [];
             if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
             if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
@@ -3835,6 +3902,32 @@ const App: React.FC = () => {
           if (completedCount > 0) {
             // Update achievement stats so quest-based achievements progress
             updateAchievementStats({ questsCompleted: completedCount });
+            
+            // Check if any completed quests match active dynamic events (by title)
+            // This allows AI-driven quest completion to also complete the associated event
+            if (dynamicEventState) {
+              const completedQuestTitles = (updates.updateQuests || [])
+                .filter(u => u.status === 'completed')
+                .map(u => u.title.toLowerCase());
+              
+              const matchingEvents = dynamicEventState.activeEvents.filter(e => {
+                if (e.status !== 'active') return false;
+                const eventTitle = e.name.toLowerCase();
+                // Match by exact title or if quest title contains event name
+                return completedQuestTitles.some(qt => 
+                  qt === eventTitle || 
+                  qt.includes(eventTitle) || 
+                  eventTitle.includes(qt)
+                );
+              });
+              
+              // Complete matching events (deferred to avoid state conflicts)
+              setTimeout(() => {
+                matchingEvents.forEach(event => {
+                  handleCompleteDynamicEvent(event.id);
+                });
+              }, 100);
+            }
           }
       }
 
@@ -4933,6 +5026,19 @@ const App: React.FC = () => {
       setEffectsEnabled,
       userSettings,
       updateUserSettings,
+      // New Feature Modals
+      openAlchemy: () => setAlchemyModalOpen(true),
+      openCooking: () => setCookingModalOpen(true),
+      openTravel: () => setTravelModalOpen(true),
+      openFactions: () => setFactionModalOpen(true),
+      // Extended Game Systems Modals
+      openShouts: () => setShoutsModalOpen(true),
+      openEnchanting: () => setEnchantingModalOpen(true),
+      openStandingStones: () => setStandingStonesModalOpen(true),
+      openBounty: () => setBountyModalOpen(true),
+      openTraining: () => setTrainingModalOpen(true),
+      openTransformation: () => setTransformationModalOpen(true),
+      openHousing: () => setHousingModalOpen(true),
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
@@ -5100,6 +5206,9 @@ const App: React.FC = () => {
         {/* Status Indicators */}
         <OfflineIndicator />
         <AutoSaveIndicator status={saveStatus} lastSaved={lastSaved} />
+        
+        {/* Game Features Sidebar */}
+        <GameSidebar />
         
         {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
           <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
@@ -5381,6 +5490,28 @@ const App: React.FC = () => {
                 return { ...c, clearedDungeons: newCleared };
               }));
               showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: 'You have conquered this dungeon!', type: 'quest-completed' });
+              
+              // Check if any active dynamic event is associated with this dungeon location
+              if (dynamicEventState) {
+                const dungeonDef = getDungeonById(dungeonId);
+                const dungeonName = dungeonDef?.name?.toLowerCase() || dungeonId.toLowerCase();
+                
+                // Find matching active events (by location name or dungeon ID)
+                const matchingEvents = dynamicEventState.activeEvents.filter(e => {
+                  if (e.status !== 'active') return false;
+                  const eventLocName = e.location?.name?.toLowerCase() || '';
+                  const eventDungeonId = (e as any).dungeonId?.toLowerCase() || '';
+                  return eventLocName.includes(dungeonName) || 
+                         dungeonName.includes(eventLocName) ||
+                         eventDungeonId === dungeonId.toLowerCase() ||
+                         // Combat-type events at dungeon locations should complete
+                         (e.type === 'combat' || e.type === 'bandit' || e.type === 'dragon');
+                });
+                
+                matchingEvents.forEach(event => {
+                  handleCompleteDynamicEvent(event.id);
+                });
+              }
             }
             setDungeonId(null);
           }}
@@ -5423,27 +5554,43 @@ const App: React.FC = () => {
               
               // If combat was triggered by a dynamic event, complete it on victory
               if (activeCombatEventId && result === 'victory') {
-                console.log('[App.onCombatEnd] Completing dynamic event:', activeCombatEventId);
                 handleCompleteDynamicEvent(activeCombatEventId);
                 setActiveCombatEventId(null);
               } else if (activeCombatEventId && result !== 'victory') {
                 // Combat lost/fled - reset the tracking but don't complete event
                 setActiveCombatEventId(null);
               }
+
+              // Check for dragon kills and absorb dragon souls
+              if (result === 'victory' && combatState) {
+                const killedDragons = combatState.enemies?.filter(
+                  e => e.type === 'dragon' && (e.currentHealth <= 0 || e.combat_state === 'dead')
+                ) || [];
+                
+                if (killedDragons.length > 0) {
+                  // Absorb souls from all killed dragons
+                  killedDragons.forEach(dragon => {
+                    const soulResult = absorbDragonSoul(shoutState, dragon.name);
+                    setShoutState(soulResult.newState);
+                    showToast(soulResult.message, 'success');
+                  });
+                  
+                  // Epic dragon kill notification
+                  showEventNotification({
+                    type: 'event-complete',
+                    title: 'Dragon Slain!',
+                    message: `You have absorbed ${killedDragons.length} dragon soul${killedDragons.length > 1 ? 's' : ''}!`,
+                    eventId: `dragon-kill-${Date.now()}`,
+                    timestamp: Date.now(),
+                    dismissed: false,
+                  });
+                }
+              }
               
               // Scale combat time: real minutes * COMBAT_TIME_SCALE = in-game minutes
               const scaledTimeAdvance = timeAdvanceMinutes ? Math.round(timeAdvanceMinutes * COMBAT_TIME_SCALE) : undefined;
               
-              // Debug log to verify rewards are being received
-              console.log('[App.onCombatEnd] Combat ended:', { result, rewards, xp: rewards?.xp, gold: rewards?.gold, realMinutes: timeAdvanceMinutes, scaledMinutes: scaledTimeAdvance });
-              
               if (result === 'victory' && rewards) {
-                // Debug: log current in-memory character before applying defensive local-apply
-                try {
-                  const cid = currentCharacterId;
-                  const before = (window as any).app?.characters?.find((c: any) => c.id === cid);
-                  console.log('[App.onCombatEnd] Character before local-apply:', cid, before && { experience: before.experience, gold: before.gold });
-                } catch (e) {}
                 // NOTE: Loot items are already applied via onInventoryUpdate during finalizeLoot
                 // Do NOT pass newItems here to avoid duplication
                   // Defensive local apply: update character state immediately so HUD reflects rewards
@@ -5478,21 +5625,6 @@ const App: React.FC = () => {
                   } : undefined,
                   timeAdvanceMinutes: scaledTimeAdvance
                 });
-
-                // Debug: after a short delay, print the in-memory character snapshot and recent ledger entries
-                setTimeout(() => {
-                  try {
-                    const cid = currentCharacterId;
-                    const after = (window as any).app?.characters?.find((c: any) => c.id === cid);
-                    console.log('[App.onCombatEnd] Character after local-apply+handleGameUpdate:', cid, after && { experience: after.experience, gold: after.gold, pendingLevelUp: (window as any).app?.pendingLevelUp || null });
-                    try {
-                      const ledger = (window as any).getTransactionLedger && (window as any).getTransactionLedger();
-                      if (ledger && typeof ledger.getRecentTransactions === 'function') {
-                        console.log('[App.onCombatEnd] Ledger recent:', ledger.getRecentTransactions(10).map((t: any) => ({ id: t.transactionId || t.id, xp: t.xpAmount, gold: t.goldAmount, timestamp: t.timestamp })));
-                      }
-                    } catch (e) {}
-                  } catch (e) {}
-                }, 120);
 
                 // Apply companion XP if provided
                 if ((rewards as any).companionXp && Array.isArray((rewards as any).companionXp)) {
@@ -5645,8 +5777,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 }
               })();
             }}
-            onNarrativeUpdate={(narrative) => {
-              console.log('[Combat Narrative]', narrative);
+            onNarrativeUpdate={(_narrative) => {
+              // Narrative updates can be used for visual effects or logging
             }}
             onInventoryUpdate={(itemsOrRemoved) => {
               // itemsOrRemoved can be:
@@ -5880,6 +6012,596 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
             theme={colorTheme} 
             weatherType={weatherEffect} 
+          />
+        )}
+
+        {/* ========== NEW FEATURE MODALS ========== */}
+        
+        {/* Alchemy Modal */}
+        {alchemyModalOpen && activeCharacter && (
+          <AlchemyModal
+            isOpen={alchemyModalOpen}
+            onClose={() => setAlchemyModalOpen(false)}
+            inventory={getCharacterItems()}
+            onBrewPotion={(potion, ingredientsUsed) => {
+              // potion is now an InventoryItem from brewPotion
+              const newItem: InventoryItem = {
+                ...potion,
+                characterId: currentCharacterId!,
+              };
+              handleGameUpdate({
+                newItems: [newItem],
+                removedItems: ingredientsUsed.map(name => ({ name, quantity: 1 }))
+              });
+              showToast(`Brewed ${potion.name}!`, 'success');
+            }}
+          />
+        )}
+        
+        {/* Cooking Modal */}
+        {cookingModalOpen && activeCharacter && (
+          <CookingModal
+            isOpen={cookingModalOpen}
+            onClose={() => setCookingModalOpen(false)}
+            inventory={getCharacterItems()}
+            onCook={(recipe, result) => {
+              // Result already has the correct structure from cookRecipe
+              const newItem: InventoryItem = {
+                ...result,
+                characterId: currentCharacterId!,
+              };
+              handleGameUpdate({
+                newItems: [newItem],
+                removedItems: recipe.ingredients.map(ing => ({ name: ing.name, quantity: ing.quantity }))
+              });
+              showToast(`Cooked ${result.name}!`, 'success');
+            }}
+          />
+        )}
+        
+        {/* Travel Modal */}
+        {travelModalOpen && activeCharacter && (
+          <TravelModal
+            isOpen={travelModalOpen}
+            onClose={() => setTravelModalOpen(false)}
+            currentLocationId={activeCharacter.currentLocation?.toLowerCase().replace(/\s/g, '_') || 'whiterun'}
+            discoveredLocations={activeCharacter.discoveredLocations || ['whiterun', 'riverwood']}
+            playerGold={activeCharacter.gold || 0}
+            onTravel={(destination, useCarriage, cost) => {
+              // Handle travel - pass time via setCharacters directly since timeChange doesn't exist
+              handleGameUpdate({
+                goldChange: -cost.gold,
+              });
+              
+              // Update character location and discovered locations
+              if (currentCharacterId && activeCharacter) {
+                const newGameTime = (activeCharacter.gameTime || 480) + (cost.timeHours * 60);
+                setCharacters(prev => prev.map(c => 
+                  c.id === currentCharacterId 
+                    ? { 
+                        ...c, 
+                        currentLocation: destination.name,
+                        discoveredLocations: [...new Set([...(c.discoveredLocations || []), destination.id])],
+                        gameTime: newGameTime
+                      }
+                    : c
+                ));
+              }
+              
+              // Check for travel encounter - create a TravelCost object
+              const travelCostObj = { 
+                gold: cost.gold, 
+                timeHours: cost.timeHours, 
+                dangerRating: destination.dangerLevel || 1 
+              };
+              const encounter = checkTravelEncounter(travelCostObj, activeCharacter.level || 1);
+              if (encounter) {
+                showToast(`Encounter: ${encounter}`, 'warning');
+                // Could trigger combat here if hostile
+              }
+              
+              // Map destination hold to weather region
+              const holdToRegion: Record<string, Region> = {
+                'Whiterun': 'whiterun',
+                'Haafingar': 'solitude',
+                'Eastmarch': 'windhelm',
+                'The Rift': 'riften',
+                'The Reach': 'markarth',
+                'Falkreath': 'falkreath',
+                'The Pale': 'dawnstar',
+                'Winterhold': 'winterhold',
+                'Hjaalmarch': 'morthal',
+              };
+              const weatherRegion = holdToRegion[destination.hold] || 'whiterun';
+              setCurrentWeather(generateWeather(weatherRegion, getGameTimeInHours(activeCharacter.gameTime || 480) % 24));
+              
+              showToast(`Arrived at ${destination.name}`, 'success');
+              setTravelModalOpen(false);
+            }}
+          />
+        )}
+        
+        {/* Faction Modal */}
+        {factionModalOpen && activeCharacter && (
+          <FactionModal
+            isOpen={factionModalOpen}
+            onClose={() => setFactionModalOpen(false)}
+            factionReputations={factionReputation}
+            onJoinFaction={(factionId) => {
+              if (currentCharacterId && activeCharacter) {
+                // Update faction reputation to mark as joined
+                setFactionReputation(prev => 
+                  prev.map(rep => 
+                    rep.factionId === factionId 
+                      ? { ...rep, joined: true } 
+                      : rep
+                  )
+                );
+                showToast(`Joined the ${FACTIONS[factionId]?.name || factionId}!`, 'success');
+              }
+            }}
+          />
+        )}
+
+        {/* Shouts Modal */}
+        {shoutsModalOpen && activeCharacter && (
+          <ShoutsModal
+            isOpen={shoutsModalOpen}
+            onClose={() => setShoutsModalOpen(false)}
+            shoutState={shoutState}
+            onLearnWord={(shoutId: string, wordIndex: number) => {
+              const result = learnShoutWord(shoutState, shoutId, wordIndex);
+              if (result.success) {
+                setShoutState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onUnlockWord={(shoutId: string, wordIndex: number) => {
+              const result = unlockShoutWord(shoutState, shoutId, wordIndex);
+              if (result.success) {
+                setShoutState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onSetActiveShout={(shoutId: string | null) => {
+              setShoutState(prev => ({ ...prev, activeShout: shoutId }));
+              if (shoutId) {
+                const shout = SHOUTS[shoutId];
+                showToast(`${shout?.name || 'Shout'} readied`, 'info');
+              }
+            }}
+          />
+        )}
+
+        {/* Enchanting Modal */}
+        {enchantingModalOpen && activeCharacter && (
+          <EnchantingModal
+            isOpen={enchantingModalOpen}
+            onClose={() => setEnchantingModalOpen(false)}
+            enchantingState={enchantingState}
+            inventory={activeCharacter.inventory || []}
+            onEnchantItem={(itemId: string, enchantmentId: string, soulGemId: string, customName?: string) => {
+              const item = (activeCharacter.inventory || []).find(i => i.id === itemId);
+              if (!item) {
+                showToast('Item not found', 'error');
+                return;
+              }
+              const result = enchantItem(
+                enchantingState,
+                item,
+                enchantmentId,
+                soulGemId,
+                activeCharacter.skills?.Enchanting || 15,
+                customName
+              );
+              if (result.success && result.enchantedItem) {
+                setEnchantingState(result.newState);
+                // Replace item in inventory
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  const newInventory = (prev.inventory || []).map(i => 
+                    i.id === itemId ? result.enchantedItem! : i
+                  );
+                  return { ...prev, inventory: newInventory };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onDisenchantItem={(itemId: string) => {
+              const item = (activeCharacter.inventory || []).find(i => i.id === itemId);
+              if (!item) {
+                showToast('Item not found', 'error');
+                return;
+              }
+              const result = disenchantItem(enchantingState, item, activeCharacter.skills?.Enchanting || 15);
+              if (result.success) {
+                setEnchantingState(result.newState);
+                // Remove item from inventory (destroyed in disenchanting)
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  const newInventory = (prev.inventory || []).filter(i => i.id !== itemId);
+                  return { ...prev, inventory: newInventory };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onLearnEnchantment={(enchantmentId: string) => {
+              if (enchantingState.knownEnchantments.includes(enchantmentId)) {
+                showToast('You already know this enchantment', 'error');
+                return;
+              }
+              setEnchantingState(prev => ({
+                ...prev,
+                knownEnchantments: [...prev.knownEnchantments, enchantmentId]
+              }));
+              showToast('Enchantment learned!', 'success');
+            }}
+          />
+        )}
+
+        {/* Standing Stones Modal */}
+        {standingStonesModalOpen && activeCharacter && (
+          <StandingStonesModal
+            isOpen={standingStonesModalOpen}
+            onClose={() => setStandingStonesModalOpen(false)}
+            standingStoneState={standingStoneState}
+            onDiscoverStone={(stoneId: string) => {
+              if (standingStoneState.discoveredStones.includes(stoneId)) {
+                showToast('You have already discovered this stone', 'info');
+                return;
+              }
+              setStandingStoneState(prev => ({
+                ...prev,
+                discoveredStones: [...prev.discoveredStones, stoneId]
+              }));
+              const stone = STANDING_STONES[stoneId];
+              showToast(`Discovered the ${stone?.name || 'Standing Stone'}!`, 'success');
+            }}
+            onActivateStone={(stoneId: string) => {
+              const stone = STANDING_STONES[stoneId];
+              if (!stone) {
+                showToast('Invalid stone', 'error');
+                return;
+              }
+              setStandingStoneState(prev => ({
+                ...prev,
+                activeStone: stoneId,
+                powerLastUsed: prev.activeStone !== stoneId ? null : prev.powerLastUsed
+              }));
+              showToast(`The ${stone.name}'s power flows through you!`, 'success');
+            }}
+            onUsePower={() => {
+              if (!standingStoneState.activeStone) {
+                showToast('No standing stone active', 'error');
+                return;
+              }
+              const stone = STANDING_STONES[standingStoneState.activeStone];
+              if (!stone?.specialPower) {
+                showToast('This stone has no special power', 'info');
+                return;
+              }
+              // Check daily cooldown
+              if (standingStoneState.powerLastUsed) {
+                const lastUsed = new Date(standingStoneState.powerLastUsed);
+                const now = new Date();
+                const hoursSinceUse = (now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60);
+                if (hoursSinceUse < 24) {
+                  showToast('Power already used today. Rest and try again tomorrow.', 'error');
+                  return;
+                }
+              }
+              setStandingStoneState(prev => ({
+                ...prev,
+                powerLastUsed: new Date().toISOString()
+              }));
+              showToast(`Used ${stone.specialPower.name}!`, 'success');
+            }}
+          />
+        )}
+
+        {/* Bounty Modal */}
+        {bountyModalOpen && activeCharacter && (
+          <BountyModal
+            isOpen={bountyModalOpen}
+            onClose={() => setBountyModalOpen(false)}
+            bountyState={bountyState}
+            playerGold={activeCharacter.gold || 0}
+            onPayBounty={(holdId: string) => {
+              const result = payBounty(bountyState, holdId, activeCharacter.gold || 0);
+              if (result.success) {
+                setBountyState(result.newState);
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  return { ...prev, gold: (prev.gold || 0) - result.goldPaid };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onBribeGuard={(holdId: string) => {
+              const bribeCost = Math.floor((bountyState.holdBounties[holdId] || 0) * 0.5) + 100;
+              if ((activeCharacter.gold || 0) < bribeCost) {
+                showToast('Not enough gold to bribe the guard', 'error');
+                return;
+              }
+              const result = bribeGuard(bountyState, holdId, activeCharacter.gold || 0, activeCharacter.skills?.Speech || 15);
+              if (result.success) {
+                setBountyState(result.newState);
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  return { ...prev, gold: (prev.gold || 0) - result.goldPaid };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onGoToJail={(holdId: string) => {
+              const result = goToJail(bountyState, holdId);
+              if (result.success) {
+                setBountyState(result.newState);
+                showToast(result.message, 'info');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onServeTime={() => {
+              const result = serveJailTime(bountyState);
+              if (result.success) {
+                setBountyState(result.newState);
+                // Skill loss from serving time
+                if (result.skillLoss > 0) {
+                  showToast(`${result.message} Lost some skill progress.`, 'warning');
+                } else {
+                  showToast(result.message, 'success');
+                }
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onAttemptEscape={() => {
+              const result = attemptJailEscape(bountyState, activeCharacter.skills?.Sneak || 15, activeCharacter.skills?.Lockpicking || 15);
+              if (result.success) {
+                setBountyState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                setBountyState(result.newState);
+                showToast(result.message, 'error');
+              }
+            }}
+          />
+        )}
+
+        {/* Training Modal */}
+        {trainingModalOpen && activeCharacter && (
+          <TrainingModal
+            isOpen={trainingModalOpen}
+            onClose={() => setTrainingModalOpen(false)}
+            trainingState={trainingState}
+            playerGold={activeCharacter.gold || 0}
+            playerLevel={activeCharacter.level || 1}
+            playerSkills={activeCharacter.skills || {}}
+            onTrain={(trainerName: string, skillName: string) => {
+              const trainer = getTrainerByName(trainerName);
+              if (!trainer) {
+                showToast('Trainer not found', 'error');
+                return;
+              }
+              const currentSkillLevel = (activeCharacter.skills as Record<string, number>)?.[skillName] || 15;
+              const result = trainSkill(
+                trainingState,
+                trainerName,
+                skillName,
+                currentSkillLevel,
+                activeCharacter.level || 1,
+                activeCharacter.gold || 0
+              );
+              if (result.success) {
+                setTrainingState(result.newState);
+                // Deduct gold and increase skill
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  const newSkills = { ...(prev.skills || {}) };
+                  (newSkills as Record<string, number>)[skillName] = currentSkillLevel + 1;
+                  return { 
+                    ...prev, 
+                    gold: (prev.gold || 0) - result.goldSpent,
+                    skills: newSkills
+                  };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+          />
+        )}
+
+        {/* Transformation Modal */}
+        {transformationModalOpen && activeCharacter && (
+          <TransformationModal
+            isOpen={transformationModalOpen}
+            onClose={() => setTransformationModalOpen(false)}
+            transformationState={transformationState}
+            currentHour={getGameTimeInHours(activeCharacter.gameTime || 480) % 24}
+            onTransformWerewolf={() => {
+              const result = transformToWerewolf(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'info');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onRevertFromBeast={() => {
+              const result = revertFromBeastForm(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'info');
+              }
+            }}
+            onFeedWerewolf={() => {
+              const result = feedAsWerewolf(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onTransformVampireLord={() => {
+              const result = transformToVampireLord(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'info');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onRevertFromVampire={() => {
+              const result = revertFromVampireLord(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'info');
+              }
+            }}
+            onFeedVampire={() => {
+              const result = feedAsVampire(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onCureLycanthropy={() => {
+              const result = cureLycanthropy(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              }
+            }}
+            onCureVampirism={() => {
+              const result = cureVampirism(transformationState);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              }
+            }}
+            onUnlockWerewolfPerk={(perkId: string) => {
+              const result = unlockWerewolfPerk(transformationState, perkId);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onUnlockVampirePerk={(perkId: string) => {
+              const result = unlockVampirePerk(transformationState, perkId);
+              if (result.success) {
+                setTransformationState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+          />
+        )}
+
+        {/* Housing Modal */}
+        {housingModalOpen && activeCharacter && (
+          <HousingModal
+            isOpen={housingModalOpen}
+            onClose={() => setHousingModalOpen(false)}
+            housingState={housingState}
+            playerGold={activeCharacter.gold || 0}
+            onPurchaseHouse={(houseId) => {
+              const result = purchaseHouse(housingState, houseId, activeCharacter.gold || 0);
+              if (result.success) {
+                setHousingState(result.newState);
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  return { ...prev, gold: (prev.gold || 0) - result.goldSpent };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onUpgradeRoom={(houseId, roomType) => {
+              const result = upgradeHouseRoom(housingState, houseId, roomType, activeCharacter.gold || 0);
+              if (result.success) {
+                setHousingState(result.newState);
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  return { ...prev, gold: (prev.gold || 0) - result.goldSpent };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onMarry={(spouseId, homeId) => {
+              const result = proposeMarriage(housingState, spouseId, homeId);
+              if (result.success) {
+                setHousingState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onCollectIncome={() => {
+              const result = collectSpouseIncome(housingState);
+              if (result.success) {
+                setHousingState(result.newState);
+                setActiveCharacter(prev => {
+                  if (!prev) return prev;
+                  return { ...prev, gold: (prev.gold || 0) + result.goldEarned };
+                });
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onAdoptChild={(childName) => {
+              const homeId = housingState.activeHome;
+              if (!homeId) {
+                showToast('You need an active home to adopt children', 'error');
+                return;
+              }
+              const result = adoptChild(housingState, childName, homeId);
+              if (result.success) {
+                setHousingState(result.newState);
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+            onSetActiveHome={(houseId) => {
+              setHousingState(prev => ({ ...prev, activeHome: houseId }));
+              if (houseId) {
+                showToast(`${HOUSES[houseId]?.name || 'House'} set as your active home`, 'info');
+              }
+            }}
+          />
+        )}
+        
+        {/* Weather HUD */}
+        {weatherHUDVisible && activeCharacter && (
+          <WeatherHUD
+            weather={currentWeather}
+            currentHour={getGameTimeInHours(activeCharacter.gameTime || 480) % 24}
+            showDetails={false}
           />
         )}
 

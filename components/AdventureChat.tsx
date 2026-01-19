@@ -870,7 +870,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         lastMsg.updates.newQuests.forEach((q: any) => {
           setToastMessages((prev) => [
             ...prev,
-            { id: Math.random().toString(36).substr(2, 9), message: `New Quest Started: ${q.title}`, type: 'success' }
+            { id: Math.random().toString(36).substring(2, 11), message: `New Quest Started: ${q.title}`, type: 'success' }
           ]);
         });
       }
@@ -1124,7 +1124,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     if (lockpickCount <= 0) {
       // No lockpicks - show message in chat
       const noPicksMessage: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         role: 'gm',
         content: `*You reach for your lockpicks, but find none.* You don't have any lockpicks! You'll need to find or purchase some before attempting to pick this lock.`,
         timestamp: Date.now()
@@ -1142,7 +1142,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const handleLockpickSuccess = useCallback(() => {
     setShowLockpicking(false);
     const successMessage: ChatMessage = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       role: 'gm',
       content: `*Click!* The lock opens with a satisfying sound. Your lockpicking skills have served you well.`,
       timestamp: Date.now(),
@@ -1173,7 +1173,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     }
     
     const failMessage: ChatMessage = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       role: 'gm',
       content: lockpicksBroken > 0 
         ? `*Snap!* ${lockpicksBroken > 1 ? `${lockpicksBroken} lockpicks break` : 'Your lockpick breaks'} in the lock. The mechanism remains stubbornly closed.`
@@ -1562,7 +1562,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     }
 
     const playerMessage: ChatMessage = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       role: 'player',
       content: trimmed,
       timestamp: Date.now()
@@ -1775,7 +1775,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       }
 
       const gmMessage: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         role: 'gm',
         content: finalContent || 'The winds of fate are silent...',
         timestamp: Date.now(),
@@ -1859,7 +1859,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     } catch (error) {
       console.error('Adventure chat error:', error);
       const errorMessage: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         role: 'gm',
         content: '*The connection to Aetherius wavers...* (Error generating response. Please try again.)',
         timestamp: Date.now()
@@ -1891,7 +1891,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const startNewAdventure = () => {
     if (!character) return;
     const intro: ChatMessage = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       role: 'gm',
       content: buildContextualIntro(),
       timestamp: Date.now()
@@ -1978,7 +1978,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       // Show a brief GM line while we request an AI continuation
       const interim = `*Combat Resolved* — ${outcomeText} The engine applied rewards. Preparing the next scene...`;
       const interimMsg: ChatMessage = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         role: 'gm',
         content: interim,
         timestamp: Date.now(),
@@ -2009,7 +2009,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           const resp = await generateAdventureResponse(playerInput, JSON.stringify(contextObj), systemPrompt, { model: 'gemini-2.5-flash', language });
 
           const gmMessage: ChatMessage = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: Math.random().toString(36).substring(2, 11),
             role: 'gm',
             content: resp.narrative?.content || 'The world continues...',
             timestamp: Date.now(),
@@ -2026,7 +2026,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           // Fallback to the terse message if AI fails
           const fallback = `*Combat Resolved* — ${outcomeText} The engine has already applied loot and rewards where appropriate. ${payload.finalVitals ? 'Your vitals have been updated accordingly.' : ''}`;
           const gmMessage: ChatMessage = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: Math.random().toString(36).substring(2, 11),
             role: 'gm',
             content: fallback,
             timestamp: Date.now(),

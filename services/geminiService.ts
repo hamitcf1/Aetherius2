@@ -96,11 +96,8 @@ const getAllApiKeys = (): string[] => {
   const gemmaKey = getGemmaApiKey();
   if (gemmaKey && !keys.includes(gemmaKey)) keys.push(gemmaKey);
   
-  // DEBUG: Log available keys (without exposing full keys)
-  console.log(`[Gemini Service] Available API keys: ${keys.length}`);
-  if (keys.length > 0) {
-    console.log(`[Gemini Service] Key suffixes: ${keys.map(k => k.slice(-4)).join(', ')}`);
-  } else {
+  // Keys are loaded from environment variables - no debug logging in production
+  if (keys.length === 0) {
     console.warn(`[Gemini Service] No API keys found! Check your environment variables.`);
   }
   

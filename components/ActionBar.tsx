@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Settings, Globe, SlidersHorizontal, Bot } from 'lucide-react';
+import { Save, Users, LogOut, Sparkles, Image as ImageIcon, Download, Upload, Loader2, Plus, Snowflake, CloudRain, CloudOff, ChevronDown, Volume2, VolumeX, Music, Music2, FileJson, Wind, Mic, Globe, SlidersHorizontal, Bot, Package } from 'lucide-react';
 import type { SnowSettings, WeatherEffectType } from './SnowEffect';
 import { useAppContext } from '../AppContext';
 import { isFeatureEnabled, isFeatureWIP, getFeatureLabel } from '../featureFlags';
@@ -83,8 +83,6 @@ const ActionBar: React.FC = () => {
     handleImportJSON,
     colorTheme,
     setColorTheme,
-    openCompanions,
-    openAchievements,
     weatherEffect,
     setWeatherEffect,
     weatherIntensity,
@@ -703,7 +701,7 @@ const ActionBar: React.FC = () => {
             {/* Inventory Settings */}
             <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
               <div className="flex items-center gap-2 mb-3">
-                <Settings size={16} className="text-skyrim-gold" />
+                <Package size={16} className="text-skyrim-gold" />
                 <span className="text-sm font-bold text-skyrim-gold uppercase">Inventory</span>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -813,48 +811,6 @@ const ActionBar: React.FC = () => {
                 )}
               </div>
             )}
-
-            {/* Companions */}
-            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
-              <div className="flex items-center gap-2 mb-3">
-                <Users size={16} className="text-skyrim-gold" />
-                <span className="text-sm font-bold text-skyrim-gold uppercase">Companions</span>
-              </div>
-              <button
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  openCompanions();
-                }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-purple-600 bg-purple-700/20 text-purple-200 hover:bg-purple-700/40 transition-colors"
-              >
-                <Users size={14} />
-                <span>Manage Companions</span>
-              </button>
-              <p className="text-[10px] text-gray-500 mt-2 italic text-center">
-                Recruit, equip and manage your adventuring party
-              </p>
-            </div>
-
-            {/* Achievements */}
-            <div className="mb-6 p-4 bg-skyrim-dark/30 rounded border border-skyrim-border">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-skyrim-gold">🏆</span>
-                <span className="text-sm font-bold text-skyrim-gold uppercase">Achievements</span>
-              </div>
-              <button
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  openAchievements();
-                }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-amber-600 bg-amber-700/20 text-amber-200 hover:bg-amber-700/40 transition-colors"
-              >
-                <span>🏆</span>
-                <span>View Achievements</span>
-              </button>
-              <p className="text-[10px] text-gray-500 mt-2 italic text-center">
-                Track your progress and collect rewards
-              </p>
-            </div>
 
             {/* Close Button */}
             <button

@@ -139,6 +139,18 @@ export interface Character {
   completedCombats?: string[];
   // Cleared dungeon IDs with clearance count (for tracking re-entries with scaling enemies)
   clearedDungeons?: Array<{ dungeonId: string; clearCount: number; lastCleared: number }>;
+  
+  // Extended game systems state (opaque to avoid circular imports)
+  shoutState?: unknown; // ShoutState from shoutsService
+  enchantingState?: unknown; // EnchantingState from enchantingService
+  standingStoneState?: unknown; // StandingStoneState from standingStoneService
+  bountyState?: unknown; // BountyState from bountyService
+  factionReputation?: unknown[]; // FactionReputation[] from factionService
+  
+  // Additional extended systems
+  trainingState?: unknown; // TrainingState from trainingService
+  transformationState?: unknown; // TransformationState from transformationService
+  housingState?: unknown; // HousingState from housingService
 }
 
 export type EquipmentSlot = 'head' | 'chest' | 'hands' | 'feet' | 'weapon' | 'offhand' | 'ring' | 'necklace';
@@ -182,6 +194,17 @@ export interface InventoryItem {
   handedness?: 'one-handed' | 'two-handed' | 'off-hand-only';
   // If this item represents a spell tome or teaches a spell, set the spell id here
   spellId?: string;
+  // Enchantments applied to this item
+  enchantments?: Array<{
+    id: string;
+    name: string;
+    magnitude: number;
+    effect: string;
+  }>;
+  // Visual effect tags for enchanted items
+  effects?: string[];
+  // Is this item a quest item (cannot be dropped/sold)
+  isQuestItem?: boolean;
 }
 
 export type LootRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'epic' | 'legendary';
@@ -1065,3 +1088,101 @@ export const DEFAULT_DYNAMIC_EVENT_STATE: Omit<DynamicEventState, 'characterId'>
   pendingNotifications: [],
   lastEventGenerationGameTime: 0,
 };
+
+// ============================================================================
+// FAST TRAVEL & LOCATION TYPES
+// ============================================================================
+
+export type LocationType = 
+  | 'city' | 'town' | 'village' | 'fort' | 'camp' | 'ruin' 
+  | 'cave' | 'mine' | 'dungeon' | 'tower' | 'landmark' 
+  | 'farm' | 'mill' | 'estate' | 'dock' | 'standing_stone'
+  | 'dragon_lair' | 'giant_camp' | 'bandit_camp' | 'nordic_ruin';
+
+export type HoldName = 
+  | 'Whiterun' | 'Haafingar' | 'Eastmarch' | 'The Rift' | 'The Reach'
+  | 'Falkreath' | 'The Pale' | 'Winterhold' | 'Hjaalmarch';
+
+export interface TravelState {
+  currentLocationId: string;
+  discoveredLocationIds: string[];
+  lastTravelTime?: number;
+}
+
+// ============================================================================
+// FACTION & REPUTATION TYPES
+// ============================================================================
+
+export type FactionId = 
+  | 'empire' | 'stormcloaks' | 'companions' | 'thieves_guild' | 'dark_brotherhood'
+  | 'college_of_winterhold' | 'greybeards' | 'blades' | 'bards_college'
+  | 'dawnguard' | 'volkihar' | 'vigilants_of_stendarr'
+  | 'forsworn' | 'silver_hand' | 'thalmor' | 'penitus_oculatus'
+  | 'whiterun' | 'solitude' | 'windhelm' | 'riften' | 'markarth' | 'morthal' | 'falkreath' | 'dawnstar' | 'winterhold';
+
+export type ReputationLevel = 
+  | 'hated' | 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'honored' | 'revered' | 'exalted';
+
+export interface FactionReputationState {
+  factionId: FactionId;
+  reputation: number; // -1000 to +1000
+  rank?: string;
+  joined: boolean;
+  joinedAt?: number;
+  questsCompleted: number;
+  crimesAgainst: number;
+}
+
+// ============================================================================
+// WEATHER TYPES
+// ============================================================================
+
+export type WeatherType = 
+  | 'clear' | 'cloudy' | 'overcast' | 'foggy' | 'misty'
+  | 'rain' | 'light_rain' | 'heavy_rain' | 'thunderstorm'
+  | 'snow' | 'light_snow' | 'heavy_snow' | 'blizzard'
+  | 'ash_storm' | 'volcanic';
+
+export interface WeatherState {
+  currentWeather: WeatherType;
+  intensity: number;
+  temperature: number;
+  lastUpdated: number;
+  region?: string;
+}
+
+// ============================================================================
+// CRAFTING TYPES
+// ============================================================================
+
+export interface CraftedPotion {
+  id: string;
+  name: string;
+  effects: string[];
+  magnitude: number;
+  duration: number;
+  value: number;
+  createdAt: number;
+  ingredientsUsed: string[];
+}
+
+export interface CookingState {
+  knownRecipes: string[];
+  cookedMeals: number;
+}
+
+// ============================================================================
+// EXTENDED CHARACTER STATE (for new systems)
+// ============================================================================
+
+export interface ExtendedCharacterState {
+  // Travel
+  travel?: TravelState;
+  // Factions
+  factionReputations?: FactionReputationState[];
+  // Weather
+  weather?: WeatherState;
+  // Crafting
+  craftedPotions?: CraftedPotion[];
+  cooking?: CookingState;
+}

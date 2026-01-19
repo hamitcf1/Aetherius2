@@ -3,7 +3,7 @@ import { JournalEntry } from '../types';
 import { Book, Calendar, Trash2, Search, X, ArrowUpDown, Clock } from 'lucide-react';
 import { SortSelector } from './GameFeatures';
 
-const uniqueId = () => Math.random().toString(36).substr(2, 9);
+const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 interface JournalProps {
   entries: JournalEntry[];

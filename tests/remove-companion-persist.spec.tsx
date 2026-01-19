@@ -22,6 +22,8 @@ vi.mock('../../services/firestore', () => ({
   loadUserCompanions: mockLoad,
   saveUserCompanions: mockSave,
   deleteUserCompanion: mockDeleteOne,
+  loadDynamicEventState: async () => null,
+  saveDynamicEventState: async () => {},
   // Export a spy-able function for assertions
   saveCharacterWithRetry: vi.fn(async (_uid: string, _char: any) => Promise.resolve())
 }));

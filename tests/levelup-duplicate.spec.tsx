@@ -18,6 +18,9 @@ vi.mock('../services/firestore', () => ({
   loadStoryChapters: async () => [],
   loadUserSettings: async () => ({}),
   loadUserCompanions: async () => [],
+  saveUserCompanions: async () => {},
+  loadDynamicEventState: async () => null,
+  saveDynamicEventState: async () => {},
   saveCharacterWithRetry: vi.fn(async (_uid: string, _char: any) => Promise.resolve())
 }));
 

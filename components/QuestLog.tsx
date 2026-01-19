@@ -3,7 +3,7 @@ import { CustomQuest, QuestStep } from '../types';
 import { Plus, Trash2, CheckSquare, Square, MapPin, Flag, ArrowUpDown, Archive, Activity, XCircle, CheckCircle, Clock, Edit2, Save, X } from 'lucide-react';
 import { SortSelector } from './GameFeatures';
 
-const uniqueId = () => Math.random().toString(36).substr(2, 9);
+const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 interface QuestLogProps {
   quests: CustomQuest[];

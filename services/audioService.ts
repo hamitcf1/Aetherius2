@@ -233,7 +233,6 @@ class AudioService {
   public initialize(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
-    console.log('🔊 Audio service initialized');
     
     // Play any pending track that was requested before user interaction
     if (this.pendingTrack) {
@@ -361,7 +360,6 @@ class AudioService {
 
     // If not yet initialized (no user interaction), queue the track for later
     if (!this.isInitialized) {
-      console.log(`🎵 Queuing "${track}" music (waiting for user interaction)`);
       this.pendingTrack = track;
       return;
     }
@@ -633,7 +631,6 @@ class AudioService {
     } else {
       // Re-enable: resume last requested track if available
       if (this.lastRequestedTrack && this.isInitialized) {
-        console.log(`🎵 Music re-enabled, resuming "${this.lastRequestedTrack}"`);
         this.playMusic(this.lastRequestedTrack, true);
       }
     }
@@ -870,7 +867,6 @@ export function updateMusicForContext(context: AmbientContext): void {
   
   // Only change if different (playMusic already checks, but this avoids console spam)
   if (currentTrack !== track) {
-    console.log(`🎵 Music change: ${currentTrack || 'none'} → ${track} (context: ${JSON.stringify(context)})`);
     audioService.playMusic(track, true); // fade in
   }
 }

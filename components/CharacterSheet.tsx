@@ -350,7 +350,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   const addMilestone = () => {
       if (!newMilestone.trim()) return;
       const milestone: Milestone = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
           level: newMilestoneLevel,
           description: newMilestone,
           achieved: false
@@ -372,7 +372,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   const addPerk = () => {
       if (!newPerkName.trim()) return;
       const perk: Perk = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
           name: newPerkName,
           skill: newPerkSkill,
           rank: newPerkRank,

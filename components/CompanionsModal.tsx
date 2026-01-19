@@ -92,7 +92,7 @@ export const CompanionsModal: React.FC<Props> = ({ open, onClose, companions, on
     const animalData = isAnimal ? ANIMAL_SPECIES.find(a => a.id === species) : null;
     
     const c: Companion = {
-      id: Math.random().toString(36).substr(2,9),
+      id: Math.random().toString(36).substring(2, 11),
       characterId: '', // Will be set by App.tsx addCompanion handler
       name: name.trim(),
       race: isAnimal ? (animalData?.label || 'Animal') : race,

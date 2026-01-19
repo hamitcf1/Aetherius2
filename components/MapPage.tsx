@@ -1278,6 +1278,20 @@ export const MapPage: React.FC<MapPageProps> = ({
                       
                       <p className="text-sm text-stone-300 mb-3">{selectedDynamicEvent.description}</p>
                       
+                      {/* Event type hint */}
+                      <div className="text-xs text-stone-500 italic mb-3 px-2 py-1.5 bg-stone-800/50 rounded border-l-2 border-stone-600">
+                        {selectedDynamicEvent.type === 'combat' && '⚔️ Starting this will trigger combat'}
+                        {selectedDynamicEvent.type === 'dragon' && '🐉 Starting this will trigger a dragon battle'}
+                        {selectedDynamicEvent.type === 'bandit' && '⚔️ Starting this will trigger bandit combat'}
+                        {selectedDynamicEvent.type === 'rescue' && '🛡️ Starting this will trigger a rescue combat'}
+                        {selectedDynamicEvent.type === 'escort' && '🛡️ Starting this will trigger escort combat'}
+                        {selectedDynamicEvent.type === 'treasure' && '🔐 Starting this will open the lockpicking minigame'}
+                        {selectedDynamicEvent.type === 'shrine' && '✨ Starting this will let you choose a divine blessing'}
+                        {selectedDynamicEvent.type === 'merchant' && '💰 Starting this will open the merchant shop'}
+                        {selectedDynamicEvent.type === 'mystery' && '🔍 Complete through adventure chat narrative'}
+                        {selectedDynamicEvent.type === 'investigation' && '🔍 Complete through adventure chat narrative'}
+                      </div>
+                      
                       {/* Location */}
                       <div className="flex items-center gap-2 text-xs text-stone-400 mb-2">
                         <MapPin size={12} />
@@ -1371,6 +1385,21 @@ export const MapPage: React.FC<MapPageProps> = ({
                             <>Start Event</>
                           )}
                         </button>
+                        
+                        {/* Manual complete button for narrative events that are active */}
+                        {selectedDynamicEvent.status === 'active' && 
+                         ['mystery', 'investigation'].includes(selectedDynamicEvent.type) && (
+                          <button 
+                            onClick={() => {
+                              onCompleteDynamicEvent?.(selectedDynamicEvent.id);
+                              setSelectedDynamicEvent(null);
+                              showToast?.(`Completed: ${selectedDynamicEvent.name}`, 'success');
+                            }}
+                            className="w-full py-2 rounded text-sm font-bold bg-gradient-to-r from-amber-900 to-amber-800 hover:from-amber-800 hover:to-amber-700 text-white"
+                          >
+                            ✓ Mark as Completed
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
