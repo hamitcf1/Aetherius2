@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { Character, CustomQuest, InventoryItem, JournalEntry, StoryChapter, UserProfile, GameStateUpdate, DynamicEvent, DynamicMission, DynamicEventState, EventChain, DEFAULT_DYNAMIC_EVENT_STATE } from '../types';
+import type { AchievementStats } from './achievementsService';
 
 export interface AdventureMessage {
   id: string;
@@ -196,6 +197,10 @@ export const deleteCharacter = async (uid: string, characterId: string): Promise
     // Delete simulation state document
     const simulationStateRef = doc(db, 'users', uid, 'characters', characterId, 'simulation', 'state');
     const simulationDeletePromise = deleteDoc(simulationStateRef).catch(() => {}); // May not exist
+
+    // Delete achievement state document
+    const achievementStateRef = doc(db, 'users', uid, 'characters', characterId, 'achievementState', 'state');
+    const achievementDeletePromise = deleteDoc(achievementStateRef).catch(() => {}); // May not exist
     
     // Delete loadouts associated with this character
     const loadoutsRef = collection(db, 'users', uid, 'loadouts');
@@ -211,6 +216,7 @@ export const deleteCharacter = async (uid: string, characterId: string): Promise
       ...storyDeletePromises,
       ...adventureDeletePromises,
       simulationDeletePromise,
+      achievementDeletePromise,
       ...loadoutDeletePromises
     ]);
   } catch (error) {
@@ -491,6 +497,8 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
     musicEnabled: settings.musicEnabled,
     // Weather settings
     weatherMouseInteractionEnabled: settings.weatherMouseInteractionEnabled,
+    // Achievement notifications (legacy fallback)
+    notifiedAchievements: settings.notifiedAchievements,
     createdAt: settings.createdAt ?? now,
     updatedAt: now,
   }; 
@@ -501,6 +509,57 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
   });
 
   await setDoc(userSettingsDocRef(uid), next, { merge: true });
+};
+
+// ===== ACHIEVEMENTS =====
+
+export interface AchievementStateDoc {
+  unlockedAchievements: Record<string, { unlockedAt: number; collected: boolean }>;
+  notifiedAchievements: string[];
+  stats: AchievementStats;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+const achievementStateDocRef = (uid: string, characterId: string) => {
+  const db = getDb();
+  return doc(db, 'users', uid, 'characters', characterId, 'achievementState', 'state');
+};
+
+export const loadAchievementState = async (
+  uid: string,
+  characterId: string
+): Promise<AchievementStateDoc | null> => {
+  const db = getDb();
+  if (!db) throw new Error('Firestore not initialized');
+
+  const snapshot = await getDoc(achievementStateDocRef(uid, characterId));
+  return snapshot.exists() ? (snapshot.data() as AchievementStateDoc) : null;
+};
+
+export const saveAchievementState = async (
+  uid: string,
+  characterId: string,
+  state: AchievementStateDoc
+): Promise<void> => {
+  const db = getDb();
+  if (!db) throw new Error('Firestore not initialized');
+
+  const now = Date.now();
+  const payload: AchievementStateDoc = {
+    unlockedAchievements: state.unlockedAchievements || {},
+    notifiedAchievements: Array.isArray(state.notifiedAchievements) ? state.notifiedAchievements : [],
+    stats: state.stats,
+    createdAt: state.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  // Remove undefined values before saving
+  Object.keys(payload).forEach(key => {
+    if ((payload as any)[key] === undefined) delete (payload as any)[key];
+  });
+
+  await setDoc(achievementStateDocRef(uid, characterId), payload, { merge: true });
 };
 
 // ===== USER METADATA (for easier tracking in database) =====

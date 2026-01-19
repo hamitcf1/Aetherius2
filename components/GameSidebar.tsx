@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
+  ChevronDown,
   ChevronLeft, 
   ChevronRight, 
   Users, 
@@ -13,15 +14,18 @@ import {
   Flame,
   Sparkles,
   Map,
+  SlidersHorizontal,
   X
 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { ActionBarToggle } from './ActionBar';
 
 interface SidebarSection {
   id: string;
   title: string;
   icon: React.ReactNode;
   items: SidebarItem[];
+  render?: React.ReactNode;
 }
 
 interface SidebarItem {
@@ -35,6 +39,15 @@ interface SidebarItem {
 const GameSidebar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => ({
+    crafting: false,
+    magic: false,
+    world: false,
+    social: false,
+    'ai-tools': false,
+    progress: false,
+    actions: false,
+  }));
   
   const {
     openCompanions,
@@ -74,6 +87,13 @@ const GameSidebar: React.FC = () => {
   const handleItemClick = (onClick: () => void) => {
     onClick();
     if (isMobile) setIsOpen(false);
+  };
+
+  const toggleSection = (id: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
   };
 
   const sections: SidebarSection[] = [
@@ -132,6 +152,17 @@ const GameSidebar: React.FC = () => {
       items: [
         { id: 'achievements', label: 'Achievements', icon: '🏆', onClick: openAchievements, color: 'amber' },
       ],
+    },
+    {
+      id: 'actions',
+      title: 'Actions',
+      icon: <SlidersHorizontal size={16} className="text-skyrim-gold" />,
+      items: [],
+      render: (
+        <div className="flex justify-start">
+          <ActionBarToggle />
+        </div>
+      ),
     },
   ];
 
@@ -195,26 +226,42 @@ const GameSidebar: React.FC = () => {
         {sections.map((section) => (
           <div key={section.id} className="p-3 border-b border-skyrim-border/50">
             {/* Section header */}
-            <div className="flex items-center gap-2 mb-2">
+            <button
+              type="button"
+              onClick={() => toggleSection(section.id)}
+              aria-expanded={!!expandedSections[section.id]}
+              className="w-full flex items-center gap-2 mb-2 text-left group"
+            >
+              <span
+                className={`transition-transform ${expandedSections[section.id] ? 'rotate-180' : ''}`}
+              >
+                <ChevronDown size={14} className="text-skyrim-gold/80" />
+              </span>
               {section.icon}
               <span className="text-xs font-bold text-skyrim-gold uppercase tracking-wider">
                 {section.title}
               </span>
-            </div>
+              <span className="ml-auto text-[10px] text-skyrim-text/50">
+                {expandedSections[section.id] ? 'Hide' : 'Show'}
+              </span>
+            </button>
 
             {/* Section items */}
-            <div className="grid gap-1.5">
-              {section.items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleItemClick(item.onClick)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${getColorClasses(item.color)}`}
-                >
-                  <span className="text-base">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
+            {expandedSections[section.id] && (
+              <div className="grid gap-1.5">
+                {section.render}
+                {section.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleItemClick(item.onClick)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${getColorClasses(item.color)}`}
+                  >
+                    <span className="text-base">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 

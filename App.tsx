@@ -6,7 +6,6 @@ import {
     DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
-import ActionBar, { ActionBarToggle } from './components/ActionBar';
 import GameSidebar from './components/GameSidebar';
 import { AppContext } from './AppContext';
 import { QuestLog } from './components/QuestLog';
@@ -111,6 +110,9 @@ import {
   // Dynamic Events
   saveDynamicEventState,
   loadDynamicEventState,
+  // Achievements
+  loadAchievementState,
+  saveAchievementState,
 } from './services/firestore';
 import {
   setUserOnline,
@@ -912,8 +914,89 @@ const App: React.FC = () => {
     notifiedAchievements: new Set(),
     stats: getDefaultAchievementStats() 
   });
+  const [achievementsLoaded, setAchievementsLoaded] = useState(false);
   const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
   const achievementNotificationQueueRef = useRef<Achievement[]>([]);
+  const achievementLoadKeyRef = useRef<string | null>(null);
+
+  const mergeNumberRecord = (base: Record<string, number>, incoming?: Record<string, number>) => {
+    const out: Record<string, number> = { ...base };
+    if (!incoming) return out;
+    Object.entries(incoming).forEach(([key, value]) => {
+      const next = typeof value === 'number' ? value : 0;
+      out[key] = Math.max(out[key] || 0, next);
+    });
+    return out;
+  };
+
+  const mergeStringArray = (base: string[], incoming?: string[]) => {
+    if (!incoming || incoming.length === 0) return base;
+    return Array.from(new Set([...(base || []), ...incoming]));
+  };
+
+  const mergeAchievementStats = (base: AchievementStats, incoming?: Partial<AchievementStats>): AchievementStats => {
+    if (!incoming) return base;
+    return {
+      ...base,
+      combatWins: Math.max(base.combatWins, incoming.combatWins ?? 0),
+      enemyKills: mergeNumberRecord(base.enemyKills || {}, incoming.enemyKills),
+      totalEnemyKills: Math.max(base.totalEnemyKills, incoming.totalEnemyKills ?? 0),
+      bossKills: Math.max(base.bossKills, incoming.bossKills ?? 0),
+      dungeonClears: Math.max(base.dungeonClears, incoming.dungeonClears ?? 0),
+      goldEarned: Math.max(base.goldEarned, incoming.goldEarned ?? 0),
+      goldSpent: Math.max(base.goldSpent, incoming.goldSpent ?? 0),
+      itemsCollected: Math.max(base.itemsCollected, incoming.itemsCollected ?? 0),
+      itemsCrafted: Math.max(base.itemsCrafted, incoming.itemsCrafted ?? 0),
+      itemsUpgraded: Math.max(base.itemsUpgraded, incoming.itemsUpgraded ?? 0),
+      spellsCast: mergeNumberRecord(base.spellsCast || {}, incoming.spellsCast),
+      totalSpellsCast: Math.max(base.totalSpellsCast, incoming.totalSpellsCast ?? 0),
+      damageDealt: Math.max(base.damageDealt, incoming.damageDealt ?? 0),
+      damageTaken: Math.max(base.damageTaken, incoming.damageTaken ?? 0),
+      healingDone: Math.max(base.healingDone, incoming.healingDone ?? 0),
+      criticalHits: Math.max(base.criticalHits, incoming.criticalHits ?? 0),
+      dodges: Math.max(base.dodges, incoming.dodges ?? 0),
+      blocks: Math.max(base.blocks, incoming.blocks ?? 0),
+      deaths: Math.max(base.deaths, incoming.deaths ?? 0),
+      playTimeMinutes: Math.max(base.playTimeMinutes, incoming.playTimeMinutes ?? 0),
+      questsCompleted: Math.max(base.questsCompleted, incoming.questsCompleted ?? 0),
+      locationsDiscovered: mergeStringArray(base.locationsDiscovered || [], incoming.locationsDiscovered),
+      npcsMet: mergeStringArray(base.npcsMet || [], incoming.npcsMet),
+      companionsRecruited: mergeStringArray(base.companionsRecruited || [], incoming.companionsRecruited),
+      perksUnlocked: Math.max(base.perksUnlocked, incoming.perksUnlocked ?? 0),
+      skillLevels: mergeNumberRecord(base.skillLevels || {}, incoming.skillLevels),
+      survivalDays: Math.max(base.survivalDays, incoming.survivalDays ?? 0),
+      potionsConsumed: Math.max(base.potionsConsumed, incoming.potionsConsumed ?? 0),
+      foodConsumed: Math.max(base.foodConsumed, incoming.foodConsumed ?? 0),
+      restedTimes: Math.max(base.restedTimes, incoming.restedTimes ?? 0),
+      lockpicksSucceeded: Math.max(base.lockpicksSucceeded, incoming.lockpicksSucceeded ?? 0),
+      pickpocketSucceeded: Math.max(base.pickpocketSucceeded, incoming.pickpocketSucceeded ?? 0),
+      sneakAttacks: Math.max(base.sneakAttacks, incoming.sneakAttacks ?? 0),
+      specificItems: mergeStringArray(base.specificItems || [], incoming.specificItems),
+      specificEnemies: mergeStringArray(base.specificEnemies || [], incoming.specificEnemies),
+      specificLocations: mergeStringArray(base.specificLocations || [], incoming.specificLocations),
+      specificQuests: mergeStringArray(base.specificQuests || [], incoming.specificQuests),
+    };
+  };
+
+  const mergeUnlockedAchievements = (
+    base: AchievementState['unlockedAchievements'],
+    incoming?: AchievementState['unlockedAchievements']
+  ) => {
+    const out = { ...base };
+    if (!incoming) return out;
+    Object.entries(incoming).forEach(([id, value]) => {
+      const existing = out[id];
+      if (!existing) {
+        out[id] = { ...value };
+        return;
+      }
+      out[id] = {
+        unlockedAt: Math.min(existing.unlockedAt || value.unlockedAt, value.unlockedAt || existing.unlockedAt),
+        collected: existing.collected || value.collected,
+      };
+    });
+    return out;
+  };
 
   // Toast notification helper
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
@@ -1161,102 +1244,130 @@ const App: React.FC = () => {
     }
   }, [currentUser?.uid, currentCharacterId]);
 
-  // Achievement system: load/save from localStorage per character + notified from Firestore
-  useEffect(() => {
-    if (!currentUser?.uid || !currentCharacterId || !userSettings) return;
-    const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Load notified achievements from user settings (Firestore)
-        const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
-        const notifiedSet = new Set(notifiedForCharacter);
-        
-        // Merge with default stats to ensure new stat fields are present
-        setAchievementState({
-          unlockedAchievements: parsed.unlockedAchievements || {},
-          notifiedAchievements: notifiedSet,
-          stats: { ...getDefaultAchievementStats(), ...(parsed.stats || {}) }
-        });
-
-        // Reconcile existing quest completions into achievement stats (one-time best-effort)
-        try {
-          const completed = getCharacterQuests().filter(q => q.status === 'completed').length;
-          if (completed > 0) {
-            setAchievementState(prev => ({
-              ...prev,
-              stats: { ...prev.stats, questsCompleted: Math.max(prev.stats.questsCompleted || 0, completed) }
-            }));
-          }
-        } catch (e) {
-          // Non-fatal; best-effort only
-        }
-
-        // Run a broader achievement audit/migration to reconcile historical gameplay data
-        try {
-          const char = characters.find(c => c.id === currentCharacterId) || null;
-          const audited = auditStatsFromGameData(
-            { ...getDefaultAchievementStats(), ...(parsed.stats || {}) },
-            char,
-            {
-              quests: getCharacterQuests(),
-              inventory: items.filter(i => i.characterId === currentCharacterId),
-              companions,
-              transactions: getTransactionLedger().getRecentTransactions(200)
-            }
-          );
-
-          setAchievementState(prev => ({ ...prev, stats: { ...prev.stats, ...audited } }));
-        } catch (e) {
-          console.warn('Achievement audit failed:', e);
-        }
-      } else {
-        // Reset to defaults when switching characters without saved achievements
-        const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
-        const notifiedSet = new Set(notifiedForCharacter);
-        setAchievementState({ 
-          unlockedAchievements: {}, 
-          notifiedAchievements: notifiedSet,
-          stats: getDefaultAchievementStats() 
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to load achievements:', err);
-      const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
-      const notifiedSet = new Set(notifiedForCharacter);
-      setAchievementState({ 
-        unlockedAchievements: {}, 
-        notifiedAchievements: notifiedSet,
-        stats: getDefaultAchievementStats() 
-      });
-    }
-  }, [currentUser?.uid, currentCharacterId, userSettings]);
-
-  // Save achievements when state changes
+  // Achievement system: load/save per character (localStorage fallback + Firestore)
   useEffect(() => {
     if (!currentUser?.uid || !currentCharacterId) return;
-    const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
-    try {
-      // Save to localStorage (excluding notifiedAchievements which are saved to Firestore)
-      const localStorageData = {
-        unlockedAchievements: achievementState.unlockedAchievements,
-        stats: achievementState.stats
+
+    const loadKey = `${currentUser.uid}:${currentCharacterId}`;
+    if (achievementLoadKeyRef.current === loadKey && achievementsLoaded) return;
+    achievementLoadKeyRef.current = loadKey;
+    setAchievementsLoaded(false);
+
+    let cancelled = false;
+    const localKey = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
+
+    (async () => {
+      let localData: any = null;
+      try {
+        const raw = localStorage.getItem(localKey);
+        if (raw) localData = JSON.parse(raw);
+      } catch (e) {
+        console.warn('Failed to parse local achievements cache:', e);
+      }
+
+      let remoteData: any = null;
+      try {
+        remoteData = await loadAchievementState(currentUser.uid, currentCharacterId);
+      } catch (e) {
+        console.warn('Failed to load achievements from Firestore:', e);
+      }
+
+      const defaults = getDefaultAchievementStats();
+      const mergedStats = mergeAchievementStats(
+        mergeAchievementStats(defaults, localData?.stats),
+        remoteData?.stats
+      );
+
+      const mergedUnlocked = mergeUnlockedAchievements(
+        localData?.unlockedAchievements || {},
+        remoteData?.unlockedAchievements || {}
+      );
+
+      const legacyNotified = userSettings?.notifiedAchievements?.[currentCharacterId] || [];
+      const notifiedSet = new Set<string>([
+        ...(localData?.notifiedAchievements || []),
+        ...(remoteData?.notifiedAchievements || []),
+        ...legacyNotified
+      ]);
+
+      let nextState: AchievementState = {
+        unlockedAchievements: mergedUnlocked,
+        notifiedAchievements: notifiedSet,
+        stats: mergedStats
       };
-      localStorage.setItem(key, JSON.stringify(localStorageData));
-      
-      // Save notifiedAchievements to Firestore
-      const notifiedArray = Array.from(achievementState.notifiedAchievements);
-      updateUserSettings({
-        notifiedAchievements: {
-          ...(userSettings?.notifiedAchievements || {}),
-          [currentCharacterId]: notifiedArray
+
+      // Reconcile existing quest completions into achievement stats (best-effort)
+      try {
+        const completed = getCharacterQuests().filter(q => q.status === 'completed').length;
+        if (completed > 0) {
+          nextState = {
+            ...nextState,
+            stats: { ...nextState.stats, questsCompleted: Math.max(nextState.stats.questsCompleted || 0, completed) }
+          };
         }
-      });
-    } catch (err) {
-      console.warn('Failed to save achievements:', err);
-    }
-  }, [achievementState.unlockedAchievements, achievementState.stats, currentUser?.uid, currentCharacterId, userSettings?.notifiedAchievements]);
+      } catch (e) {
+        // Non-fatal; best-effort only
+      }
+
+      // Run a broader achievement audit/migration to reconcile historical gameplay data
+      try {
+        const char = characters.find(c => c.id === currentCharacterId) || null;
+        const audited = auditStatsFromGameData(
+          { ...nextState.stats },
+          char,
+          {
+            quests: getCharacterQuests(),
+            inventory: items.filter(i => i.characterId === currentCharacterId),
+            companions,
+            transactions: getTransactionLedger().getRecentTransactions(200)
+          }
+        );
+
+        nextState = { ...nextState, stats: mergeAchievementStats(nextState.stats, audited) };
+      } catch (e) {
+        console.warn('Achievement audit failed:', e);
+      }
+
+      if (cancelled) return;
+      setAchievementState(nextState);
+      setAchievementsLoaded(true);
+    })();
+
+    return () => { cancelled = true; };
+  }, [currentUser?.uid, currentCharacterId, userSettings?.notifiedAchievements, achievementsLoaded, characters, items, companions]);
+
+  // Save achievements when state changes (local + Firestore)
+  useEffect(() => {
+    if (!currentUser?.uid || !currentCharacterId || !achievementsLoaded) return;
+
+    const localKey = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
+    const notifiedArray = Array.from(achievementState.notifiedAchievements);
+    const localStorageData = {
+      unlockedAchievements: achievementState.unlockedAchievements,
+      notifiedAchievements: notifiedArray,
+      stats: achievementState.stats
+    };
+
+    const timeout = setTimeout(() => {
+      try {
+        localStorage.setItem(localKey, JSON.stringify(localStorageData));
+      } catch (err) {
+        console.warn('Failed to save achievements to localStorage:', err);
+      }
+
+      try {
+        saveAchievementState(currentUser.uid, currentCharacterId, {
+          unlockedAchievements: achievementState.unlockedAchievements,
+          notifiedAchievements: notifiedArray,
+          stats: achievementState.stats
+        });
+      } catch (err) {
+        console.warn('Failed to save achievements to Firestore:', err);
+      }
+    }, 800);
+
+    return () => clearTimeout(timeout);
+  }, [achievementState, currentUser?.uid, currentCharacterId, achievementsLoaded]);
 
   // Achievement notification queue handler - show one at a time
   useEffect(() => {
@@ -1986,7 +2097,7 @@ const App: React.FC = () => {
 
   // Auto-evaluate achievements when the character or achievement stats change (e.g., on load or level-up)
   useEffect(() => {
-    if (!activeCharacter) return;
+    if (!activeCharacter || !achievementsLoaded) return;
     setAchievementState(prev => {
       const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
       if (newlyUnlocked && newlyUnlocked.length > 0) {
@@ -2006,7 +2117,7 @@ const App: React.FC = () => {
       }
       return updatedState;
     });
-  }, [activeCharacter, achievementState.stats]);
+  }, [activeCharacter, achievementState.stats, achievementsLoaded]);
 
   const updateCharacter = useCallback((field: keyof Character, value: any) => {
       // If someone directly sets `level`, treat it as a level-up when increasing the level
@@ -5436,9 +5547,6 @@ const App: React.FC = () => {
 
                 {/* Story Dropdown */}
                 <StoryDropdown activeTab={activeTab} setActiveTab={setActiveTab} />
-                {/* Actions button inline with tabs */}
-                <ActionBarToggle />
-
                 {/* Persistent Level Badge (HUD) */}
                 {activeCharacter && (
                   <div className="ml-2 hidden sm:block">
