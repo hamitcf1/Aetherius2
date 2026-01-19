@@ -4720,6 +4720,7 @@ const App: React.FC = () => {
                 onRest={openBonfireMenu}
                 onEat={handleEatItem}
                 onDrink={handleDrinkItem}
+                onUseItem={handleUseItem}
                 hasCampingGear={hasCampingGear}
                 hasBedroll={hasBedroll}
                 onRequestLevelUp={() => requestLevelUp(activeCharacter)}

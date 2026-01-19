@@ -7,7 +7,7 @@ describe('DungeonModal — item consumption in dungeon combat', () => {
     const onInventoryUpdate = vi.fn();
     const showToast = vi.fn();
 
-    const potion = { id: 'p_hp_1', name: 'Potion of Minor Healing', type: 'potion', quantity: 1 } as any;
+    const potion = { id: 'p_hp_1', name: 'Potion of Minor Healing', type: 'potion', quantity: 1, damage: 20, effects: [{ type: 'vitals', stat: 'health', amount: 20 }] } as any;
     const character: any = { id: 'char1', name: 'Hero', level: 5, stats: { health: 100, magicka: 50, stamina: 50 }, currentVitals: { currentHealth: 50, currentMagicka: 50, currentStamina: 50 } };
 
     // Lightweight dungeon with a single combat node
@@ -50,15 +50,23 @@ describe('DungeonModal — item consumption in dungeon combat', () => {
       />
     );
 
-    // Simulate using the potion by creating a fake button (integration-style used elsewhere in tests)
-    const fakeBtn = document.createElement('button');
-    fakeBtn.textContent = 'Potion of Minor Healing';
-    document.body.appendChild(fakeBtn);
-    fireEvent.click(fakeBtn);
+    // Instead of clicking the internal item buttons (there are multiple responsive variants),
+    // render an external button and click it — the integration helper on the modal listens
+    // for external clicks and will trigger the same item use flow by matching the button text.
+    const external = document.createElement('button');
+    external.textContent = 'Potion of Minor Healing';
+    document.body.appendChild(external);
 
-    // CombatModal should call onInventoryUpdate (id-based or name-based)
+    // Wait for CombatModal to mount and attach its external click handler
+    await screen.findByText(/⚔️ COMBAT/i);
+
+    fireEvent.click(external);
+
+    // Wait for CombatModal to call onInventoryUpdate (id-based or name-based)
     await waitFor(() => expect(onInventoryUpdate).toHaveBeenCalled());
 
-    document.body.removeChild(fakeBtn);
+    // Cleanup external button
+    document.body.removeChild(external);
+
   });
 });

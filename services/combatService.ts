@@ -294,13 +294,13 @@ export const combatHasActiveSummon = (state: CombatState | undefined): boolean =
 export const getConjurationOutcome = (nat: number) => {
   // Outcomes:
   // 1 -> fail
-  // 2-9 -> weak (reduced duration/level)
-  // 10-18 -> normal
+  // 2-5 -> weak (reduced duration/level)
+  // 6-18 -> normal
   // 19 -> powerful
   // 20 -> critical (powerful + extra weak minion)
   if (nat <= 1) return { outcome: 'fail' as const, multiplier: 0, extraSummons: 0, durationMod: 0 };
-  if (nat >= 2 && nat <= 9) return { outcome: 'weak' as const, multiplier: 0.6, extraSummons: 0, durationMod: -1 };
-  if (nat >= 10 && nat <= 18) return { outcome: 'normal' as const, multiplier: 1.0, extraSummons: 0, durationMod: 0 };
+  if (nat >= 2 && nat <= 5) return { outcome: 'weak' as const, multiplier: 0.6, extraSummons: 0, durationMod: -1 };
+  if (nat >= 6 && nat <= 18) return { outcome: 'normal' as const, multiplier: 1.0, extraSummons: 0, durationMod: 0 };
   if (nat === 19) return { outcome: 'powerful' as const, multiplier: 1.35, extraSummons: 0, durationMod: 1 };
   return { outcome: 'critical' as const, multiplier: 1.5, extraSummons: 1, durationMod: 1 };
 };
@@ -607,7 +607,7 @@ import { isFeatureEnabled } from '../featureFlags';
 
 const UNARMED_SKILL_MODIFIER = 0.5; // tuning constant for unarmed damage scaling
 
-const generatePlayerAbilities = (
+export const generatePlayerAbilities = (
   character: Character,
   equipment: InventoryItem[]
 ): CombatAbility[] => {
@@ -680,7 +680,9 @@ const generatePlayerAbilities = (
   // High stamina cost (70-85), hits multiple enemies based on roll
   const twoHandedSkill = getSkillLevel('Two-Handed');
   const oneHandedSkillVal = getSkillLevel('One-Handed');
-  if (twoHandedSkill >= 35 || oneHandedSkillVal >= 40) {
+  // Allow Whirlwind Attack if skill thresholds met OR if the character has a unlock perk
+  const hasWhirlwindPerk = hasPerk(character, 'whirlwind_mastery');
+  if (twoHandedSkill >= 35 || oneHandedSkillVal >= 40 || hasWhirlwindPerk) {
     const baseDamage = Math.floor((weapon?.damage || 10) * 1.2);
     abilities.push({
       id: 'whirlwind_attack',
@@ -695,7 +697,9 @@ const generatePlayerAbilities = (
   }
   
   // Cleaving Strike - AoE physical for Two-Handed specialists
-  if (twoHandedSkill >= 50) {
+  // Cleaving Strike: available via Two-Handed skill OR perk unlock
+  const hasCleavingPerk = hasPerk(character, 'cleaving_mastery');
+  if (twoHandedSkill >= 50 || hasCleavingPerk) {
     const cleaveDamage = Math.floor((weapon?.damage || 10) * 1.4);
     abilities.push({
       id: 'cleaving_strike',
@@ -1311,6 +1315,8 @@ export const executePlayerAction = (
   // Collector for AoE per-target details (engine -> UI contract)
   const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
 
+  // Debug: trace action invocation in tests
+
   // EARLY-EXIT: if the player is stunned they must skip their turn (no dice, no action)
   const playerStun = (newState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
   if (playerStun) {
@@ -1350,12 +1356,19 @@ export const executePlayerAction = (
       newState.playerActionCounts[actionKey] = (newState.playerActionCounts[actionKey] || 0) + 1;
 
       // Defensive: if this ability is a conjuration and there is already an active summon,
-      // block early before consuming resources to avoid accidentally spending magicka.
+      // block early before consuming resources to avoid accidentally spending magicka. Support multiple summons
+      // when a conjuration perk (e.g., twin_souls) increases the allowed limit.
       const hasSummonEffectEarly = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
-      if (hasSummonEffectEarly && combatHasActiveSummon(newState)) {
-        const msg = 'You already have an active summon.';
-        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
-        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+      if (hasSummonEffectEarly) {
+        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
+        const pending = (newState.pendingSummons || []).length;
+        const activeSummonCount = aliveSummons + pending;
+        const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
+        if (activeSummonCount >= allowedSummons) {
+          const msg = 'You already have an active summon.';
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
+          return { newState, newPlayerStats, narrative: msg, aoeSummary };
+        }
       }
 
       // Check cost and handle stamina-shortage by scaling damage instead of blocking
@@ -1409,11 +1422,17 @@ export const executePlayerAction = (
 
       // Defensive engine guard: if ability summons but a summon is already active, block the action
       // here (no roll, no resource spend, do not advance/consume the player's turn). This prevents
-      // UI races from accidentally letting a conjure attempt consume the turn.
-      if (hasSummonEffect && combatHasActiveSummon(newState)) {
-        const msg = 'You already have an active summon.';
-        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
-        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+      // UI races from accidentally letting a conjure attempt consume the turn. Support multiple summons via perk.
+      if (hasSummonEffect) {
+        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
+        const pending = (newState.pendingSummons || []).length;
+        const activeSummonCount = aliveSummons + pending;
+        const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
+        if (activeSummonCount >= allowedSummons) {
+          const msg = 'You already have an active summon.';
+          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
+          return { newState, newPlayerStats, narrative: msg, aoeSummary };
+        }
       }
 
       // Healing: prefer self when no explicit target; explicit enemy target is disallowed
@@ -1498,8 +1517,12 @@ export const executePlayerAction = (
 
       // Summon abilities: create companion/summon without attack resolution (D20-influenced)
       if (hasSummonEffect) {
-        // Enforce one active conjuration per combat
-        if (combatHasActiveSummon(newState)) {
+        // Enforce allowed number of conjurations per combat (supports conjuration perks)
+        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
+        const pending = (newState.pendingSummons || []).length;
+        const activeSummonCount = aliveSummons + pending;
+        const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
+        if (activeSummonCount >= allowedSummons) {
           narrative += ' The conjuration fizzles — another summoned ally is already present.';
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative, timestamp: Date.now() });
           break;
@@ -1531,9 +1554,15 @@ export const executePlayerAction = (
             }
           }
 
-          const baseLevel = Math.max(1, Math.floor((playerStats?.maxHealth || 100) / 20));
+          // Prefer an explicit caster `character` (when simulating enemy conjures) otherwise fall back to player's implicit level derived from maxHealth
+          const casterLevel = (character && character.level) ? character.level : Math.max(1, Math.floor((playerStats?.maxHealth || 100) / 20));
+          const baseLevel = Math.max(1, Math.floor(casterLevel / 2));
           const level = Math.max(1, Math.floor(baseLevel * conjOutcome.multiplier));
-          const maxHealth = Math.max(8, Math.floor(((ef as any).baseHealth || 30) * conjOutcome.multiplier));
+
+          // Compute summon health as baseHealth + (hpPerLevel * level), then apply conjuration multiplier
+          const baseHealth = (ef as any).baseHealth || 30;
+          const hpPerLevel = (ef as any).hpPerLevel || 11;
+          const maxHealth = Math.max(8, Math.floor((baseHealth + (level * hpPerLevel)) * conjOutcome.multiplier));
 
           const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
           const companion: CombatEnemy = {
@@ -1571,7 +1600,9 @@ export const executePlayerAction = (
           if (conjOutcome.extraSummons > 0) {
             for (let i = 0; i < conjOutcome.extraSummons; i++) {
               const extraId = `${summonId}_x${i}`;
-              const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: Math.max(1, Math.floor(level * 0.6)), maxHealth: Math.max(4, Math.floor(maxHealth * 0.6)), currentHealth: Math.max(4, Math.floor(maxHealth * 0.6)), description: `${summonName} (lesser)` };
+              const extraLevel = Math.max(1, Math.floor(level * 0.6));
+              const extraMaxHealth = Math.max(4, Math.floor((baseHealth + (extraLevel * hpPerLevel)) * conjOutcome.multiplier * 0.6));
+              const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: extraLevel, maxHealth: extraMaxHealth, currentHealth: extraMaxHealth, description: `${summonName} (lesser)` };
               newState.allies.push(extra);
             }
           }
@@ -2034,7 +2065,11 @@ export const executePlayerAction = (
               const summonId = `summon_${summonName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).substr(2,6)}`;
               const baseLevel = Math.max(1, actor.level ? Math.floor(actor.level / 2) : 1);
               const level = Math.max(1, Math.floor(baseLevel * conjOutcome.multiplier));
-              const maxHealth = Math.max(8, Math.floor((effect as any).baseHealth || 30) * conjOutcome.multiplier);
+
+              // Compute summon health as baseHealth + (hpPerLevel * level), then apply conjuration multiplier
+              const baseHealth = (effect as any).baseHealth || 30;
+              const hpPerLevel = (effect as any).hpPerLevel || 11; // tunable per-summon parameter
+              const maxHealth = Math.max(8, Math.floor((baseHealth + (level * hpPerLevel)) * conjOutcome.multiplier));
 
               const companion: CombatEnemy = {
                 id: summonId,
@@ -2060,7 +2095,9 @@ export const executePlayerAction = (
               if (conjOutcome.extraSummons > 0) {
                 for (let i = 0; i < conjOutcome.extraSummons; i++) {
                   const extraId = `${summonId}_x${i}`;
-                  const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: Math.max(1, Math.floor(level * 0.6)), maxHealth: Math.max(4, Math.floor(maxHealth * 0.6)), currentHealth: Math.max(4, Math.floor(maxHealth * 0.6)), description: `${summonName} (lesser)` };
+                  const extraLevel = Math.max(1, Math.floor(level * 0.6));
+                  const extraMaxHealth = Math.max(4, Math.floor((baseHealth + (extraLevel * hpPerLevel)) * conjOutcome.multiplier * 0.6));
+                  const extra: any = { ...companion, id: extraId, name: `${summonName} (Lesser)`, level: extraLevel, maxHealth: extraMaxHealth, currentHealth: extraMaxHealth, description: `${summonName} (lesser)` };
                   newState.allies.push(extra);
                 }
               }
@@ -2239,6 +2276,7 @@ export const executePlayerAction = (
         // Resolve potion effect centrally
         const resolved = resolvePotionEffect(item);
         const amount = resolved.amount ?? item.damage ?? 0;
+
         if (!resolved.stat || !amount || amount <= 0) {
           narrative = `The ${item.name} has no clear effect.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
@@ -2246,9 +2284,11 @@ export const executePlayerAction = (
         }
 
         const mod = modifyPlayerCombatStat(newPlayerStats, resolved.stat, amount);
+
         if (mod.actual > 0) {
           newPlayerStats = mod.newPlayerStats;
           usedItem = { ...item, quantity: item.quantity - 1 };
+
           narrative = `You use ${item.name} and recover ${mod.actual} ${resolved.stat}.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative, usedItem, aoeSummary };

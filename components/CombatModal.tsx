@@ -25,7 +25,8 @@ import {
   applyTurnRegen,
   checkCombatEnd,
   combatHasActiveSummon,
-  getCombatPerkBonus
+  getCombatPerkBonus,
+  getPerkRank
 } from '../services/combatService';
 import { LootModal } from './LootModal';
 import { populatePendingLoot, finalizeLoot } from '../services/lootService';
@@ -670,7 +671,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     setShowRoll(true);
     const start = performance.now();
-    const revolutions = 6; // full 6 rotations (configurable)
+    const revolutions = 4; // full 4 rotations (snappier)
     const totalSteps = revolutions * 20 + ((finalValue - 1 + 20) % 20);
     let lastStep = -1;
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -1063,7 +1064,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         await waitMs(Math.floor(600 * timeScale));
       } else {
         // animate wheel-style roll with ease-out for smooth stop
-        await animateRoll(finalEnemyRoll, Math.floor(3000 * timeScale));
+        await animateRoll(finalEnemyRoll, Math.floor(3000));
         await waitMs(Math.floor(220 * timeScale));
         setShowRoll(false);
         setRollActor(null);
@@ -1228,6 +1229,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
   }, [combatState.currentTurnActor, combatState.active, isAnimating, awaitingCompanionAction]);
 
+  // Track optimistic inventory updates to avoid emitting duplicate updates when the engine
+  // later returns a concrete usedItem. This is a small in-component cache keyed by item id.
+  const pendingInventoryUpdateIds = React.useRef<Set<string>>(new Set());
+
   // Handle player action
   const handlePlayerAction = async (action: CombatActionType, abilityId?: string, itemId?: string) => {
     // debug
@@ -1302,19 +1307,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return;
     }
 
-    // Defensive UI guard: if this ability is a conjuration and there's already an active summon,
-    // block the action immediately (no roll animation, no turn consumed) and surface a toast.
+    // Defensive UI guard: if this ability is a conjuration, check active summon count against
+    // the character's allowed summon limit (base 1, increased by conjuration perks).
     const abilityToCheck = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
     const isConjuration = !!(abilityToCheck && abilityToCheck.effects && abilityToCheck.effects.some((ef: any) => ef.type === 'summon'));
-    if (isConjuration && combatHasActiveSummon(combatState)) {
-      if (showToast) showToast('Already summoned', 'warning');
-      // suppress any transient roll UI and ensure we don't consume the player's turn
-      lastInvalidTargetRef.current = true;
-      if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
-      setShowRoll(false);
-      setRollActor(null);
-      setIsAnimating(false);
-      return;
+    if (isConjuration) {
+      const aliveSummons = ((combatState.allies || []).concat(combatState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
+      const pending = (combatState.pendingSummons || []).length;
+      const activeSummonCount = aliveSummons + pending;
+      const allowedSummons = 1 + (getPerkRank(character, 'twin_souls') || 0);
+      if (activeSummonCount >= allowedSummons) {
+        if (showToast) showToast('Already summoned', 'warning');
+        // suppress any transient roll UI and ensure we don't consume the player's turn
+        lastInvalidTargetRef.current = true;
+        if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
+        setShowRoll(false);
+        setRollActor(null);
+        setIsAnimating(false);
+        return;
+      }
     }
 
     // Pre-check: if the player is stunned, skip the roll and let engine handle the skip immediately (prevents UX roll animation when stunned)
@@ -1342,6 +1353,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return;
     }
 
+    // Optimistically emit an inventory update for item uses so that external handlers can
+    // react immediately and tests are deterministic. Track the item id so we can avoid
+    // double-emitting when the engine later returns a usedItem.
+    if (action === 'item' && itemId) {
+      const match = localInventory.find(it => it.id === itemId);
+      if (match && onInventoryUpdate) {
+        pendingInventoryUpdateIds.current.add(itemId);
+        const precise: InventoryItem = { ...match, quantity: Math.max(0, (match.quantity || 0) - 1) } as InventoryItem;
+        onInventoryUpdate([precise]);
+      }
+    }
+
     // Animate d20 rolling: show a sequence then finalize to a deterministic nat roll
     const finalRoll = Math.floor(Math.random() * 20) + 1;
     setRollActor('player');
@@ -1352,7 +1375,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
 
     // animate wheel-style roll with ease-out for smooth stop
-    await animateRoll(finalRoll, Math.floor(3000 * timeScale));
+    await animateRoll(finalRoll, Math.floor(3000));
     await waitMs(Math.floor(220 * timeScale));
     setShowRoll(false);
     setRollActor(null);
@@ -1467,16 +1490,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       });
 
       if (onInventoryUpdate) {
-        // If we have a concrete id from the engine, prefer emitting an id-based update
-        // (allows App to merge by id and treat quantity<=0 as deletion). Fallback to
-        // legacy name-based removal when id is not available.
-        if ((usedItem as any).id) {
-          const precise: InventoryItem = { ...(usedItem as any) } as InventoryItem;
-          // ensure quantity in the payload reflects the post-use quantity
-          precise.quantity = Number(usedItem.quantity || 0);
-          onInventoryUpdate([precise]);
+        // If we previously emitted an optimistic update for this item, do not emit again.
+        if (usedItem.id && pendingInventoryUpdateIds.current.has(usedItem.id)) {
+          pendingInventoryUpdateIds.current.delete(usedItem.id);
         } else {
-          onInventoryUpdate([{ name: usedItem.name, quantity: 1 }]);
+          // If we have a concrete id from the engine, prefer emitting an id-based update
+          // (allows App to merge by id and treat quantity<=0 as deletion). Fallback to
+          // legacy name-based removal when id is not available.
+          if ((usedItem as any).id) {
+            const precise: InventoryItem = { ...(usedItem as any) } as InventoryItem;
+            // ensure quantity in the payload reflects the post-use quantity
+            precise.quantity = Number(usedItem.quantity || 0);
+            onInventoryUpdate([precise]);
+          } else {
+            onInventoryUpdate([{ name: usedItem.name, quantity: 1 }]);
+          }
         }
       }
 
@@ -1568,6 +1596,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   };
 
   const isPlayerTurn = combatState.currentTurnActor === 'player' && combatState.active;
+  // Player stun guard (used to disable controls while stunned)
+  const playerStunned = Boolean((combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0));
 
   // container ref used by the integration/test helper (see below)
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -1581,6 +1611,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     if (!combatState?.active) return;
 
     const handler = (ev: MouseEvent) => {
+      if (playerStunned) return; // ignore external item clicks while stunned
       const target = ev.target as HTMLElement | null;
       if (!target || !(target instanceof HTMLButtonElement)) return;
       if (containerRef.current && containerRef.current.contains(target)) return;
@@ -1593,6 +1624,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         try { handlePlayerAction('item', undefined, match.id); } catch (err) { console.debug && console.debug('[combat] external item-click helper failed', err); }
       }, 0);
     };
+
 
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
@@ -2158,7 +2190,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                                   const companionRoll = Math.floor(Math.random() * 20) + 1;
                                   if (!compStunned) {
-                                    await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                    await animateRoll(companionRoll, Math.floor(3000));
                                     await waitMs(Math.floor(220 * timeScale));
                                     setShowRoll(false);
                                     setRollActor(null);
@@ -2264,7 +2296,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
                           if (!compStunned) {
-                            await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                            await animateRoll(companionRoll, Math.floor(3000));
                             await waitMs(Math.floor(220 * timeScale));
                             setShowRoll(false);
                             setRollActor(null);
@@ -2359,7 +2391,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
                           if (!compStunned) {
-                            await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                            await animateRoll(companionRoll, Math.floor(3000));
                             await waitMs(Math.floor(220 * timeScale));
                             setShowRoll(false);
                             setRollActor(null);
@@ -2418,7 +2450,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 <ActionButton
                                   key={ability.id}
                                   ability={ability}
-                                  disabled={!isPlayerTurn || isAnimating}
+                                  disabled={!isPlayerTurn || isAnimating || playerStunned}
                                   cooldown={combatState.abilityCooldowns[ability.id] || 0}
                                   canAfford={
                                     ability.type === 'magic' 
@@ -2454,7 +2486,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   {!showItemSelection ? (
                     <button
                       onClick={() => setShowItemSelection(true)}
-                      disabled={!isPlayerTurn || isAnimating}
+                      disabled={!isPlayerTurn || isAnimating || playerStunned}
                       data-sfx="button_click"
                       className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -2475,7 +2507,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             handlePlayerAction('item', undefined, item.id);
                             setShowItemSelection(false);
                           }}
-                          disabled={!isPlayerTurn || isAnimating}
+                          disabled={!isPlayerTurn || isAnimating || playerStunned}
                           className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-left"
                         >
                           <div className="flex justify-between items-center">
@@ -2578,7 +2610,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 setAwaitingCompanionAction(false);
                                 setRollActor('ally');
                                 const companionRoll = Math.floor(Math.random() * 20) + 1;
-                                await animateRoll(companionRoll, Math.floor(3000 * timeScale));
+                                await animateRoll(companionRoll, Math.floor(3000));
                                 await waitMs(Math.floor(220 * timeScale));
                                 setShowRoll(false);
                                 setRollActor(null);
@@ -2663,7 +2695,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             <div className="flex gap-1">
               <button
                 onClick={() => handlePlayerAction('defend')}
-                disabled={!isPlayerTurn || isAnimating}
+                disabled={!isPlayerTurn || isAnimating || playerStunned}
                 data-sfx="button_click"
                 className="flex-1 py-2 rounded bg-blue-900/60 border border-blue-700/50 text-blue-200 text-xs font-bold disabled:opacity-50"
               >
@@ -2673,7 +2705,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               {getUsableItems().length > 0 && (
                 <button
                   onClick={() => setShowItemSelection(!showItemSelection)}
-                  disabled={!isPlayerTurn || isAnimating}
+                  disabled={!isPlayerTurn || isAnimating || playerStunned}
                   data-sfx="button_click"
                   className="flex-1 py-2 rounded bg-green-900/60 border border-green-700/50 text-green-200 text-xs font-bold disabled:opacity-50"
                 >
@@ -2684,7 +2716,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               {combatState.fleeAllowed && (
                 <button
                   onClick={() => handlePlayerAction('flee')}
-                  disabled={!isPlayerTurn || isAnimating}
+                  disabled={!isPlayerTurn || isAnimating || playerStunned}
                   data-sfx="button_click"
                   className="flex-1 py-2 rounded bg-yellow-900/60 border border-yellow-700/50 text-yellow-200 text-xs font-bold disabled:opacity-50"
                 >

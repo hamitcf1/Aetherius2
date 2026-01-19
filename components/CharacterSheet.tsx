@@ -27,6 +27,7 @@ interface CharacterSheetProps {
   onRest?: (options: RestOptions) => void;
   onEat?: (item: InventoryItem) => void;
   onDrink?: (item: InventoryItem) => void;
+  onUseItem?: (item: InventoryItem) => void; // use potions/items that affect vitals
   hasCampingGear?: boolean;
   hasBedroll?: boolean;
   onRequestLevelUp?: () => void;
@@ -278,6 +279,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
   onRest,
   onEat,
   onDrink,
+  onUseItem,
   hasCampingGear = false,
   hasBedroll = false,
   onRequestLevelUp,
@@ -794,14 +796,14 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               {/* Current Health */}
               <div className="space-y-2">
                 {/* Quick Potion Button for Health */}
-                {onDrink && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
+                {(onDrink || onUseItem) && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
                   <div className="flex justify-end mb-1">
                     <QuickPotionButton
                       statType="health"
                       potions={healthPotions}
                       currentValue={character.currentVitals?.currentHealth ?? character.stats.health}
                       maxValue={character.stats.health}
-                      onUsePotion={onDrink}
+                      onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="red"
                     />
                   </div>
@@ -826,14 +828,14 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               {/* Current Magicka */}
               <div className="space-y-2">
                 {/* Quick Potion Button for Magicka */}
-                {onDrink && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
+                {(onDrink || onUseItem) && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
                   <div className="flex justify-end mb-1">
                     <QuickPotionButton
                       statType="magicka"
                       potions={magickaPotions}
                       currentValue={character.currentVitals?.currentMagicka ?? character.stats.magicka}
                       maxValue={character.stats.magicka}
-                      onUsePotion={onDrink}
+                      onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="blue"
                     />
                   </div>
@@ -858,14 +860,14 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               {/* Current Stamina */}
               <div className="space-y-2">
                 {/* Quick Potion Button for Stamina */}
-                {onDrink && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
+                {(onDrink || onUseItem) && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
                   <div className="flex justify-end mb-1">
                     <QuickPotionButton
                       statType="stamina"
                       potions={staminaPotions}
                       currentValue={character.currentVitals?.currentStamina ?? character.stats.stamina}
                       maxValue={character.stats.stamina}
-                      onUsePotion={onDrink}
+                      onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="green"
                     />
                   </div>

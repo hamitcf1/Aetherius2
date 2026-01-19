@@ -2312,13 +2312,6 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             <User size={12} /> Equip
           </button>
           <button
-            onClick={() => setShowMap(true)}
-            className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
-            title="View Skyrim Map"
-          >
-            <Map size={12} /> <span className="hidden sm:inline">Map</span>
-          </button>
-          <button
             onClick={() => setShowSettings(!showSettings)}
             className={`px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs ${showSettings ? 'bg-skyrim-gold/20 border-skyrim-gold' : ''}`}
           >

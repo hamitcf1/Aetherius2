@@ -181,6 +181,41 @@ describe('Spell classification: healing and summons', () => {
     expect(summCount).toBeGreaterThanOrEqual(1);
   });
 
+  it('allows additional summons up to twin_souls perk rank (1 => 2 total)', () => {
+    const char = makeCharacter();
+    char.perks = [{ id: 'twin_souls', rank: 1 }];
+
+    const playerStats = makePlayerStats();
+    const summonAbility = { id: 'summon_skeleton', name: 'Summon Skeleton', type: 'magic', cost: 40, effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }] } as any;
+    playerStats.abilities.push(summonAbility);
+
+    // Start with one active summon
+    const state = playStateWithSummon();
+    state.allies[0].companionMeta = { ...(state.allies[0].companionMeta || {}), isSummon: true };
+
+    const res = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_skeleton', undefined, undefined, 15, char);
+    // Should have succeeded in queuing another summon
+    expect(res.newState.pendingSummons && res.newState.pendingSummons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('allows up to 3 summons when twin_souls rank 2 is present', () => {
+    const char = makeCharacter();
+    char.perks = [{ id: 'twin_souls', rank: 2 }];
+
+    const playerStats = makePlayerStats();
+    const summonAbility = { id: 'summon_skeleton', name: 'Summon Skeleton', type: 'magic', cost: 40, effects: [{ type: 'summon', name: 'Skeleton', duration: 3 }] } as any;
+    playerStats.abilities.push(summonAbility);
+
+    // Start with two active summons
+    const state = baseState();
+    const comp1 = { id: 's1', name: 'S1', level: 1, maxHealth: 10, currentHealth: 10, isCompanion: true, companionMeta: { isSummon: true } } as any;
+    const comp2 = { id: 's2', name: 'S2', level: 1, maxHealth: 10, currentHealth: 10, isCompanion: true, companionMeta: { isSummon: true } } as any;
+    state.allies.push(comp1, comp2);
+
+    const res = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_skeleton', undefined, undefined, 15, char);
+    expect(res.newState.pendingSummons && res.newState.pendingSummons.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('summon works and remains friendly even when cast by a damaging spell (damage + summon) and begins decaying after 3 player turns', () => {
     const char = makeCharacter();
     const playerStats = makePlayerStats();

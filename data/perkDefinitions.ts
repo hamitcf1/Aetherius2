@@ -61,6 +61,10 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   // Defensive guard mastery: increases Defensive/Guard duration up to 3 rounds
   { id: 'tactical_guard_mastery', name: 'Tactical Guard Mastery', skill: 'Block', description: 'Increases the duration of Tactical Guard by +1 round per rank (max +2), allowing Guard to last up to 3 rounds.', requires: ['shield_wall:1'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'defendDuration', amount: 1 } },
   
+  // AoE physical unlock perks
+  { id: 'whirlwind_mastery', name: 'Whirlwind Mastery', skill: 'Combat', description: 'Unlocks Whirlwind Attack (AoE physical) even without the high Two/One-Handed skill thresholds.', maxRank: 1, masteryCost: 3 },
+  { id: 'cleaving_mastery', name: 'Cleaving Mastery', skill: 'Combat', description: 'Unlocks Cleaving Strike (AoE two-handed cleave) even without the high Two-Handed skill threshold.', maxRank: 1, masteryCost: 3 },
+
   // === COMBAT PERKS - ARCHERY ===
   { id: 'overdraw', name: 'Overdraw', skill: 'Archery', description: 'Increases bow damage by 12% per rank.', maxRank: 5, masteryCost: 2, effect: { type: 'combat', key: 'bowDamage', amount: 12 } },
   { id: 'eagle_eye', name: 'Eagle Eye', skill: 'Archery', description: 'Increases critical hit chance with bows by 5% per rank.', requires: ['overdraw:2'], maxRank: 4, masteryCost: 2, effect: { type: 'combat', key: 'bowCritChance', amount: 5 } },
@@ -102,7 +106,7 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'conjuration_novice', name: 'Novice Conjuration', skill: 'Conjuration', description: 'Novice-level conjuration spells cost 25% less magicka per rank.', maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'noviceConjurationCost', amount: -25 } },
   { id: 'summoner', name: 'Summoner', skill: 'Conjuration', description: 'Summoned creatures have 15% more health per rank.', requires: ['conjuration_novice:1'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'summonHealth', amount: 15 } },
   { id: 'atromancy', name: 'Atromancy', skill: 'Conjuration', description: 'Summoned Atronachs last 25% longer per rank.', requires: ['summoner:2'], maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'atronachDuration', amount: 25 } },
-  { id: 'twin_souls', name: 'Twin Souls', skill: 'Conjuration', description: 'Can summon an additional creature (up to 2 total).', requires: ['atromancy:2', 'summoner:3'], maxRank: 1, masteryCost: 4 },
+  { id: 'twin_souls', name: 'Twin Souls', skill: 'Conjuration', description: 'Can summon an additional creature per rank (up to 3 total when fully ranked).', requires: ['atromancy:2', 'summoner:3'], maxRank: 2, masteryCost: 4 },
   
   // === COMBAT PERKS - SNEAK ===
   { id: 'stealth', name: 'Stealth', skill: 'Sneak', description: 'You are 15% harder to detect per rank.', maxRank: 5, masteryCost: 2, effect: { type: 'combat', key: 'sneakBonus', amount: 15 } },
