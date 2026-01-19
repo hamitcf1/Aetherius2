@@ -85,6 +85,7 @@ export interface AppContextType {
   openTraining?: () => void;
   openTransformation?: () => void;
   openHousing?: () => void;
+  openAIScribe?: () => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);

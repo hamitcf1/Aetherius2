@@ -126,6 +126,7 @@ export interface AchievementStats {
 // Player achievement state
 export interface AchievementState {
   unlockedAchievements: Record<string, { unlockedAt: number; collected: boolean }>;
+  notifiedAchievements: Set<string>; // Achievement IDs that have already been notified
   stats: AchievementStats;
 }
 
@@ -520,7 +521,10 @@ export function checkAchievements(
 
     // Check requirement
     if (checkRequirement(achievement.requirement, state.stats, character)) {
-      newlyUnlocked.push(achievement);
+      // Only add to newlyUnlocked if not already notified
+      if (!updatedState.notifiedAchievements.has(achievement.id)) {
+        newlyUnlocked.push(achievement);
+      }
       updatedState.unlockedAchievements[achievement.id] = {
         unlockedAt: Date.now(),
         collected: false
@@ -529,6 +533,19 @@ export function checkAchievements(
   }
 
   return { newlyUnlocked, updatedState };
+}
+
+export function markAchievementsNotified(
+  state: AchievementState,
+  achievementIds: string[]
+): AchievementState {
+  const updatedNotified = new Set(state.notifiedAchievements);
+  achievementIds.forEach(id => updatedNotified.add(id));
+
+  return {
+    ...state,
+    notifiedAchievements: updatedNotified
+  };
 }
 
 export function collectAchievementReward(

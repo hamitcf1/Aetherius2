@@ -20,51 +20,33 @@ interface AIScribeProps {
   contextData: string;
   onUpdateState: (updates: GameStateUpdate) => void;
   model?: PreferredAIModel | string;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, model }) => {
+export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, model, isOpen: externalIsOpen, onClose }) => {
   const [batchInput, setBatchInput] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [lastResponse, setLastResponse] = useState<GameStateUpdate | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [mode, setMode] = useState<'action' | 'hero'>('action'); // Mode toggle
+  
+  // Use external isOpen if provided, otherwise use internal state
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = externalIsOpen !== undefined ? onClose || (() => {}) : setInternalIsOpen;
   // Feature gating for AIScribe
   const _featureEnabled = isFeatureEnabled('aiScribe');
   const _featureWIP = isFeatureWIP('aiScribe');
   // If disabled and not WIP, hide entirely
   if (!_featureEnabled && !_featureWIP) return null;
 
-  // --- Consult Game Master button visibility ---
-  const [showConsultButton, setShowConsultButton] = useState(() => {
-    try {
-      const stored = localStorage.getItem('showConsultGameMaster');
-      return stored === 'true';
-    } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem('showConsultGameMaster', showConsultButton ? 'true' : 'false'); } catch {}
-  }, [showConsultButton]);
-  // --- Draggable state for button ---
-  const [isDragging, setIsDragging] = useState(false);
-  const [hasDragged, setHasDragged] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [buttonPos, setButtonPos] = useState(() => {
-    const isMobile = window.innerWidth <= 600;
-    return {
-      x: isMobile ? window.innerWidth - 60 : window.innerWidth - 200,
-      y: window.innerHeight - 100
-    };
-  });
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [collapsedSide, setCollapsedSide] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null);
-
   // ESC key and body scroll lock
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') setIsOpen(false);
-  }, []);
+  }, [setIsOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -75,76 +57,6 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
       document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen, handleEscape]);
-  
-  // Handle vertical-only drag events (mouse and touch)
-  useEffect(() => {
-    function handleMove(e) {
-      if (!isDragging) return;
-      setHasDragged(true);
-      let clientY;
-      if (e.touches && e.touches.length > 0) {
-        clientY = e.touches[0].clientY;
-      } else {
-        clientY = e.clientY;
-      }
-      const buttonHeight = window.innerWidth <= 600 ? 70 : 60;
-      const newY = clientY - dragOffset.y;
-      setButtonPos(pos => ({ x: pos.x, y: Math.max(0, Math.min(window.innerHeight - buttonHeight, newY)) }));
-    }
-    function handleUp() {
-      setIsDragging(false);
-    }
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMove);
-      document.addEventListener('mouseup', handleUp);
-      document.addEventListener('touchmove', handleMove);
-      document.addEventListener('touchend', handleUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMove);
-        document.removeEventListener('mouseup', handleUp);
-        document.removeEventListener('touchmove', handleMove);
-        document.removeEventListener('touchend', handleUp);
-      };
-    }
-  }, [isDragging, dragOffset]);
-
-  // Mouse/touch down for vertical drag only
-  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    let clientY;
-    if ('touches' in e && e.touches.length > 0) {
-      clientY = e.touches[0].clientY;
-    } else {
-      // @ts-ignore
-      clientY = e.clientY;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    setDragOffset({
-      x: 0, // lock horizontal
-      y: clientY - rect.top
-    });
-    setIsDragging(true);
-    setHasDragged(false);
-  };
-
-  const handleButtonClick = (e: React.MouseEvent) => {
-    if (!hasDragged) {
-      if (isCollapsed) {
-        // Uncollapse button
-        setIsCollapsed(false);
-        setCollapsedSide(null);
-        const isMobile = window.innerWidth <= 600;
-        const buttonWidth = isMobile ? 60 : 200;
-        const buttonHeight = isMobile ? 70 : 60;
-        setButtonPos({
-          x: Math.max(10, Math.min(window.innerWidth - buttonWidth - 10, buttonPos.x)),
-          y: Math.max(10, Math.min(window.innerHeight - buttonHeight - 10, buttonPos.y))
-        });
-      } else {
-        setIsOpen(true);
-      }
-    }
-  };
 
   const parseBatchInput = (text: string): GameStateUpdate | null => {
     const raw = (text || '').trim();
@@ -256,86 +168,7 @@ export const AIScribe: React.FC<AIScribeProps> = ({ contextData, onUpdateState, 
     setGeneratedImage(null);
   };
 
-  if (!isOpen) {
-    return (
-      <>
-        {/* Minimal tab to unhide the button, fixed to side, only if hidden */}
-        {!showConsultButton && (
-          <button
-            onMouseDown={e => {
-              e.preventDefault();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setDragOffset({
-                x: 0, // lock horizontal
-                y: e.clientY - rect.top
-              });
-              setIsDragging(true);
-            }}
-            onClick={() => setShowConsultButton(true)}
-            className="fixed z-50 bg-skyrim-gold text-skyrim-dark rounded-l-lg shadow-cheap border-2 border-skyrim-dark font-serif font-bold opacity-80 hover:opacity-100 gm-toggle-btn"
-            style={{
-              top: `${buttonPos.y}px`,
-              right: 0,
-              minWidth: window.innerWidth <= 600 ? 50 : 32,
-              minHeight: window.innerWidth <= 600 ? 60 : 48,
-              writingMode: window.innerWidth <= 600 ? 'horizontal-tb' : 'vertical-rl',
-              fontSize: window.innerWidth <= 600 ? 14 : 12,
-              letterSpacing: 1,
-              padding: window.innerWidth <= 600 ? '4px 8px' : 0,
-              cursor: isDragging ? 'grabbing' : 'grab',
-              transition: isDragging ? 'none' : 'all 0.3s ease',
-              zIndex: 9999,
-            }}
-            aria-label="Show Consult Game Master"
-          >
-            GM
-          </button>
-        )}
-        {/* Consult Game Master button, only if visible */}
-        {showConsultButton && (
-          <button
-            onClick={() => setShowConsultButton(false)}
-            className="fixed top-1/2 right-0 z-50 px-2 py-1 bg-skyrim-gold text-skyrim-dark rounded-l-lg shadow-lg border-2 border-skyrim-dark font-serif font-bold opacity-80 hover:opacity-100"
-            style={{
-              transform: 'translateY(-50%)',
-              minWidth: window.innerWidth <= 600 ? 40 : 32,
-              minHeight: window.innerWidth <= 600 ? 50 : 48,
-              writingMode: window.innerWidth <= 600 ? 'horizontal-tb' : 'vertical-rl',
-              fontSize: window.innerWidth <= 600 ? 14 : 12,
-              letterSpacing: 1,
-              padding: window.innerWidth <= 600 ? '4px 8px' : 0
-            }}
-            aria-label="Hide Consult Game Master"
-          >
-            ×
-          </button>
-        )}
-        {showConsultButton && (
-          <button
-            onMouseDown={_featureEnabled ? handleMouseDown : undefined}
-            onClick={_featureEnabled ? handleButtonClick : (e) => e.preventDefault()}
-            className={`fixed top-1/2 right-10 z-50 p-3 ${_featureEnabled ? 'bg-skyrim-gold hover:bg-skyrim-goldHover text-skyrim-dark' : 'bg-gray-700 text-gray-400 cursor-not-allowed'} rounded-full shadow-lg border-2 ${_featureEnabled ? 'border-skyrim-dark transition-transform hover:scale-105' : 'border-gray-600'} flex items-center gap-2 font-serif font-bold ${
-              isCollapsed ? 'opacity-70 scale-75' : ''
-            }`}
-            title={_featureEnabled ? (isCollapsed ? 'Click to restore' : 'Consult the Game Master (drag to move)') : (getFeatureLabel('aiScribe') || 'Work in Progress')}
-            style={{
-              transform: 'translateY(-50%)',
-              minWidth: window.innerWidth <= 600 ? 50 : 44,
-              minHeight: window.innerWidth <= 600 ? 50 : 44,
-              maxWidth: '90vw',
-              maxHeight: '90vw',
-              fontSize: window.innerWidth <= 600 ? 12 : 14,
-              padding: window.innerWidth <= 600 ? '8px' : 0,
-              boxSizing: 'border-box'
-            }}
-          >
-            <Sparkles size={20} />
-            {!isCollapsed && <span className="hidden md:inline">Consult Game Master</span>}
-          </button>
-        )}
-      </>
-    );
-  }
+  if (!isOpen) return null;
 
   return (
     <div 

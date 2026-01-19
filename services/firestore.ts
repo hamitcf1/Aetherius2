@@ -454,6 +454,8 @@ export interface UserSettings {
   musicEnabled?: boolean;
   // Weather UI settings
   weatherMouseInteractionEnabled?: boolean;
+  // Achievement notification tracking (per character)
+  notifiedAchievements?: Record<string, string[]>; // characterId -> array of notified achievement IDs
 } 
 
 const userSettingsDocRef = (uid: string) => {

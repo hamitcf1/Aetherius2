@@ -139,6 +139,7 @@ import {
   checkAchievements, 
   collectAchievementReward, 
   getDefaultAchievementStats,
+  markAchievementsNotified,
   ACHIEVEMENTS,
   auditStatsFromGameData,
   type AchievementState,
@@ -534,6 +535,9 @@ const App: React.FC = () => {
   const [housingModalOpen, setHousingModalOpen] = useState<boolean>(false);
   const [housingState, setHousingState] = useState<HousingState>(() => getInitialHousingState());
 
+  // AI Scribe Modal
+  const [aiScribeModalOpen, setAiScribeModalOpen] = useState<boolean>(false);
+
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
     if (!statusEffects || statusEffects.length === 0) return;
@@ -808,6 +812,7 @@ const App: React.FC = () => {
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
   const [achievementState, setAchievementState] = useState<AchievementState>({ 
     unlockedAchievements: {}, 
+    notifiedAchievements: new Set(),
     stats: getDefaultAchievementStats() 
   });
   const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
@@ -1059,17 +1064,22 @@ const App: React.FC = () => {
     }
   }, [currentUser?.uid, currentCharacterId]);
 
-  // Achievement system: load/save from localStorage per character
+  // Achievement system: load/save from localStorage per character + notified from Firestore
   useEffect(() => {
-    if (!currentUser?.uid || !currentCharacterId) return;
+    if (!currentUser?.uid || !currentCharacterId || !userSettings) return;
     const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
+        // Load notified achievements from user settings (Firestore)
+        const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
+        const notifiedSet = new Set(notifiedForCharacter);
+        
         // Merge with default stats to ensure new stat fields are present
         setAchievementState({
           unlockedAchievements: parsed.unlockedAchievements || {},
+          notifiedAchievements: notifiedSet,
           stats: { ...getDefaultAchievementStats(), ...(parsed.stats || {}) }
         });
 
@@ -1106,24 +1116,50 @@ const App: React.FC = () => {
         }
       } else {
         // Reset to defaults when switching characters without saved achievements
-        setAchievementState({ unlockedAchievements: {}, stats: getDefaultAchievementStats() });
+        const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
+        const notifiedSet = new Set(notifiedForCharacter);
+        setAchievementState({ 
+          unlockedAchievements: {}, 
+          notifiedAchievements: notifiedSet,
+          stats: getDefaultAchievementStats() 
+        });
       }
     } catch (err) {
       console.warn('Failed to load achievements:', err);
-      setAchievementState({ unlockedAchievements: {}, stats: getDefaultAchievementStats() });
+      const notifiedForCharacter = userSettings.notifiedAchievements?.[currentCharacterId] || [];
+      const notifiedSet = new Set(notifiedForCharacter);
+      setAchievementState({ 
+        unlockedAchievements: {}, 
+        notifiedAchievements: notifiedSet,
+        stats: getDefaultAchievementStats() 
+      });
     }
-  }, [currentUser?.uid, currentCharacterId]);
+  }, [currentUser?.uid, currentCharacterId, userSettings]);
 
   // Save achievements when state changes
   useEffect(() => {
     if (!currentUser?.uid || !currentCharacterId) return;
     const key = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
     try {
-      localStorage.setItem(key, JSON.stringify(achievementState));
+      // Save to localStorage (excluding notifiedAchievements which are saved to Firestore)
+      const localStorageData = {
+        unlockedAchievements: achievementState.unlockedAchievements,
+        stats: achievementState.stats
+      };
+      localStorage.setItem(key, JSON.stringify(localStorageData));
+      
+      // Save notifiedAchievements to Firestore
+      const notifiedArray = Array.from(achievementState.notifiedAchievements);
+      updateUserSettings({
+        notifiedAchievements: {
+          ...(userSettings?.notifiedAchievements || {}),
+          [currentCharacterId]: notifiedArray
+        }
+      });
     } catch (err) {
       console.warn('Failed to save achievements:', err);
     }
-  }, [achievementState, currentUser?.uid, currentCharacterId]);
+  }, [achievementState.unlockedAchievements, achievementState.stats, currentUser?.uid, currentCharacterId, userSettings?.notifiedAchievements]);
 
   // Achievement notification queue handler - show one at a time
   useEffect(() => {
@@ -1858,6 +1894,9 @@ const App: React.FC = () => {
       const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
       if (newlyUnlocked && newlyUnlocked.length > 0) {
         achievementNotificationQueueRef.current.push(...newlyUnlocked);
+        // Mark these achievements as notified
+        const notifiedIds = newlyUnlocked.map(a => a.id);
+        const markedState = markAchievementsNotified(updatedState, notifiedIds);
         // Trigger immediate notification display if none showing
         if (achievementNotification === null) {
           const next = achievementNotificationQueueRef.current.shift();
@@ -1866,6 +1905,7 @@ const App: React.FC = () => {
             audioService.playSoundEffect('quest_complete');
           }
         }
+        return markedState;
       }
       return updatedState;
     });
@@ -1940,6 +1980,9 @@ const App: React.FC = () => {
       // Queue notifications for newly unlocked achievements
       if (newlyUnlocked.length > 0) {
         achievementNotificationQueueRef.current.push(...newlyUnlocked);
+        // Mark these achievements as notified
+        const notifiedIds = newlyUnlocked.map(a => a.id);
+        const markedState = markAchievementsNotified(updatedState, notifiedIds);
         // Trigger notification display if not already showing one
         if (achievementNotification === null) {
           const next = achievementNotificationQueueRef.current.shift();
@@ -1948,6 +1991,7 @@ const App: React.FC = () => {
             audioService.playSoundEffect('quest_complete');
           }
         }
+        return markedState;
       }
 
       return updatedState;
@@ -5039,6 +5083,7 @@ const App: React.FC = () => {
       openTraining: () => setTrainingModalOpen(true),
       openTransformation: () => setTransformationModalOpen(true),
       openHousing: () => setHousingModalOpen(true),
+      openAIScribe: () => setAiScribeModalOpen(true),
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
@@ -5071,6 +5116,9 @@ const App: React.FC = () => {
             const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
             if (newlyUnlocked && newlyUnlocked.length > 0) {
               achievementNotificationQueueRef.current.push(...newlyUnlocked);
+              // Mark these achievements as notified
+              const notifiedIds = newlyUnlocked.map(a => a.id);
+              const markedState = markAchievementsNotified(updatedState, notifiedIds);
               if (achievementNotification === null) {
                 const next = achievementNotificationQueueRef.current.shift();
                 if (next) {
@@ -5078,6 +5126,7 @@ const App: React.FC = () => {
                   audioService.playSoundEffect('quest_complete');
                 }
               }
+              return markedState;
             }
             return updatedState;
           });
@@ -5444,7 +5493,13 @@ const App: React.FC = () => {
         </main>
 
         {/* AI Game Master */}
-        <AIScribe contextData={getAIContext()} onUpdateState={handleGameUpdate} model={aiModel} />
+        <AIScribe 
+          contextData={getAIContext()} 
+          onUpdateState={handleGameUpdate} 
+          model={aiModel}
+          isOpen={aiScribeModalOpen}
+          onClose={() => setAiScribeModalOpen(false)}
+        />
 
         {/* Character Export/Import Modals */}
         {activeCharacter && (

@@ -50,6 +50,7 @@ const GameSidebar: React.FC = () => {
     openTraining,
     openTransformation,
     openHousing,
+    openAIScribe,
   } = useAppContext();
 
   // Check for mobile on mount and resize
@@ -114,6 +115,14 @@ const GameSidebar: React.FC = () => {
       icon: <Users size={16} className="text-purple-400" />,
       items: [
         { id: 'companions', label: 'Companions', icon: '👥', onClick: openCompanions, color: 'purple' },
+      ],
+    },
+    {
+      id: 'ai-tools',
+      title: 'AI Tools',
+      icon: <Sparkles size={16} className="text-cyan-400" />,
+      items: [
+        { id: 'ai-scribe', label: 'Consult Game Master', icon: '🧙', onClick: () => openAIScribe?.(), color: 'cyan' },
       ],
     },
     {
