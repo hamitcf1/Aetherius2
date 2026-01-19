@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
     DifficultyLevel, WeatherState, StatusEffect, Companion,
@@ -56,7 +57,7 @@ import {
   DifficultySelector,
   ThemeSelector,
 } from './components/GameFeatures';
-import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords, Compass } from 'lucide-react';
+import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords, Compass, ChevronDown } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { setCurrentUser as setFeatureFlagUser, isFeatureEnabled, isFeatureWIP } from './featureFlags';
 import { 
@@ -402,6 +403,102 @@ const TABS = {
   QUESTS: 'quests',
   STORY: 'story',
   JOURNAL: 'journal'
+};
+
+// Story Dropdown Component
+const StoryDropdown: React.FC<{ activeTab: string; setActiveTab: (tab: string) => void }> = ({ activeTab, setActiveTab }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ left: 0, top: 0, width: 0 });
+  const isStoryActive = activeTab === TABS.STORY || activeTab === TABS.JOURNAL;
+  const { t } = useLocalization();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update dropdown position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width
+      });
+    }
+  }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        buttonRef.current && 
+        !buttonRef.current.contains(event.target as Node) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+          isStoryActive
+              ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+              : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+          }`}
+      >
+        <Feather size={14} className="sm:w-4 sm:h-4" />
+        <span className="hidden sm:inline">{t('nav.story')}</span>
+        <ChevronDown size={12} className={`ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && createPortal(
+        <div
+          ref={dropdownRef}
+          className="bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-[100] min-w-[140px] animate-in fade-in slide-in-from-top-2"
+          style={{
+            position: 'fixed',
+            left: dropdownPos.left,
+            top: dropdownPos.top,
+            minWidth: dropdownPos.width,
+            maxWidth: 'calc(100vw - 16px)',
+          }}
+        >
+          <button
+            onClick={() => { setActiveTab(TABS.STORY); setIsOpen(false); }}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${
+              activeTab === TABS.STORY ? 'text-skyrim-gold' : 'text-skyrim-text'
+            }`}
+          >
+            {t('nav.story')}
+            {activeTab === TABS.STORY && <span className="text-skyrim-gold">✓</span>}
+          </button>
+          <button
+            onClick={() => { setActiveTab(TABS.JOURNAL); setIsOpen(false); }}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${
+              activeTab === TABS.JOURNAL ? 'text-skyrim-gold' : 'text-skyrim-text'
+            }`}
+          >
+            {t('nav.journal')}
+            {activeTab === TABS.JOURNAL && <span className="text-skyrim-gold">✓</span>}
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
+  );
 };
 
 interface AppGameState {
@@ -5262,6 +5359,7 @@ const App: React.FC = () => {
         {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
           <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
         )}
+
         {/* Navigation Header */}
         <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-cheap">
           <div className="max-w-7xl mx-auto px-4">
@@ -5271,28 +5369,73 @@ const App: React.FC = () => {
                 <span className="hidden md:inline">Skyrim Aetherius</span>
               </div>
               <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-x-auto scrollbar-hide max-w-[calc(100vw-140px)] sm:max-w-none">
-                {[
-                        { id: TABS.CHARACTER, icon: User, label: t('nav.hero') },
-                    { id: TABS.INVENTORY, icon: Package, label: t('nav.equipment') },
-                    { id: TABS.ADVENTURE, icon: Swords, label: t('nav.adventure') },
-                    { id: TABS.MAP, icon: Compass, label: 'Map' },
-                    { id: TABS.QUESTS, icon: Scroll, label: t('nav.quests') },
-                    { id: TABS.STORY, icon: Feather, label: t('nav.story') },
-                    { id: TABS.JOURNAL, icon: BookOpen, label: t('nav.journal') },
-                ].map(tab => (
-                  <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                    className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                      activeTab === tab.id 
-                          ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                          : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                      }`}
-                  >
-                      <tab.icon size={14} className="sm:w-4 sm:h-4" />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                  </button>
-                ))}
+                {/* Character Sheet */}
+                <button
+                  onClick={() => setActiveTab(TABS.CHARACTER)}
+                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+                    activeTab === TABS.CHARACTER 
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
+                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+                    }`}
+                >
+                  <User size={14} className="sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Hero</span>
+                </button>
+
+                {/* Equipment */}
+                <button
+                  onClick={() => setActiveTab(TABS.INVENTORY)}
+                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+                    activeTab === TABS.INVENTORY 
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
+                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+                    }`}
+                >
+                  <Package size={14} className="sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Inventory</span>
+                </button>
+
+                {/* Adventure Chat */}
+                <button
+                  onClick={() => setActiveTab(TABS.ADVENTURE)}
+                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+                    activeTab === TABS.ADVENTURE 
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
+                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+                    }`}
+                >
+                  <Swords size={14} className="sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Adventure</span>
+                </button>
+
+                {/* Map */}
+                <button
+                  onClick={() => setActiveTab(TABS.MAP)}
+                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+                    activeTab === TABS.MAP 
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
+                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+                    }`}
+                >
+                  <Compass size={14} className="sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Map</span>
+                </button>
+
+                {/* Quests */}
+                <button
+                  onClick={() => setActiveTab(TABS.QUESTS)}
+                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
+                    activeTab === TABS.QUESTS 
+                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
+                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+                    }`}
+                >
+                  <Scroll size={14} className="sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">{t('nav.quests')}</span>
+                </button>
+
+                {/* Story Dropdown */}
+                <StoryDropdown activeTab={activeTab} setActiveTab={setActiveTab} />
                 {/* Actions button inline with tabs */}
                 <ActionBarToggle />
 
