@@ -685,10 +685,13 @@ export const MapPage: React.FC<MapPageProps> = ({
                 return (
                   <div
                     key={location.id}
-                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-125 ${
-                      isCurrent ? 'z-30' : isQuest ? 'z-20' : 'z-10'
-                    } ${isLocked ? 'opacity-50' : ''}`}
-                    style={{ left: `${location.x}%`, top: `${location.y}%`, transform: 'translate(-50%, -50%)' }}
+                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-125 hover:z-50 ${isLocked ? 'opacity-50' : ''}`}
+                    style={{ 
+                      left: `${location.x}%`, 
+                      top: `${location.y}%`, 
+                      transform: 'translate(-50%, -50%)',
+                      zIndex: isCurrent ? 40 : isQuest ? 30 : 20
+                    }}
                     onClick={() => { setSelectedLocation(location); setActivePanel('location'); }}
                     title={isLocked ? `${location.name} (Requires Level ${location.levelRequirement})` : location.name}
                   >
@@ -718,39 +721,59 @@ export const MapPage: React.FC<MapPageProps> = ({
                 );
               })}
 
-              {/* Event Markers */}
-              {showEvents && mapEvents.map(event => {
+              {/* Event Markers - Higher z-index and offset to prevent overlapping */}
+              {showEvents && mapEvents.map((event, idx) => {
                 const isLocked = event.levelRequirement > playerLevel;
+                // Offset events slightly to prevent exact overlap with locations
+                const offsetX = (idx % 3 - 1) * 1.5; // Small horizontal scatter
+                const offsetY = Math.floor(idx / 3) % 2 === 0 ? -1.5 : 1.5; // Vertical offset
                 return (
                   <div
                     key={event.id}
-                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 z-25 ${isLocked ? 'opacity-40' : ''}`}
-                    style={{ left: `${event.x}%`, top: `${event.y}%`, transform: 'translate(-50%, -50%)' }}
+                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 ${isLocked ? 'opacity-40' : ''}`}
+                    style={{ 
+                      left: `${event.x + offsetX}%`, 
+                      top: `${event.y + offsetY}%`, 
+                      transform: 'translate(-50%, -50%)',
+                      zIndex: 35 // Higher than locations but lower than hover
+                    }}
                     onClick={() => { setSelectedEvent(event); setActivePanel('event'); }}
                     title={event.name}
                   >
                     <div className="relative drop-shadow-lg">
-                      <div className="w-6 h-6 rounded-full bg-red-900/80 border-2 border-red-500 flex items-center justify-center animate-pulse">
+                      <div className="w-6 h-6 rounded-full bg-red-900/80 border-2 border-red-500 flex items-center justify-center animate-pulse shadow-[0_0_10px_rgba(255,0,0,0.5)]">
                         {getEventIcon(event)}
                       </div>
+                      {/* Event label on hover */}
+                      <span className="absolute left-full ml-1 text-[8px] whitespace-nowrap font-medium px-1 rounded bg-red-900/90 text-red-200 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        {event.name}
+                      </span>
                     </div>
                   </div>
                 );
               })}
 
-              {/* Mission Markers */}
-              {showMissions && availableMissions.map(mission => {
+              {/* Mission Markers - Offset to prevent overlap */}
+              {showMissions && availableMissions.map((mission, idx) => {
                 const isLocked = mission.levelRequirement > playerLevel;
+                // Offset missions differently from events
+                const offsetX = ((idx + 1) % 3 - 1) * 2;
+                const offsetY = Math.floor((idx + 1) / 3) % 2 === 0 ? 2 : -2;
                 return (
                   <div
                     key={mission.id}
-                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 z-24 ${isLocked ? 'opacity-40' : ''}`}
-                    style={{ left: `${mission.x}%`, top: `${mission.y}%`, transform: 'translate(-50%, -50%)' }}
+                    className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 ${isLocked ? 'opacity-40' : ''}`}
+                    style={{ 
+                      left: `${mission.x + offsetX}%`, 
+                      top: `${mission.y + offsetY}%`, 
+                      transform: 'translate(-50%, -50%)',
+                      zIndex: 34 // Between locations and events
+                    }}
                     onClick={() => { setSelectedMission(mission); setActivePanel('mission'); }}
                     title={mission.name}
                   >
                     <div className="relative drop-shadow-lg">
-                      <div className="w-7 h-7 rounded bg-blue-900/80 border-2 border-blue-400 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded bg-blue-900/80 border-2 border-blue-400 flex items-center justify-center shadow-[0_0_10px_rgba(0,100,255,0.5)]">
                         <Target size={14} className="text-blue-300" />
                       </div>
                       {mission.timeLimit && (

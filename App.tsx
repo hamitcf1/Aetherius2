@@ -5320,20 +5320,37 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         {/* Quest Notifications (Skyrim-style) */}
         <QuestNotificationOverlay notifications={questNotifications} onDismiss={handleQuestNotificationDismiss} />
 
-        {/* Mini-Game Prototype for interactive missions */}
+        {/* Doom-Style Dungeon Crawler Mini-Game */}
         {miniGameOpen && (
           <MiniGameModal
             open={miniGameOpen}
             missionId={miniGameMission?.id}
             missionName={miniGameMission?.name}
+            difficulty={(miniGameMission?.difficulty as 'easy' | 'medium' | 'hard' | 'nightmare') || 'medium'}
+            playerLevel={activeCharacter?.level || 1}
+            playerStats={activeCharacter ? {
+              maxHealth: activeCharacter.stats.health,
+              maxMagicka: activeCharacter.stats.magicka,
+              maxStamina: activeCharacter.stats.stamina,
+              damage: 15, // Base damage
+              armor: 0, // Base armor
+            } : undefined}
             showToast={showToast}
             onClose={(result) => {
               setMiniGameOpen(false);
               if (result?.success) {
                 // Apply rewards through canonical update path
-                handleGameUpdate({ narrative: `Mini-game completed: ${miniGameMission?.name}`, xpChange: (result.rewards?.xp || 0), goldChange: (result.rewards?.gold || 0) } as any);
+                const goldEarned = result.rewards?.gold || 0;
+                const xpEarned = result.rewards?.xp || 0;
+                handleGameUpdate({ 
+                  narrative: `You emerged victorious from the dungeon! Earned ${goldEarned} gold and ${xpEarned} experience.`, 
+                  xpChange: xpEarned, 
+                  goldChange: goldEarned,
+                  items: result.rewards?.items,
+                } as any);
+                showToast && showToast(`Dungeon cleared! +${goldEarned} Gold, +${xpEarned} XP`, 'success');
               } else {
-                showToast && showToast('Mini-game canceled', 'warning');
+                showToast && showToast('You retreated from the dungeon...', 'warning');
               }
               setMiniGameMission(null);
             }}

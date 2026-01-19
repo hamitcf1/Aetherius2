@@ -4,7 +4,8 @@ import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy, Character, I
 import { getDungeonById } from '../data/dungeonDefinitions';
 import { CombatModal } from './CombatModal';
 import { initializeCombat } from '../services/combatService';
-import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle, DoorOpen, Swords, Eye, EyeOff } from 'lucide-react';
+import { DoomMinigame } from './DoomMinigame';
+import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle, DoorOpen, Swords, Eye, EyeOff, Gamepad2 } from 'lucide-react';
 
 interface DungeonModalProps {
   open: boolean;
@@ -149,6 +150,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   const [showFloorComplete, setShowFloorComplete] = useState(false);
   const [currentFloor, setCurrentFloor] = useState(1);
   const [floorScalingFactor, setFloorScalingFactor] = useState(1);
+  
+  // Doom-style minigame mode
+  const [doomModeOpen, setDoomModeOpen] = useState(false);
   
   // Refs for node positions (to draw connections accurately)
   const nodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -673,6 +677,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             <div className="text-sm text-skyrim-gold">Gold: {state.collectedRewards.gold}</div>
             <div className="text-sm text-blue-300">XP: {state.collectedRewards.xp}</div>
             <button 
+              onClick={() => setDoomModeOpen(true)}
+              className="px-3 py-1.5 bg-amber-600/30 text-amber-300 rounded hover:bg-amber-600/50 flex items-center gap-1 border border-amber-600/50 transition-all hover:scale-105"
+              title="Enter Doom Mode - First-person dungeon crawler!"
+            >
+              <Gamepad2 size={14} /> Doom Mode
+            </button>
+            <button 
               onClick={() => setShowExitConfirm(true)}
               className="px-3 py-1.5 bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1"
             >
@@ -996,6 +1007,42 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Doom-Style First-Person Dungeon Crawler */}
+      {doomModeOpen && dungeon && (
+        <DoomMinigame
+          isOpen={doomModeOpen}
+          dungeonName={dungeon.name}
+          difficulty={dungeon.difficulty as 'easy' | 'medium' | 'hard' | 'nightmare'}
+          playerLevel={character?.level || 1}
+          playerStats={character ? {
+            maxHealth: character.stats.health,
+            maxMagicka: character.stats.magicka,
+            maxStamina: character.stats.stamina,
+            damage: 15,
+            armor: 0,
+          } : undefined}
+          showToast={showToast}
+          onClose={(result) => {
+            setDoomModeOpen(false);
+            if (result?.victory && result.rewards) {
+              // Accumulate rewards from Doom mode
+              setState(prev => prev ? {
+                ...prev,
+                collectedRewards: {
+                  ...prev.collectedRewards,
+                  gold: prev.collectedRewards.gold + (result.rewards?.gold || 0),
+                  xp: prev.collectedRewards.xp + (result.rewards?.xp || 0),
+                  items: [...prev.collectedRewards.items, ...(result.rewards?.items || [])],
+                },
+              } : prev);
+              showToast?.(`Doom Mode Victory! +${result.rewards.gold} Gold, +${result.rewards.xp} XP`, 'success');
+            } else if (result && !result.victory) {
+              showToast?.('You retreated from the depths...', 'info');
+            }
+          }}
+        />
       )}
     </ModalWrapper>
   );

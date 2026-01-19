@@ -186,3 +186,109 @@ export function getDrinkNutritionDisplay(itemName: string): string {
   }
   return parts.join(', ') || 'No nutrition value';
 }
+
+/**
+ * Get restoration values for any consumable item (potions, food, drink)
+ * Used by the Use Item list in combat to show what the item will restore.
+ */
+export interface RestorationValues {
+  health?: number;
+  magicka?: number;
+  stamina?: number;
+  hunger?: number;
+  thirst?: number;
+  displayString: string;
+}
+
+export function getItemRestorationValues(item: { name?: string; type?: string; subtype?: string; damage?: number; description?: string }): RestorationValues {
+  const name = (item.name || '').toLowerCase().trim();
+  const type = (item.type || '').toLowerCase();
+  const subtype = (item.subtype || '').toLowerCase();
+  const description = (item.description || '').toLowerCase();
+  
+  const result: RestorationValues = { displayString: '' };
+  const parts: string[] = [];
+  
+  // Handle potions
+  if (type === 'potion') {
+    // Determine which stat the potion restores
+    let stat: 'health' | 'magicka' | 'stamina' | null = null;
+    if (subtype === 'health' || name.includes('health') || name.includes('heal') || name.includes('vitality') || description.includes('health')) {
+      stat = 'health';
+    } else if (subtype === 'magicka' || name.includes('magicka') || name.includes('mana') || description.includes('magicka')) {
+      stat = 'magicka';
+    } else if (subtype === 'stamina' || name.includes('stamina') || name.includes('endurance') || description.includes('stamina')) {
+      stat = 'stamina';
+    }
+    
+    // Determine the amount
+    let amount = typeof item.damage === 'number' ? item.damage : null;
+    if (amount == null) {
+      // Parse from text
+      const text = name + ' ' + description;
+      const match = text.match(/(\d+)/);
+      if (match) {
+        amount = parseInt(match[1], 10);
+      } else {
+        // Default based on tier
+        if (name.includes('minor') || name.includes('small')) {
+          amount = 25;
+        } else if (name.includes('major') || name.includes('plentiful') || name.includes('grand') || name.includes('ultimate')) {
+          amount = 100;
+        } else {
+          amount = 50;
+        }
+      }
+    }
+    
+    if (stat && amount) {
+      result[stat] = amount;
+      const icon = stat === 'health' ? '❤️' : stat === 'magicka' ? '✨' : '⚡';
+      const statLabel = stat.charAt(0).toUpperCase() + stat.slice(1);
+      parts.push(`${icon} +${amount} ${statLabel}`);
+    }
+  }
+  
+  // Handle food
+  if (type === 'food') {
+    const nutrition = getFoodNutrition(name);
+    // Food heals based on hunger reduction: heal = floor(hungerReduction/2) + 10
+    const healthRestore = Math.floor(nutrition.hungerReduction / 2) + 10;
+    result.health = healthRestore;
+    result.hunger = nutrition.hungerReduction;
+    
+    parts.push(`❤️ +${healthRestore} Health`);
+    if (nutrition.hungerReduction > 0) {
+      parts.push(`🍖 -${nutrition.hungerReduction} Hunger`);
+    }
+  }
+  
+  // Handle drinks
+  if (type === 'drink') {
+    const nutrition = getDrinkNutrition(name);
+    result.thirst = nutrition.thirstReduction;
+    
+    // Some drinks restore stamina (alcoholic ones add fatigue instead)
+    if (name.includes('ale') || name.includes('mead') || name.includes('wine') || name.includes('skooma')) {
+      // Alcoholic drinks add fatigue but don't restore stats
+      if (nutrition.thirstReduction > 0) {
+        parts.push(`💧 -${nutrition.thirstReduction} Thirst`);
+      }
+      if (nutrition.fatigueReduction && nutrition.fatigueReduction < 0) {
+        parts.push(`😴 +${Math.abs(nutrition.fatigueReduction)} Fatigue`);
+      }
+    } else {
+      // Non-alcoholic drinks restore stamina
+      const staminaRestore = Math.floor(nutrition.thirstReduction / 2) + 5;
+      result.stamina = staminaRestore;
+      parts.push(`⚡ +${staminaRestore} Stamina`);
+      if (nutrition.thirstReduction > 0) {
+        parts.push(`💧 -${nutrition.thirstReduction} Thirst`);
+      }
+    }
+  }
+  
+  result.displayString = parts.join(' | ') || 'Unknown effect';
+  return result;
+}
+

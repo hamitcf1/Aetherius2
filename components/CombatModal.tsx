@@ -37,6 +37,7 @@ import { LoadoutManager } from './LoadoutManager';
 import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
 import { getItemBaseAndBonus } from '../services/upgradeService';
+import { getItemRestorationValues } from '../services/nutritionData';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
 // Play combat sound based on action type and actor info (enemy/ally/player)
@@ -2502,26 +2503,57 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       >
                         ← Back
                       </button>
-                      {getUsableItems().map(item => (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            handlePlayerAction('item', undefined, item.id);
-                            setShowItemSelection(false);
-                          }}
-                          disabled={!isPlayerTurn || isAnimating || playerStunned}
-                          className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-left"
-                        >
-                          <div className="flex justify-between items-center">
-                            <span>{item.name}</span>
-                            <span className="text-xs text-stone-400">x{item.quantity}</span>
-                          </div>
-                          <div className="text-xs text-stone-400 mt-1">
-                            {item.type === 'potion' ? (item.subtype === 'stamina' ? '💪 Stamina Potion' : item.subtype === 'magicka' ? '✨ Magicka Potion' : '💊 Health Potion') : 
-                             item.type === 'food' ? '🍖 Food' : '🥤 Drink'}
-                          </div>
-                        </button>
-                      ))}
+                      {getUsableItems().map(item => {
+                        const restoration = getItemRestorationValues(item);
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              handlePlayerAction('item', undefined, item.id);
+                              setShowItemSelection(false);
+                            }}
+                            disabled={!isPlayerTurn || isAnimating || playerStunned}
+                            className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">{item.name}</span>
+                              <span className="text-xs text-stone-400 bg-stone-800/60 px-1.5 py-0.5 rounded">x{item.quantity}</span>
+                            </div>
+                            {/* Restoration values display */}
+                            <div className="text-xs mt-1 flex flex-wrap gap-1.5">
+                              {restoration.health && (
+                                <span className="text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  ❤️ +{restoration.health}
+                                </span>
+                              )}
+                              {restoration.magicka && (
+                                <span className="text-blue-300 bg-blue-900/40 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  ✨ +{restoration.magicka}
+                                </span>
+                              )}
+                              {restoration.stamina && (
+                                <span className="text-green-300 bg-green-900/40 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  ⚡ +{restoration.stamina}
+                                </span>
+                              )}
+                              {restoration.hunger && (
+                                <span className="text-orange-300 bg-orange-900/40 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  🍖 -{restoration.hunger}
+                                </span>
+                              )}
+                              {restoration.thirst && (
+                                <span className="text-cyan-300 bg-cyan-900/40 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  💧 -{restoration.thirst}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-stone-500 mt-0.5 italic">
+                              {item.type === 'potion' ? (item.subtype === 'stamina' ? 'Stamina Potion' : item.subtype === 'magicka' ? 'Magicka Potion' : 'Health Potion') : 
+                               item.type === 'food' ? 'Food' : 'Drink'}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -2734,23 +2766,32 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   <span className="text-xs font-bold text-green-300">Select Item</span>
                   <button onClick={() => setShowItemSelection(false)} className="text-xs text-stone-400">✕</button>
                 </div>
-                <div className="grid grid-cols-2 gap-1 max-h-24 overflow-y-auto">
-                  {getUsableItems().map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        handlePlayerAction('item', undefined, item.id);
-                        setShowItemSelection(false);
-                      }}
-                      disabled={!isPlayerTurn || isAnimating}
-                      className="p-1.5 rounded bg-green-900/40 border border-green-700/50 text-green-200 text-[10px] text-left disabled:opacity-50"
-                    >
-                      <div className="flex justify-between">
-                        <span className="truncate">{item.name}</span>
-                        <span className="text-stone-400">x{item.quantity}</span>
-                      </div>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                  {getUsableItems().map(item => {
+                    const restoration = getItemRestorationValues(item);
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          handlePlayerAction('item', undefined, item.id);
+                          setShowItemSelection(false);
+                        }}
+                        disabled={!isPlayerTurn || isAnimating}
+                        className="p-1.5 rounded bg-green-900/40 border border-green-700/50 text-green-200 text-[10px] text-left disabled:opacity-50"
+                      >
+                        <div className="flex justify-between">
+                          <span className="truncate font-medium">{item.name}</span>
+                          <span className="text-stone-400">x{item.quantity}</span>
+                        </div>
+                        {/* Compact restoration display for mobile */}
+                        <div className="flex flex-wrap gap-0.5 mt-0.5">
+                          {restoration.health && <span className="text-red-300">❤️+{restoration.health}</span>}
+                          {restoration.magicka && <span className="text-blue-300">✨+{restoration.magicka}</span>}
+                          {restoration.stamina && <span className="text-green-300">⚡+{restoration.stamina}</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
