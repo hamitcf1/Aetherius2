@@ -856,3 +856,122 @@ When introducing quests from this line, use the "newQuests" field with proper re
 Guide the player naturally toward these quests through NPCs and story hooks.
 `;
 }
+
+// ============================================================
+// UNIVERSAL MAIN QUEST (WORLD BUILDING) - Same for every character
+// ============================================================
+export const UNIVERSAL_MAIN: QuestChain = {
+  id: 'universal_main',
+  name: 'The Riftborn Threat',
+  description: 'A strange rift has appeared, corrupting wildlife and tearing the fabric of the land. Your journey begins to understand and seal this menace.',
+  archetypes: [],
+  quests: [
+    {
+      id: 'um_01_prologue',
+      title: 'Prologue: A Night of Broken Stars',
+      description: 'Villagers report strange lights and a low humming wind. Investigate the sighting.',
+      location: 'Riverwood',
+      questType: 'main',
+      difficulty: 'easy',
+      xpReward: 75,
+      goldReward: 50,
+      objectives: [
+        { description: 'Speak with the local villagers about the lights', completed: false },
+        { description: 'Find the place the lights were seen', completed: false }
+      ],
+      unlocks: ['um_02_discovery']
+    },
+    {
+      id: 'um_02_discovery',
+      title: 'The Rift Revealed',
+      description: 'A small tear in the sky pulses with dark energy. Collect evidence and return to the town elder.',
+      location: 'Hidden Cave',
+      questType: 'main',
+      difficulty: 'easy',
+      xpReward: 125,
+      goldReward: 75,
+      objectives: [
+        { description: 'Locate the rift site', completed: false },
+        { description: 'Collect samples of the corrupted soil', completed: false },
+        { description: 'Report findings to the elder', completed: false }
+      ],
+      prerequisiteQuestId: 'um_01_prologue',
+      unlocks: ['um_03_herbalist']
+    },
+    {
+      id: 'um_03_herbalist',
+      title: 'A Cure from the Wilds',
+      description: 'Seek the herbalist who knows of cleansing rituals. Gather rare herbs and test a remedy.',
+      location: 'Rorikstead',
+      questType: 'main',
+      difficulty: 'medium',
+      xpReward: 175,
+      goldReward: 150,
+      objectives: [
+        { description: 'Travel to Rorikstead and find the herbalist', completed: false },
+        { description: 'Gather the required herbs (3)', completed: false },
+        { description: 'Assist in preparing the cleansing salve', completed: false }
+      ],
+      prerequisiteQuestId: 'um_02_discovery',
+      unlocks: ['um_04_gather_allies']
+    },
+    {
+      id: 'um_04_gather_allies',
+      title: 'Rally the Hold',
+      description: 'Convince local leaders to investigate the rift together. Diplomacy or force may be required.',
+      location: 'Whiterun',
+      questType: 'main',
+      difficulty: 'medium',
+      xpReward: 250,
+      goldReward: 250,
+      objectives: [
+        { description: 'Speak with the Jarl about the rift', completed: false },
+        { description: 'Secure a party of helpers', completed: false },
+        { description: 'Prepare for the journey to the Rifted Vale', completed: false }
+      ],
+      prerequisiteQuestId: 'um_03_herbalist',
+      unlocks: ['um_05_rifted_vale']
+    },
+    {
+      id: 'um_05_rifted_vale',
+      title: 'Into the Rifted Vale',
+      description: 'Traverse into the corrupted valley, defeat its guardian and seal the rift.',
+      location: 'Bleak Falls Barrow',
+      questType: 'main',
+      difficulty: 'hard',
+      xpReward: 600,
+      goldReward: 800,
+      objectives: [
+        { description: 'Travel to the Rifted Vale', completed: false },
+        { description: 'Defeat the Rift Guardian', completed: false },
+        { description: 'Place the cleansing talisman in the rift', completed: false }
+      ],
+      prerequisiteQuestId: 'um_04_gather_allies'
+    }
+  ]
+};
+
+// Lightweight id generator for quests
+const _uid = () => Math.random().toString(36).substring(2, 9);
+
+// Instantiate a quest chain for a single character and return CustomQuest objects
+export const instantiateQuestChain = (chain: QuestChain, characterId: string) => {
+  const now = Date.now();
+  return chain.quests.map((t, idx) => ({
+    id: `${characterId}_${t.id}`,
+    characterId,
+    title: t.title,
+    description: t.description,
+    location: t.location,
+    objectives: t.objectives.map((o, oi) => ({ id: `${t.id}_obj_${oi}`, description: o.description, completed: false })),
+    status: idx === 0 ? 'active' : 'locked',
+    createdAt: now,
+    xpReward: t.xpReward,
+    goldReward: t.goldReward,
+    templateId: t.id,
+    prerequisiteId: t.prerequisiteQuestId,
+    chainId: chain.id,
+    chainIndex: idx
+  }));
+};
+

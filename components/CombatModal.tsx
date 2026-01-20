@@ -873,6 +873,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     try { localStorage.setItem('aetherius:combatSpeedMultiplier', String(v)); } catch {}
   };
 
+  // Auto-combat toggle (when enabled, player's turn will auto-execute a default action)
+  const [autoCombat, setAutoCombat] = useState<boolean>(() => {
+    try { return localStorage.getItem('aetherius:autoCombat') === 'true'; } catch { return false; }
+  });
+  const toggleAutoCombat = (v?: boolean) => {
+    setAutoCombat(prev => {
+      const next = typeof v === 'boolean' ? v : !prev;
+      try { localStorage.setItem('aetherius:autoCombat', String(next)); } catch {}
+      return next;
+    });
+  };
+
   // Helper to compute scaled milliseconds for waits/animations — divides base delays by multiplier
   const ms = (base: number) => Math.max(0, Math.floor(base * timeScale / Math.max(1, speedMultiplier)));
 
@@ -1201,7 +1213,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         } catch (e) {}
 
         setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-        setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+        setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
 
         try {
           // Play centralized 'hit received' sound matched to attacker (if available)
@@ -1452,8 +1464,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             setFloatingHits(h => [{ id, actor: d.name || 'enemy', damage: d.amount, hitLocation: undefined, isCrit: false, x: rect.x + rect.width/2, y: rect.y + rect.height/2 }, ...h]);
             // brief highlight
             setRecentlyHighlighted(d.id);
-            setTimeout(() => setRecentlyHighlighted(null), 900);
-            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+            setTimeout(() => setRecentlyHighlighted(null), ms(900));
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           });
 
           // Push floating heals for allies + player
@@ -1463,8 +1475,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             const rect = isPlayer ? playerRef.current?.getBoundingClientRect?.() : (enemyRefs[hd.id]?.getBoundingClientRect?.() || { x: window.innerWidth/2, y: 120 });
             setFloatingHits(f => [{ id, actor: hd.name || (isPlayer ? 'You' : 'ally'), damage: hd.amount, hitLocation: undefined, isCrit: false, x: rect.x + (rect.width||0)/2, y: rect.y + (rect.height||0)/2, isHeal: true } as any, ...f]);
             setRecentlyHighlighted(hd.id);
-            setTimeout(() => setRecentlyHighlighted(null), 900);
-            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+            setTimeout(() => setRecentlyHighlighted(null), ms(900));
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           });
         } catch (e) {
           // best-effort UI enhancements — do not block combat flow
@@ -1566,7 +1578,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       } catch (e) { /* ignore */ }
 
       setFloatingHits(h => [{ id, actor: 'player', damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-      setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+      setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
 
       // Play hit or crit sound only for non-player actors (avoid duplicating player's ability sound)
       // Player attacks already play an ability-specific SFX at the time of action; playing
@@ -1647,6 +1659,43 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   // Mobile action panel collapsed state
   const [mobileActionsExpanded, setMobileActionsExpanded] = useState(true);
+
+  // Auto-combat effect: when enabled, automatically perform a default action on the player's turn
+  useEffect(() => {
+    if (!autoCombat) return;
+    if (!isPlayerTurn) return;
+    if (isAnimating) return;
+    if (pendingTargeting) return;
+
+    let cancelled = false;
+    (async () => {
+      // short delay so the user can see the turn change; scaled by speed multiplier
+      await waitMs(ms(150));
+      if (cancelled) return;
+
+      try {
+        // Prefer a damaging magical ability if affordable, otherwise perform a basic attack
+        const abilities = (playerStats.abilities || []);
+        let chosen: any = undefined;
+        for (const ab of abilities) {
+          const affordable = (ab.cost === 0) || ((playerStats.currentMagicka || 0) >= (ab.cost || 0));
+          if (ab.type === 'magic' && affordable && (ab.damage || (ab.effects && ab.effects.length > 0))) {
+            chosen = ab; break;
+          }
+        }
+        if (chosen) {
+          handlePlayerAction('magic', chosen.id);
+        } else {
+          handlePlayerAction('attack');
+        }
+      } catch (e) {
+        // swallow errors to avoid crashing the loop
+        console.debug && console.debug('[combat] auto-combat action failed', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [autoCombat, isPlayerTurn, isAnimating, pendingTargeting, playerStats, speedMultiplier]);
 
   // When clicking an ability, decide whether to open explicit target selection (for heals/buffs)
   const handleAbilityClick = (ability: CombatAbility) => {
@@ -1733,6 +1782,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   </button>
                 ))}
               </div>
+
+              {/* Auto-combat toggle */}
+              <button
+                onClick={() => toggleAutoCombat()}
+                aria-pressed={autoCombat}
+                title={autoCombat ? 'Auto-combat ON' : 'Auto-combat OFF'}
+                className={`ml-2 px-2 py-1 text-xs rounded font-semibold transition-colors ${autoCombat ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}
+              >
+                Auto {autoCombat ? 'ON' : 'OFF'}
+              </button>
             </div>
           </div>
 
@@ -1793,7 +1852,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
 
       {/* Main combat area - reorganized for mobile */}
-      <div className="flex-1 overflow-auto flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 max-w-7xl mx-auto w-full pb-32 lg:pb-4">
+      <div className="flex-1 overflow-auto grid gap-8 lg:grid-cols-[280px_1.8fr_320px_420px] items-stretch min-h-0 p-1 sm:p-4 w-full pb-32 lg:pb-4">
         {/* Mobile Turn List (scrolls with content) */}
         <div className="lg:hidden w-full">
            <TurnList
@@ -1807,7 +1866,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </div>
 
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
-        <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
+        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0 lg:pr-6 lg:border-r lg:border-stone-800/20">
           <div 
             ref={playerRef} 
             className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''} ${selectedTarget === 'player' ? 'ring-2 ring-green-400/50' : ''} ${pendingTargeting ? 'cursor-pointer hover:ring-2 hover:ring-green-400/30' : ''}`} 
@@ -1871,7 +1930,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             })()}
 
             {/* ACTIONS (moved from right column) */}
-            <div className="mt-4 bg-stone-900/60 rounded-lg p-3 border border-stone-700">
+            <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700">
               <h4 className="text-sm font-semibold text-stone-300 mb-2">ACTIONS</h4>
               <div className="space-y-2">
                 <button
@@ -1918,21 +1977,24 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
             
             {/* Turn List */}
-            <TurnList
-              turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
-              currentTurnActor={combatState.currentTurnActor}
-              player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
-              enemies={combatState.enemies}
-              allies={combatState.allies || []}
-            />
+            <div className="flex-1 overflow-y-auto max-h-[46vh]">
+              <TurnList
+                turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
+                currentTurnActor={combatState.currentTurnActor}
+                player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
+                enemies={combatState.enemies}
+                allies={combatState.allies || []}
+                className=""
+              />
+            </div>
           </div>
         </div>
 
-        {/* Center - Enemies and combat log */}
-        <div className="w-full lg:w-1/2 flex flex-col gap-4 min-h-0">
+        {/* Center - Allies and Enemies (combat log moved to its own column) */}
+        <div className="w-full flex flex-col gap-4 min-h-0 lg:pl-4 lg:shadow-inner">
           {/* Allies (companions) */}
           {combatState.allies && combatState.allies.length > 0 && (
-            <div className="bg-stone-900/40 rounded-lg p-3 border border-stone-700 mb-3">
+            <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700 mb-3">
               <h3 className="text-sm font-bold text-stone-400 mb-2">ALLIES</h3>
               <div className="grid grid-cols-2 gap-2">
                 {combatState.allies.map(ally => {
@@ -1948,14 +2010,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                       isCurrentTurn={combatState.currentTurnActor === ally.id}
                       onToggleAutoControl={() => toggleAllyAutoControl(ally.id)}
                       onClick={() => {
-                        // If pendingTargeting is active, restrict selection to allies
                         if (pendingTargeting) {
                           if (pendingTargeting.allow === 'allies' || pendingTargeting.allow === 'both') {
                             userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                             setSelectedTarget(ally.id);
                           } else {
-                            // If the user very recently clicked an ability (rapid click: ability -> ally), treat the ally
-                            // click as a simple target selection to match expected UX in companion control/tests.
                             if (lastAbilityClickAt.current && (Date.now() - lastAbilityClickAt.current) < 120) {
                               userInitiatedTargetChange.current = true; lastUserTargetChangeAt.current = Date.now();
                               setSelectedTarget(ally.id);
@@ -1967,19 +2026,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             setSuppressRollLabelUntil(Date.now() + 600);
                             setSuppressRollForTurn(combatState.turn);
 
-                            // defensive cleanup: remove any combat-log entries with a nat that were added this turn
                             setCombatState(prev => ({
                               ...prev,
                               combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
                             }));
-                            // schedule follow-up cleanup to catch any racing entries
                             setTimeout(() => {
                               setCombatState(prev => ({
                                 ...prev,
                                 combatLog: (prev.combatLog || []).filter(e => !(e.turn === prev.turn && e.nat !== undefined))
                               }));
                             }, 0);
-                            // mark invalid-target to cancel in-flight animations
                             lastInvalidTargetRef.current = true;
                             if (rollAnimRef.current) { cancelAnimationFrame(rollAnimRef.current); rollAnimRef.current = null; }
                             setShowRoll(false);
@@ -2011,7 +2067,6 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     isTarget={selectedTarget === enemy.id}
                     isHighlighted={recentlyHighlighted === enemy.id}
                     onClick={() => {
-                      // If pendingTargeting is active and does NOT allow enemies, reject selection
                       if (pendingTargeting && pendingTargeting.allow === 'allies') {
                         if (showToast) showToast('This ability cannot target enemies.', 'warning');
                       } else {
@@ -2024,55 +2079,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 </div>
               ))}
             </div>
-            
-            {/* Combat log */}
-            <div className="flex items-center justify-between p-3 border-b border-stone-700">
-              <h3 className="text-sm font-bold text-stone-400">COMBAT LOG</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setAutoScroll(s => !s)}
-                  aria-pressed={autoScroll}
-                  title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
-                  className={`px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none ${autoScroll ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}>
-                  Auto-scroll {autoScroll ? 'ON' : 'OFF'}
-                </button>
-              </div>
-            </div>
-            <div ref={logRef} className="flex-1 overflow-y-auto p-3 space-y-2 scroll-smooth">
-              {combatState.combatLog.map((entry, i) => {
-                const isAlly = !!(combatState.allies && combatState.allies.find(a => a.name === entry.actor));
-                return (
-                  <div 
-                    key={`log-${entry.turn}-${entry.actor}-${entry.timestamp || i}`} 
-                    className={`text-sm p-2 rounded ${
-                      entry.actor === 'player' 
-                        ? 'bg-green-900/20 border-l-2 border-green-500' 
-                        : entry.actor === 'system'
-                          ? 'bg-amber-900/20 border-l-2 border-amber-500'
-                          : isAlly
-                            ? 'bg-sky-900/10 border-l-2 border-sky-400 text-sky-200' 
-                            : 'bg-red-900/20 border-l-2 border-red-500'
-                    }`}
-                  >
-                    <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
-                    <span className="text-stone-300">{entry.narrative}</span>
-                    {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && !lastInvalidTargetRef.current && entry.turn !== suppressRollForTurn && (
-                      <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
-                    )}
-                    {entry.auto && (
-                      <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">AUTO</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
 
-        {/* Right side - Actions (Desktop only, hidden on mobile) */}
-        <div className="hidden lg:block w-full lg:w-1/4 space-y-4">
+        {/* Right side - Abilities & Inventory (Desktop only, stacked in Column 3) */}
+        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0 lg:pl-4 lg:pr-6 lg:border-l lg:border-stone-800/10">
           {/* Abilities */}
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30 flex flex-col h-[400px]">
+          <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30 flex flex-col min-h-[44vh]">
             <div className="flex items-center justify-between mb-3 shrink-0">
               {(!awaitingCompanionAction && !pendingTargeting) ? (
                 <div className="flex gap-1 bg-stone-900/80 p-1 rounded border border-stone-700">
@@ -2098,6 +2111,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700 border border-blue-600">Equipment</button>
               </div>
             </div>
+
+            {/* Abilities list (existing) */}
+
             <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
               {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
                 (() => {
@@ -2263,7 +2279,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                         y = r.top + r.height / 2;
                                       }
                                       setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-                                      setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                                      setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
                                     }
                                   } catch (e) { /* best-effort */ }
 
@@ -2364,7 +2380,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 y = r.top + r.height / 2;
                               }
                               setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
                             }
                           } catch (e) { /* best-effort UI */ }
 
@@ -2457,7 +2473,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 y = r.top + r.height / 2;
                               }
                               setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+                              setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
                             }
                           } catch (e) { /* best-effort UI */ }
 
@@ -2600,10 +2616,58 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           {/* Actions moved to player panel on desktop — preserved here as a placeholder */}
           <div className="hidden lg:block" aria-hidden="true" />
         </div>
+
+        {/* Column 4 — Combat Log (Desktop only) */}
+        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0">
+          <div className="bg-stone-900/60 rounded-lg p-4 border border-stone-700 h-full flex flex-col min-h-0">
+            <div className="flex items-center justify-between p-3 border-b border-stone-700">
+              <h3 className="text-sm font-bold text-stone-400">COMBAT LOG</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setAutoScroll(s => !s)}
+                  aria-pressed={autoScroll}
+                  title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+                  className={`px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none ${autoScroll ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}>
+                  Auto-scroll {autoScroll ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+            <div ref={logRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
+              {combatState.combatLog.map((entry, i) => {
+                const isAlly = !!(combatState.allies && combatState.allies.find(a => a.name === entry.actor));
+                const key = entry.id || `log-${entry.turn}-${entry.actor}-${entry.timestamp || i}`;
+                return (
+                  <div 
+                    key={key}
+                    data-testid={`combat-log-entry`}
+                    className={`text-sm p-2 rounded ${
+                      entry.actor === 'player' 
+                        ? 'bg-green-900/20 border-l-2 border-green-500' 
+                        : entry.actor === 'system'
+                          ? 'bg-amber-900/20 border-l-2 border-amber-500'
+                          : isAlly
+                            ? 'bg-sky-900/10 border-l-2 border-sky-400 text-sky-200' 
+                            : 'bg-red-900/20 border-l-2 border-red-500'
+                    }`}
+                  >
+                    <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
+                    <span className="text-stone-300">{entry.narrative}</span>
+                    {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && !lastInvalidTargetRef.current && entry.turn !== suppressRollForTurn && (
+                      <span className="text-xs text-stone-400 ml-2">• Roll: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
+                    )}
+                    {entry.auto && (
+                      <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">AUTO</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Mobile: Fixed bottom action bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-stone-900/95 border-t border-amber-900/30 safe-area-inset-bottom z-50">
+      {/* Mobile: Inline action panel (replacing fixed bottom bar) */}
+      <div className="lg:hidden block bg-stone-900/95 border-t border-amber-900/30">
         {/* Action bar toggle */}
         <button 
           onClick={() => setMobileActionsExpanded(!mobileActionsExpanded)}

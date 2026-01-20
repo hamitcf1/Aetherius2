@@ -155,15 +155,26 @@ export const QuestLog: React.FC<QuestLogProps> = ({ quests, setQuests, onDelete,
   };
   
   const toggleObjective = (questId: string, objId: string) => {
-      setQuests(quests.map(q => {
-          if (q.id === questId) {
-              return { 
-                  ...q, 
-                  objectives: q.objectives.map(o => o.id === objId ? { ...o, completed: !o.completed } : o)
-              };
+      setQuests(prev => {
+          const next = prev.map(q => {
+              if (q.id === questId) {
+                  return {
+                      ...q,
+                      objectives: q.objectives.map(o => o.id === objId ? { ...o, completed: !o.completed } : o)
+                  };
+              }
+              return q;
+          });
+
+          // If all objectives of this quest are now complete, auto-complete the quest
+          const updated = next.find(q => q.id === questId);
+          if (updated && updated.objectives.length > 0 && updated.objectives.every(o => o.completed)) {
+              // Use updateStatus to ensure rewards are granted via parent callback
+              updateStatus(questId, 'completed');
           }
-          return q;
-      }));
+
+          return next;
+      });
   };
 
   const deleteObjective = (questId: string, objId: string) => {

@@ -133,8 +133,9 @@ const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
     if (entry.nat !== undefined) console.debug && console.debug('[combatService] pushCombatLogUnique adding roll entry', { entry });
   } catch (e) {}
 
-  // If there is no last entry, just push
+  // If there is no last entry, assign id and push
   if (!last) {
+    if (!entry.id) entry.id = `${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
     state.combatLog.push(entry);
     return;
   }
@@ -147,6 +148,8 @@ const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
 
   // Strong equality: same turn/actor/action/target and identical damage — treat as duplicate
   if (sameTurn && sameActor && sameAction && sameTarget && sameDamage && last.narrative === entry.narrative) {
+    // preserve or ensure id on the last entry (so keys stay stable)
+    ensureLogEntryHasId(last);
     last.timestamp = entry.timestamp || Date.now();
     return;
   }
@@ -165,6 +168,7 @@ const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
         last.nat = last.nat ?? entry.nat;
         last.isCrit = last.isCrit ?? entry.isCrit;
         last.rollTier = last.rollTier ?? entry.rollTier;
+        ensureLogEntryHasId(last);
         return;
       }
     } catch (e) {
@@ -172,9 +176,19 @@ const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
     }
   }
 
+  // Ensure every entry has a stable unique id
+  const _uid = () => `${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+
   // Fallback: different enough — push as new entry
+  if (!entry.id) entry.id = _uid();
   state.combatLog.push(entry);
 };
+
+// Helper to ensure an existing entry has an id (used when merging updates into last entry)
+const ensureLogEntryHasId = (entry: CombatLogEntry) => {
+  if (!entry.id) entry.id = `${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+};
+
 
 // Dice helper: roll `count` d`sides`
 const rollDice = (count: number, sides: number) => {
@@ -1246,6 +1260,7 @@ export const initializeCombat = (
     fleeAllowed,
     surrenderAllowed,
     combatLog: [{
+      id: `${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
       turn: 0,
       actor: 'system',
       action: 'combat_start',

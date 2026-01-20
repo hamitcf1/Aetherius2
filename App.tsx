@@ -9,6 +9,7 @@ import { CharacterSheet } from './components/CharacterSheet';
 import GameSidebar, { ActionButton } from './components/GameSidebar';
 import { AppContext } from './AppContext';
 import { QuestLog } from './components/QuestLog';
+import { UNIVERSAL_MAIN, instantiateQuestChain } from './services/mainQuestLines';
 import { Journal } from './components/Journal';
 import { Inventory } from './components/Inventory';
 import { StoryLog } from './components/StoryLog';
@@ -2961,6 +2962,50 @@ const App: React.FC = () => {
         }
       } catch (e) { /* ignore */ }
 
+      // --- Start the universal main quest line for world-building ---
+      try {
+        const mainQuests = instantiateQuestChain(UNIVERSAL_MAIN, charId);
+        setQuests(prev => [...prev, ...mainQuests]);
+        mainQuests.forEach(q => setDirtyEntities(prev => new Set([...prev, q.id])));
+
+        // Prologue story & journal entries for flavour
+        const prologue = {
+          id: uniqueId(),
+          characterId: charId,
+          title: 'Prologue: The Rift Appears',
+          content: 'A strange tear in the sky was seen by villagers, and a low hum persists at night. The land seems unsettled. Your first steps are to investigate this omen.',
+          date: '4E 201',
+          summary: 'A dark omen revealed',
+          createdAt: Date.now()
+        };
+        setStoryChapters(prev => [...prev, prologue]);
+        setDirtyEntities(prev => new Set([...prev, prologue.id]));
+
+        const journalEntry = {
+          id: uniqueId(),
+          characterId: charId,
+          date: '4E 201',
+          title: 'A Strange Night',
+          content: 'You remember a night when the stars shifted and a cold wind blew from the hills. Something watched from afar.'
+        };
+        setJournalEntries(prev => [...prev, journalEntry]);
+        setDirtyEntities(prev => new Set([...prev, journalEntry.id]));
+
+        // Mark quest locations as discovered for map context (lightweight, randomized coordinates)
+        const discovered = mainQuests.filter(q => q.location).map(q => ({
+          name: q.location!,
+          type: 'landmark' as any,
+          x: Math.floor(Math.random() * 86) + 7,
+          y: Math.floor(Math.random() * 86) + 7,
+          description: q.description
+        }));
+        if (discovered.length) {
+          setCharacters(prev => prev.map(c => c.id === charId ? ({ ...c, discoveredLocations: discovered } as any) : c));
+        }
+      } catch (e) {
+        console.warn('Failed to start main quest chain for character', e);
+      }
+
         // 2. Inventory - validate incoming items against defined set and apply stats
         if (fullDetails?.inventory) {
           const validatedMap = new Map<string, InventoryItem>();
@@ -3785,6 +3830,38 @@ const App: React.FC = () => {
         handleGameUpdate({ newItems: [rewardItem as any] });
         showToast(`Quest reward: ${rarity} ${itemName}!`, 'success');
       }
+    }
+
+    // Unlock the next quest(s) in the same chain (if any)
+    try {
+      setQuests(prev => {
+        const unlocked: string[] = [];
+        const next = prev.map(q => {
+          if (q.prerequisiteId && q.prerequisiteId === quest.templateId && q.status === 'locked' && q.characterId === currentCharacterId) {
+            unlocked.push(q.title);
+            setDirtyEntities(prevDirty => new Set([...prevDirty, q.id]));
+            return { ...q, status: 'active' };
+          }
+          return q;
+        });
+        if (unlocked.length) {
+          showToast(`New quest available: ${unlocked.join(', ')}`, 'info');
+          const chapter = {
+            id: uniqueId(),
+            characterId: currentCharacterId!,
+            title: `New Quest: ${unlocked[0]}`,
+            content: `You have been called to ${unlocked[0]}.`,
+            date: '4E 201',
+            summary: `New quest unlocked: ${unlocked[0]}`,
+            createdAt: Date.now()
+          };
+          setStoryChapters(prev => [...prev, chapter]);
+          setDirtyEntities(prev => new Set([...prev, chapter.id]));
+        }
+        return next;
+      });
+    } catch (e) {
+      console.warn('Failed to unlock chained quests:', e);
     }
   };
 
@@ -5687,7 +5764,7 @@ const App: React.FC = () => {
                 character={activeCharacter}
                 currentLocation={activeCharacter.currentLocation}
                 visitedLocations={activeCharacter.visitedLocations || []}
-                questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.name }))}
+                questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.title }))}
                 discoveredLocations={activeCharacter.discoveredLocations || []}
                 clearedDungeons={activeCharacter.clearedDungeons || []}
                 onEnterDungeon={handleEnterDungeonFromMap}

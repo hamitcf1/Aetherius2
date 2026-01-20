@@ -221,7 +221,13 @@ export interface CustomQuest {
   title: string;
   description: string;
   objectives: QuestStep[];
-  status: 'active' | 'completed' | 'failed';
+  // Locked quests are part of a quest chain but not yet available to the player.
+  status: 'locked' | 'active' | 'completed' | 'failed';
+  // Template / chain metadata (useful for unlocking the next quest)
+  templateId?: string;
+  prerequisiteId?: string; // Template id of the prior quest required to unlock this one
+  chainId?: string;
+  chainIndex?: number;
   location?: string;
   dueDate?: string; // New field
   createdAt: number;
@@ -233,7 +239,7 @@ export interface CustomQuest {
   questType?: 'main' | 'side' | 'misc' | 'bounty';
   // Difficulty level (affects rewards)
   difficulty?: 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary';
-}
+} 
 
 export interface StoryChapter {
   id: string;
@@ -672,6 +678,7 @@ export interface CombatState {
 }
 
 export interface CombatLogEntry {
+  id?: string; // Unique stable id for React keys and deduplication
   turn: number;
   actor: string;
   action: string;
