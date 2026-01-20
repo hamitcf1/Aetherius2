@@ -11,6 +11,7 @@ import {
   orderBy, 
   getDocs,
   writeBatch,
+  limit,
   Query,
   DocumentData,
   CollectionReference,
@@ -252,7 +253,8 @@ export const loadInventoryItems = async (uid: string, characterId?: string): Pro
     constraints.push(where('characterId', '==', characterId));
   }
   
-  const q = query(collRef, ...constraints);
+  // Limit to 500 items to prevent excessive reads
+  const q = query(collRef, ...constraints, limit(500));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => doc.data());
 };
@@ -299,7 +301,8 @@ export const loadQuests = async (uid: string, characterId?: string): Promise<Cus
     constraints.push(where('characterId', '==', characterId));
   }
   
-  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'));
+  // Limit to 100 most recent quests to reduce read operations
+  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'), limit(100));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => doc.data());
 };
@@ -349,7 +352,8 @@ export const loadJournalEntries = async (uid: string, characterId?: string): Pro
     constraints.push(where('characterId', '==', characterId));
   }
   
-  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'));
+  // Limit to 100 most recent journal entries to reduce read operations
+  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'), limit(100));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => doc.data());
 };
@@ -383,7 +387,8 @@ export const loadStoryChapters = async (uid: string, characterId?: string): Prom
     constraints.push(where('characterId', '==', characterId));
   }
   
-  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'));
+  // Limit to 100 most recent story chapters to reduce read operations
+  const q = query(collRef, ...constraints, orderBy('createdAt', 'desc'), limit(100));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => doc.data());
 };

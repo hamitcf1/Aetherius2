@@ -1653,9 +1653,9 @@ const App: React.FC = () => {
             loadUserProfiles(user.uid),
             loadCharacters(user.uid),
             loadInventoryItems(user.uid, preferredCharacterId),
-            loadQuests(user.uid),
-            loadJournalEntries(user.uid),
-            loadStoryChapters(user.uid),
+            loadQuests(user.uid, preferredCharacterId),        // Scoped to character to reduce reads
+            loadJournalEntries(user.uid, preferredCharacterId), // Scoped to character to reduce reads
+            loadStoryChapters(user.uid, preferredCharacterId),  // Scoped to character to reduce reads
             loadUserSettings(user.uid)
           ]);
 
@@ -2383,7 +2383,7 @@ const App: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [currentUser?.uid, currentCharacterId, combatState]);
+  }, [currentUser?.uid, currentCharacterId]); // Removed combatState - was causing reload on every combat update
 
   const completeOnboarding = async () => {
     if (!currentUser?.uid) {
