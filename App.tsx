@@ -1283,17 +1283,6 @@ const App: React.FC = () => {
         remoteData?.unlockedAchievements || {}
       );
 
-      // Prevent legacy global (non-namespaced) unlocked achievements from being applied
-      // to the currently selected character. Only keep namespaced keys for this character.
-      const filteredUnlocked: Record<string, { unlockedAt: number; collected: boolean }> = {};
-      Object.entries(mergedUnlocked).forEach(([k, v]) => {
-        if (typeof k === 'string' && k.startsWith(`${currentCharacterId}:`)) {
-          filteredUnlocked[k] = v;
-        }
-      });
-
-      const finalUnlocked = filteredUnlocked;
-
       const legacyNotified = userSettings?.notifiedAchievements?.[currentCharacterId] || [];
       const notifiedSet = new Set<string>([
         ...(localData?.notifiedAchievements || []),
@@ -1302,7 +1291,7 @@ const App: React.FC = () => {
       ]);
 
       let nextState: AchievementState = {
-        unlockedAchievements: finalUnlocked,
+        unlockedAchievements: mergedUnlocked,
         notifiedAchievements: notifiedSet,
         stats: mergedStats
       };
@@ -1664,9 +1653,9 @@ const App: React.FC = () => {
             loadUserProfiles(user.uid),
             loadCharacters(user.uid),
             loadInventoryItems(user.uid, preferredCharacterId),
-            loadQuests(user.uid, preferredCharacterId),        // Scoped to character to reduce reads
-            loadJournalEntries(user.uid, preferredCharacterId), // Scoped to character to reduce reads
-            loadStoryChapters(user.uid, preferredCharacterId),  // Scoped to character to reduce reads
+            loadQuests(user.uid),
+            loadJournalEntries(user.uid),
+            loadStoryChapters(user.uid),
             loadUserSettings(user.uid)
           ]);
 
@@ -2394,7 +2383,7 @@ const App: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [currentUser?.uid, currentCharacterId]); // Removed combatState - was causing reload on every combat update
+  }, [currentUser?.uid, currentCharacterId, combatState]);
 
   const completeOnboarding = async () => {
     if (!currentUser?.uid) {

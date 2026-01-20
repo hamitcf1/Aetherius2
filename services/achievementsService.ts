@@ -505,19 +505,19 @@ export function checkAchievements(
   for (const achievement of ACHIEVEMENTS) {
     const key = makeUnlockKey(characterId, achievement.id);
 
-    // Skip already unlocked for this character (do NOT treat legacy global unlocks as per-character)
-    if (updatedState.unlockedAchievements[key]) continue;
+    // Skip already unlocked for this character OR global legacy unlock
+    if (updatedState.unlockedAchievements[key] || updatedState.unlockedAchievements[achievement.id]) continue;
 
-    // Check prerequisite (must be unlocked for this character)
+    // Check prerequisite (prereq should be checked within same character scope OR legacy global unlock)
     if (achievement.prerequisite) {
       const prereqKey = makeUnlockKey(characterId, achievement.prerequisite);
-      if (!updatedState.unlockedAchievements[prereqKey]) continue;
+      if (!updatedState.unlockedAchievements[prereqKey] && !updatedState.unlockedAchievements[achievement.prerequisite]) continue;
     }
 
     // Check requirement
     if (checkRequirement(achievement.requirement, state.stats, character)) {
       // Only add to newlyUnlocked if not already notified (use key)
-      if (!updatedState.notifiedAchievements || !updatedState.notifiedAchievements.has(key)) {
+      if (!updatedState.notifiedAchievements.has(key)) {
         newlyUnlocked.push(achievement);
       }
       updatedState.unlockedAchievements[key] = {
