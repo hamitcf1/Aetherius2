@@ -1283,6 +1283,17 @@ const App: React.FC = () => {
         remoteData?.unlockedAchievements || {}
       );
 
+      // Prevent legacy global (non-namespaced) unlocked achievements from being applied
+      // to the currently selected character. Only keep namespaced keys for this character.
+      const filteredUnlocked: Record<string, { unlockedAt: number; collected: boolean }> = {};
+      Object.entries(mergedUnlocked).forEach(([k, v]) => {
+        if (typeof k === 'string' && k.startsWith(`${currentCharacterId}:`)) {
+          filteredUnlocked[k] = v;
+        }
+      });
+
+      const finalUnlocked = filteredUnlocked;
+
       const legacyNotified = userSettings?.notifiedAchievements?.[currentCharacterId] || [];
       const notifiedSet = new Set<string>([
         ...(localData?.notifiedAchievements || []),
@@ -1291,7 +1302,7 @@ const App: React.FC = () => {
       ]);
 
       let nextState: AchievementState = {
-        unlockedAchievements: mergedUnlocked,
+        unlockedAchievements: finalUnlocked,
         notifiedAchievements: notifiedSet,
         stats: mergedStats
       };

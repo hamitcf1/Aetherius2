@@ -46,4 +46,24 @@ describe('achievements service', () => {
     res = checkAchievements(state, char);
     expect(res.newlyUnlocked.some(a => a.id === 'perk_novice')).toBe(true);
   });
+
+  it('legacy global unlocks are not applied to new characters', () => {
+    const stats = getDefaultAchievementStats();
+    // Legacy global unlocked key (no character prefix)
+    const legacyKey = 'first_steps';
+    const state = { unlockedAchievements: { [legacyKey]: { unlockedAt: Date.now(), collected: true } }, stats } as any;
+
+    // New character that does not meet requirement (level 1)
+    const char = makeChar(1);
+    const res = checkAchievements(state, char, 'c_new');
+    // Should NOT consider legacy global key as per-character unlocked
+    expect(res.newlyUnlocked.some(a => a.id === 'first_steps')).toBe(false);
+    expect(res.updatedState.unlockedAchievements['c_new:first_steps']).toBeUndefined();
+
+    // If the character meets requirement, it should unlock for that character
+    const char2 = makeChar(100);
+    const res2 = checkAchievements(state, char2, 'c2');
+    expect(res2.newlyUnlocked.some(a => a.id === 'first_steps')).toBe(true);
+    expect(res2.updatedState.unlockedAchievements['c2:first_steps']).toBeTruthy();
+  });
 });

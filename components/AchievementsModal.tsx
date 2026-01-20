@@ -58,8 +58,9 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
         return false;
       }
 
-      // Unlocked/Locked filter
-      const isUnlocked = !!achievementState.unlockedAchievements[achievement.id];
+      // Unlocked/Locked filter (per-character)
+      const perCharKey = `${character.id}:${achievement.id}`;
+      const isUnlocked = !!achievementState.unlockedAchievements[perCharKey];
       if (showUnlockedOnly && !isUnlocked) return false;
       if (showLockedOnly && isUnlocked) return false;
 

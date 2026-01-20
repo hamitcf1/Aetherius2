@@ -621,7 +621,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Reset the flag
     userInitiatedTargetChange.current = false;
 
-    const t = setTimeout(() => setRecentlyHighlighted(null), 900);
+    const t = setTimeout(() => setRecentlyHighlighted(null), ms(900));
     return () => clearTimeout(t);
   }, [selectedTarget]);
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
@@ -864,6 +864,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // During tests we want animations to be effectively instant to keep tests fast and deterministic
   const timeScale = process.env.NODE_ENV === 'test' ? 0 : 1 + Math.floor((character?.level || 1) / 20) * 0.25;
 
+  // Combat speed multiplier controls (1x, 2x, 5x) — higher values speed up combat by dividing animation waits
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(() => {
+    try { return Number(localStorage.getItem('aetherius:combatSpeedMultiplier')) || 1; } catch { return 1; }
+  });
+  const setAndPersistSpeed = (v: number) => {
+    setSpeedMultiplier(v);
+    try { localStorage.setItem('aetherius:combatSpeedMultiplier', String(v)); } catch {}
+  };
+
+  // Helper to compute scaled milliseconds for waits/animations — divides base delays by multiplier
+  const ms = (base: number) => Math.max(0, Math.floor(base * timeScale / Math.max(1, speedMultiplier)));
+
   // Scroll combat log to bottom (if auto-scroll is enabled)
   useEffect(() => {
     if (!autoScroll) return;
@@ -1064,11 +1076,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (actingStunned) {
         // Show stunned indication instead of dice roll
         showToast?.(`${acting?.name || 'Entity'} is stunned and cannot act!`, 'warning');
-        await waitMs(Math.floor(600 * timeScale));
+        await waitMs(ms(600));
       } else {
         // animate wheel-style roll with ease-out for smooth stop
         await animateRoll(finalEnemyRoll, Math.floor(3000));
-        await waitMs(Math.floor(220 * timeScale));
+        await waitMs(ms(220));
         setShowRoll(false);
         setRollActor(null);
       }
@@ -1083,7 +1095,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           // Advance turn so the encounter doesn't stall
           currentState = advanceTurn(currentState);
           setCombatState(currentState);
-          await waitMs(Math.floor(300 * timeScale));
+          await waitMs(ms(300));
           continue;
         }
 
@@ -1106,13 +1118,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               y = r.top + r.height / 2;
             }
             setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
-            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), 1600);
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           }
         } catch (e) { /* best-effort UI */ }
 
         // Update UI and play companion animation
         setCombatState(currentState);
-        await waitMs(Math.floor(600 * timeScale));
+        await waitMs(ms(600));
 
         // Check for combat end
         currentState = checkCombatEnd(currentState, currentPlayerStats);
@@ -1136,7 +1148,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         }
 
         // brief pause before next actor
-        await waitMs(Math.floor(400 * timeScale));
+        await waitMs(ms(400));
         continue; // proceed to next turn
       }
 
@@ -1152,7 +1164,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       currentPlayerStats = newPlayerStats;
       
       // Update state with animation delay
-      await waitMs(Math.floor(1000 * timeScale));
+      await waitMs(ms(1000));
       
       setCombatState(currentState);
       setPlayerStats(currentPlayerStats);
@@ -1219,7 +1231,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setPlayerStats(currentPlayerStats);
       }
       
-      await waitMs(Math.floor(500 * timeScale));
+      await waitMs(ms(500));
     }
     
     setIsAnimating(false);
@@ -1306,7 +1318,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setPlayerStats(newPlayerStats);
 
       // In tests this will resolve instantly, but in production we keep the short delay for UX
-      waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
+      waitMs(ms(500)).then(() => setIsAnimating(false));
       return;
     }
 
@@ -1352,7 +1364,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setCombatState(finalState);
       setPlayerStats(execRes.newPlayerStats);
       if (showToast) showToast(execRes.narrative, 'warning');
-      waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
+      waitMs(ms(500)).then(() => setIsAnimating(false));
       return;
     }
 
@@ -1379,7 +1391,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     // animate wheel-style roll with ease-out for smooth stop
     await animateRoll(finalRoll, Math.floor(3000));
-    await waitMs(Math.floor(220 * timeScale));
+    await waitMs(ms(220));
     setShowRoll(false);
     setRollActor(null);
 
@@ -1478,7 +1490,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Trigger healing animation and toast if health was restored
     if (action === 'item' && newPlayerStats.currentHealth > playerStats.currentHealth) {
       setIsHealing(true);
-      setTimeout(() => setIsHealing(false), 1000);
+      setTimeout(() => setIsHealing(false), ms(1000));
       if (showToast) {
         showToast(`Restored ${newPlayerStats.currentHealth - playerStats.currentHealth} health!`, 'success');
       }
@@ -1574,7 +1586,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
     
     // In tests this will resolve instantly, but in production we keep the short delay for UX
-    waitMs(Math.floor(500 * timeScale)).then(() => setIsAnimating(false));
+    waitMs(ms(500)).then(() => setIsAnimating(false));
   };
 
 
@@ -1700,8 +1712,28 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               return null;
             })() }
           </div>
-          <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
-            {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
+          <div className="flex items-center gap-3">
+            <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
+              {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
+            </div>
+
+            {/* Combat speed controls */}
+            <div className="flex items-center gap-2 ml-2">
+              <div className="text-xs text-stone-400 mr-1 hidden sm:block">Speed</div>
+              <div className="flex gap-1">
+                {[1,2,5].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setAndPersistSpeed(s)}
+                    aria-pressed={speedMultiplier === s}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${speedMultiplier === s ? 'bg-skyrim-gold text-skyrim-dark font-semibold' : 'bg-skyrim-paper/20 text-skyrim-text/70 hover:bg-skyrim-paper/30'}`}
+                    title={`Set combat speed ${s}x`}
+                  >
+                    {s}x
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
         {/* D20 roll visual centered in header */}
@@ -2154,7 +2186,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                     setRollValue(null);
 
                                     // clear the per-turn suppression after a short grace window
-                                    setTimeout(() => setSuppressRollForTurn(null), 300);
+                                    setTimeout(() => setSuppressRollForTurn(null), ms(300));
 
                                     // defensive cleanup: remove any combat-log entries with a nat that were added this turn
                                     setCombatState(prev => ({
@@ -2181,7 +2213,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                     setIsAnimating(false);
 
                                     // clear the invalid-target marker after a short grace window so subsequent actions behave normally
-                                    setTimeout(() => { lastInvalidTargetRef.current = false; }, 250);
+                                    setTimeout(() => { lastInvalidTargetRef.current = false; }, ms(250));
                                     return;
                                   }
 
@@ -2194,7 +2226,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   const companionRoll = Math.floor(Math.random() * 20) + 1;
                                   if (!compStunned) {
                                     await animateRoll(companionRoll, Math.floor(3000));
-                                    await waitMs(Math.floor(220 * timeScale));
+                                    await waitMs(ms(220));
                                     setShowRoll(false);
                                     setRollActor(null);
                                   }
@@ -2235,7 +2267,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                     }
                                   } catch (e) { /* best-effort */ }
 
-                                  await waitMs(Math.floor(600 * timeScale));
+                                  await waitMs(ms(600));
 
                                   const advanced = advanceTurn(res.newState);
                                   setCombatState(advanced);
@@ -2300,7 +2332,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
                           if (!compStunned) {
                             await animateRoll(companionRoll, Math.floor(3000));
-                            await waitMs(Math.floor(220 * timeScale));
+                            await waitMs(ms(220));
                             setShowRoll(false);
                             setRollActor(null);
                           }
@@ -2395,7 +2427,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
                           if (!compStunned) {
                             await animateRoll(companionRoll, Math.floor(3000));
-                            await waitMs(Math.floor(220 * timeScale));
+                            await waitMs(ms(220));
                             setShowRoll(false);
                             setRollActor(null);
                           }
@@ -2645,7 +2677,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 setRollActor('ally');
                                 const companionRoll = Math.floor(Math.random() * 20) + 1;
                                 await animateRoll(companionRoll, Math.floor(3000));
-                                await waitMs(Math.floor(220 * timeScale));
+                                await waitMs(ms(220));
                                 setShowRoll(false);
                                 setRollActor(null);
 
@@ -2661,7 +2693,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 }
                                 if (res.narrative && onNarrativeUpdate) onNarrativeUpdate(res.narrative);
 
-                                await waitMs(Math.floor(600 * timeScale));
+                                await waitMs(ms(600));
 
                                 const advanced = advanceTurn(res.newState);
                                 setCombatState(advanced);
