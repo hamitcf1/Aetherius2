@@ -748,30 +748,32 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
 
           {/* Level and Experience */}
             <div className="mb-6 bg-skyrim-paper/40 border border-skyrim-border p-4 rounded">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                {/* Level Badge */}
-                <div className="flex items-center gap-6">
-                  <LevelBadge level={character.level} size={72} />
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  {/* Level Badge */}
+                  <div className="flex items-center gap-6">
+                    <LevelBadge level={character.level} size={72} />
 
-                  {/* XP Progress Section */}
-                  <div className="flex flex-col flex-1 min-w-0">
-                    {(() => {
-                      const xpData = getXPProgress(character.experience || 0, character.level);
-                      return (
-                        <XPProgressBar current={xpData.current} required={xpData.required} total={xpData.totalXP} />
-                      );
-                    })()}
+                    {/* XP Progress Section */}
+                    <div className="flex flex-col flex-1 min-w-0">
+                      {(() => {
+                        const xpData = getXPProgress(character.experience || 0, character.level);
+                        return (
+                          <XPProgressBar current={xpData.current} required={xpData.required} total={xpData.totalXP} />
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
-                
-                {/* Level Controls */}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => updateCharacter('level', Math.max(1, character.level - 1))} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">-</button>
-                  <button onClick={() => onRequestLevelUp ? onRequestLevelUp() : updateCharacter('level', character.level + 1)} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">+</button>
-                  {/* Level up available indicator (renders when a postponed level-up exists) */}
-                  {levelUpAvailable && (
-                    <button onClick={() => onRequestLevelUp && onRequestLevelUp()} className="ml-2 px-3 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs font-semibold hover:bg-yellow-400 transition-all">Level up available</button>
-                  )}
+                  
+                  {/* Level Controls */}
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <button onClick={() => updateCharacter('level', Math.max(1, character.level - 1))} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">-</button>
+                    <button onClick={() => onRequestLevelUp ? onRequestLevelUp() : updateCharacter('level', character.level + 1)} className="w-8 h-8 rounded border border-skyrim-border hover:border-skyrim-gold flex items-center justify-center text-skyrim-text hover:text-skyrim-gold transition-colors">+</button>
+                    {/* Level up available indicator (renders when a postponed level-up exists) */}
+                    {levelUpAvailable && (
+                      <button onClick={() => onRequestLevelUp && onRequestLevelUp()} className="ml-2 px-3 py-1 rounded bg-skyrim-gold text-skyrim-dark text-xs font-semibold hover:bg-yellow-400 transition-all">Level up available</button>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -795,9 +797,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Current Health */}
               <div className="space-y-2">
-                {/* Quick Potion Button for Health */}
-                {(onDrink || onUseItem) && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
-                  <div className="flex justify-end mb-1">
+                {/* Quick Potion Button for Health - Reserve space to prevent layout shift */}
+                <div className="flex justify-end min-h-[28px]">
+                  {(onDrink || onUseItem) && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
                     <QuickPotionButton
                       statType="health"
                       potions={healthPotions}
@@ -806,8 +808,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="red"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <Heart size={12} className="text-red-500" /> {t('character.health')}
@@ -827,9 +829,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               
               {/* Current Magicka */}
               <div className="space-y-2">
-                {/* Quick Potion Button for Magicka */}
-                {(onDrink || onUseItem) && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
-                  <div className="flex justify-end mb-1">
+                {/* Quick Potion Button for Magicka - Reserve space to prevent layout shift */}
+                <div className="flex justify-end min-h-[28px]">
+                  {(onDrink || onUseItem) && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
                     <QuickPotionButton
                       statType="magicka"
                       potions={magickaPotions}
@@ -838,8 +840,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="blue"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <Droplets size={12} className="text-blue-500" /> {t('character.magicka')}
@@ -859,9 +861,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               
               {/* Current Stamina */}
               <div className="space-y-2">
-                {/* Quick Potion Button for Stamina */}
-                {(onDrink || onUseItem) && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
-                  <div className="flex justify-end mb-1">
+                {/* Quick Potion Button for Stamina - Reserve space to prevent layout shift */}
+                <div className="flex justify-end min-h-[28px]">
+                  {(onDrink || onUseItem) && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
                     <QuickPotionButton
                       statType="stamina"
                       potions={staminaPotions}
@@ -870,8 +872,8 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="green"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-skyrim-text flex items-center gap-1">
                     <BicepsFlexed size={12} className="text-green-500" /> {t('character.stamina')}
