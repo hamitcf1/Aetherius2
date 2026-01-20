@@ -490,29 +490,37 @@ export function checkRequirement(req: AchievementRequirement, stats: Achievement
   }
 }
 
+export function makeUnlockKey(characterId: string | undefined, achievementId: string) {
+  return characterId ? `${characterId}:${achievementId}` : achievementId;
+}
+
 export function checkAchievements(
   state: AchievementState,
-  character: Character
+  character: Character,
+  characterId?: string
 ): { newlyUnlocked: Achievement[]; updatedState: AchievementState } {
   const newlyUnlocked: Achievement[] = [];
   const updatedState = { ...state };
 
   for (const achievement of ACHIEVEMENTS) {
-    // Skip already unlocked
-    if (updatedState.unlockedAchievements[achievement.id]) continue;
+    const key = makeUnlockKey(characterId, achievement.id);
 
-    // Check prerequisite
-    if (achievement.prerequisite && !updatedState.unlockedAchievements[achievement.prerequisite]) {
-      continue;
+    // Skip already unlocked for this character OR global legacy unlock
+    if (updatedState.unlockedAchievements[key] || updatedState.unlockedAchievements[achievement.id]) continue;
+
+    // Check prerequisite (prereq should be checked within same character scope OR legacy global unlock)
+    if (achievement.prerequisite) {
+      const prereqKey = makeUnlockKey(characterId, achievement.prerequisite);
+      if (!updatedState.unlockedAchievements[prereqKey] && !updatedState.unlockedAchievements[achievement.prerequisite]) continue;
     }
 
     // Check requirement
     if (checkRequirement(achievement.requirement, state.stats, character)) {
-      // Only add to newlyUnlocked if not already notified
-      if (!updatedState.notifiedAchievements.has(achievement.id)) {
+      // Only add to newlyUnlocked if not already notified (use key)
+      if (!updatedState.notifiedAchievements.has(key)) {
         newlyUnlocked.push(achievement);
       }
-      updatedState.unlockedAchievements[achievement.id] = {
+      updatedState.unlockedAchievements[key] = {
         unlockedAt: Date.now(),
         collected: false
       };
@@ -537,10 +545,14 @@ export function markAchievementsNotified(
 
 export function collectAchievementReward(
   state: AchievementState,
-  achievementId: string
+  achievementId: string,
+  characterId?: string
 ): { success: boolean; reward?: AchievementReward; updatedState: AchievementState } {
   const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
-  const unlockData = state.unlockedAchievements[achievementId];
+  const key = makeUnlockKey(characterId, achievementId);
+  // Support legacy unlocked keys (achievementId without character prefix)
+  const legacy = state.unlockedAchievements[achievementId];
+  const unlockData = state.unlockedAchievements[key] || legacy;
 
   if (!achievement || !unlockData || unlockData.collected) {
     return { success: false, updatedState: state };
@@ -550,7 +562,7 @@ export function collectAchievementReward(
     ...state,
     unlockedAchievements: {
       ...state.unlockedAchievements,
-      [achievementId]: { ...unlockData, collected: true }
+      [key]: { ...unlockData, collected: true }
     }
   };
 

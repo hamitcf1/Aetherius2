@@ -2099,12 +2099,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!activeCharacter || !achievementsLoaded) return;
     setAchievementState(prev => {
-      const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter);
+      const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter, activeCharacter?.id);
       if (newlyUnlocked && newlyUnlocked.length > 0) {
         achievementNotificationQueueRef.current.push(...newlyUnlocked);
-        // Mark these achievements as notified
-        const notifiedIds = newlyUnlocked.map(a => a.id);
-        const markedState = markAchievementsNotified(updatedState, notifiedIds);
+        // Mark these achievements as notified (namespace with character id), but support legacy global keys
+        const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
+        // Also add legacy ids for backwards compat when older saves used un-namespaced keys
+        const legacyNotified = newlyUnlocked.map(a => a.id);
+        const markedState = markAchievementsNotified(updatedState, [...notifiedIds, ...legacyNotified]);
         // Trigger immediate notification display if none showing
         if (achievementNotification === null) {
           const next = achievementNotificationQueueRef.current.shift();
@@ -2182,14 +2184,15 @@ const App: React.FC = () => {
       // Check for newly unlocked achievements
       const { newlyUnlocked, updatedState } = checkAchievements(
         { ...prev, stats: newStats },
-        activeCharacter
+        activeCharacter,
+        activeCharacter?.id
       );
 
       // Queue notifications for newly unlocked achievements
       if (newlyUnlocked.length > 0) {
         achievementNotificationQueueRef.current.push(...newlyUnlocked);
-        // Mark these achievements as notified
-        const notifiedIds = newlyUnlocked.map(a => a.id);
+        // Mark these achievements as notified (namespaced)
+        const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
         const markedState = markAchievementsNotified(updatedState, notifiedIds);
         // Trigger notification display if not already showing one
         if (achievementNotification === null) {
@@ -2213,15 +2216,17 @@ const App: React.FC = () => {
     const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
     if (!achievement) return;
 
+    const key = `${activeCharacter.id}:${achievementId}`;
+
     setAchievementState(prev => {
-      const unlocked = prev.unlockedAchievements[achievementId];
+      const unlocked = prev.unlockedAchievements[key];
       if (!unlocked || unlocked.collected) return prev;
       
       return {
         ...prev,
         unlockedAchievements: {
           ...prev.unlockedAchievements,
-          [achievementId]: { ...unlocked, collected: true }
+          [key]: { ...unlocked, collected: true }
         }
       };
     });
@@ -2233,7 +2238,8 @@ const App: React.FC = () => {
       showToast(`+${reward.gold} gold`, 'success', { color: '#ffd700', stat: 'gold', amount: reward.gold });
     }
     if (reward.xp) {
-      updateCharacter('experience', (activeCharacter.experience || 0) + reward.xp);
+      // Use central game update path so XP gains run through the level-up check (xpChange -> pendingLevelUp)
+      handleGameUpdate({ xpChange: reward.xp });
       showToast(`+${reward.xp} XP`, 'success', { color: '#9966ff', stat: 'xp', amount: reward.xp });
     }
     if (reward.perkPoint) {
@@ -4878,6 +4884,11 @@ const App: React.FC = () => {
       }
       pts = Math.max(0, pts - 1);
       setDirtyEntities(d => new Set([...d, c.id]));
+      // If we added a new unique perk (wasn't present before), increment achievement stat
+      const addedNew = existing ? 0 : 1;
+      if (addedNew > 0) {
+        updateAchievementStats({ perksUnlocked: addedNew });
+      }
       return { ...c, stats: updatedStats, perks: sanitizePerks(newPerks), perkPoints: pts } as Character;
     }));
   };
@@ -4916,11 +4927,12 @@ const App: React.FC = () => {
               continue;
             }
 
-            // Deduct points for each mastery purchased
+                  // Deduct points for each mastery purchased
             pts = Math.max(0, pts - masteryCostResolved * (wantCount || 1));
 
             // increment mastery counter and reset rank to 1 (prestige while preserving prior stat gains)
             let found = false;
+            let newlyAddedMasteryPerks = 0;
             for (let i = 0; i < nextPerks.length; i++) {
               if (nextPerks[i].id === baseId) {
                 nextPerks[i] = { ...nextPerks[i], mastery: (nextPerks[i].mastery || 0) + wantCount, rank: 1 };
@@ -4931,7 +4943,9 @@ const App: React.FC = () => {
             if (!found) {
               // If a perk wasn't present (edge case), add it with rank=1 and mastery
               nextPerks.push({ id: def.id, name: def.name, skill: def.skill || '', rank: 1, mastery: wantCount, description: def.description });
+              newlyAddedMasteryPerks = 1;
             }
+            if (newlyAddedMasteryPerks > 0) updateAchievementStats({ perksUnlocked: newlyAddedMasteryPerks });
 
             // apply mastery bonus from config if present
             if (masteryBonusCfg && masteryBonusCfg.type === 'stat') {
@@ -4981,6 +4995,12 @@ const App: React.FC = () => {
       }
 
       setDirtyEntities(d => new Set([...d, c.id]));
+      // Count newly-added unique perks and update achievement stats
+      const prevIds = new Set((c.perks || []).map(p => p.id));
+      const nextIds = new Set(nextPerks.map(p => p.id));
+      let newlyAdded = 0;
+      nextIds.forEach(id => { if (!prevIds.has(id)) newlyAdded += 1; });
+      if (newlyAdded > 0) updateAchievementStats({ perksUnlocked: newlyAdded });
       return { ...c, stats: updatedStats, perks: sanitizePerks(nextPerks), perkPoints: pts } as Character; // already sanitized above (nextPerks)
     }));
   };

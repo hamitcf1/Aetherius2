@@ -42,8 +42,9 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
   // Filter achievements
   const filteredAchievements = useMemo(() => {
     return ACHIEVEMENTS.filter(achievement => {
-      // Hidden achievements only shown if unlocked
-      if (achievement.hidden && !achievementState.unlockedAchievements[achievement.id]) {
+      // Hidden achievements only shown if unlocked for THIS character
+      const key = `${character.id}:${achievement.id}`;
+      if (achievement.hidden && !achievementState.unlockedAchievements[key]) {
         return false;
       }
 
@@ -75,10 +76,11 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
     });
   }, [selectedCategory, selectedRarity, showUnlockedOnly, showLockedOnly, searchQuery, achievementState]);
 
-  // Stats
-  const totalAchievements = ACHIEVEMENTS.filter(a => !a.hidden || achievementState.unlockedAchievements[a.id]).length;
-  const unlockedCount = Object.keys(achievementState.unlockedAchievements).length;
-  const collectedCount = Object.values(achievementState.unlockedAchievements).filter((a: { unlockedAt: number; collected: boolean }) => a.collected).length;
+  // Stats (compute per-character unlocked/collected)
+  const totalAchievements = ACHIEVEMENTS.filter(a => !a.hidden || !!achievementState.unlockedAchievements[`${character.id}:${a.id}`]).length;
+  const unlockedKeysForChar = Object.keys(achievementState.unlockedAchievements).filter(k => k.startsWith(`${character.id}:`));
+  const unlockedCount = unlockedKeysForChar.length;
+  const collectedCount = unlockedKeysForChar.filter(k => achievementState.unlockedAchievements[k]?.collected).length;
   const uncollectedCount = unlockedCount - collectedCount;
 
   const handleCollect = (achievementId: string) => {
@@ -218,8 +220,9 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredAchievements.map(achievement => {
-                const isUnlocked = !!achievementState.unlockedAchievements[achievement.id];
-                const isCollected = achievementState.unlockedAchievements[achievement.id]?.collected;
+                const key = `${character.id}:${achievement.id}`;
+                const isUnlocked = !!achievementState.unlockedAchievements[key];
+                const isCollected = achievementState.unlockedAchievements[key]?.collected;
                 const progress = getAchievementProgress(achievement, achievementState.stats, character);
                 const colors = RARITY_COLORS[achievement.rarity];
 
@@ -312,8 +315,9 @@ const AchievementsModal: React.FC<AchievementsModalProps> = ({
             >
               {(() => {
                 const achievement = selectedAchievement;
-                const isUnlocked = !!achievementState.unlockedAchievements[achievement.id];
-                const isCollected = achievementState.unlockedAchievements[achievement.id]?.collected;
+                const key = `${character.id}:${achievement.id}`;
+                const isUnlocked = !!achievementState.unlockedAchievements[key];
+                const isCollected = achievementState.unlockedAchievements[key]?.collected;
                 const progress = getAchievementProgress(achievement, achievementState.stats, character);
                 const colors = RARITY_COLORS[achievement.rarity];
 

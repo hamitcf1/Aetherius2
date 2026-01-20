@@ -30,4 +30,20 @@ describe('achievements service', () => {
     const { newlyUnlocked } = checkAchievements(state, makeChar(1));
     expect(newlyUnlocked.some(a => a.id === 'shadow_walker')).toBe(true);
   });
+
+  it('unlocks perk-related achievements when perksUnlocked crosses threshold', () => {
+    const stats = getDefaultAchievementStats();
+    const state = { unlockedAchievements: {}, stats } as any;
+    const char = makeChar(1);
+
+    // Initially 4 perks -> no unlock
+    state.stats.perksUnlocked = 4;
+    let res = checkAchievements(state, char);
+    expect(res.newlyUnlocked.some(a => a.id === 'perk_novice')).toBe(false);
+
+    // Increase to 5 -> should unlock "perk_novice"
+    state.stats.perksUnlocked = 5;
+    res = checkAchievements(state, char);
+    expect(res.newlyUnlocked.some(a => a.id === 'perk_novice')).toBe(true);
+  });
 });
