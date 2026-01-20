@@ -6,7 +6,7 @@ import {
     DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
-import GameSidebar from './components/GameSidebar';
+import GameSidebar, { ActionButton } from './components/GameSidebar';
 import { AppContext } from './AppContext';
 import { QuestLog } from './components/QuestLog';
 import { Journal } from './components/Journal';
@@ -5547,6 +5547,10 @@ const App: React.FC = () => {
 
                 {/* Story Dropdown */}
                 <StoryDropdown activeTab={activeTab} setActiveTab={setActiveTab} />
+                
+                {/* Actions Button */}
+                <ActionButton />
+                
                 {/* Persistent Level Badge (HUD) */}
                 {activeCharacter && (
                   <div className="ml-2 hidden sm:block">

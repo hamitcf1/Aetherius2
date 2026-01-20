@@ -46,7 +46,6 @@ const GameSidebar: React.FC = () => {
     social: false,
     'ai-tools': false,
     progress: false,
-    actions: false,
   }));
   
   const {
@@ -152,17 +151,6 @@ const GameSidebar: React.FC = () => {
       items: [
         { id: 'achievements', label: 'Achievements', icon: '🏆', onClick: openAchievements, color: 'amber' },
       ],
-    },
-    {
-      id: 'actions',
-      title: 'Actions',
-      icon: <SlidersHorizontal size={16} className="text-skyrim-gold" />,
-      items: [],
-      render: (
-        <div className="flex justify-start">
-          <ActionBarToggle />
-        </div>
-      ),
     },
   ];
 
@@ -292,5 +280,8 @@ const GameSidebar: React.FC = () => {
     document.body
   );
 };
+
+// Export ActionButton as a named export for navbar use
+export const ActionButton = ActionBarToggle;
 
 export default GameSidebar;
