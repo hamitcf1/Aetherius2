@@ -3,7 +3,7 @@ import ModalWrapper from './ModalWrapper';
 import { InventoryItem } from '../types';
 import type { ShopItem } from './ShopModal';
 import upgradeSvc, { countMaterialInInventory, getUpgradeCost, canUpgrade, previewUpgradeStats, getMaxUpgradeForItem, getRequiredPlayerLevelForNextUpgrade, getRequirementsForNextUpgrade, getItemBaseAndBonus } from '../services/upgradeService';
-import { Sword, Shield, Coins, Check } from 'lucide-react';
+import { Sword, Shield, Coins, Check, Star } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import { audioService } from '../services/audioService';
@@ -145,6 +145,21 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   const eligible = useMemo(() => items.filter(i => (i.type === 'weapon' || i.type === 'apparel') ), [items]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<'all'|'weapons'|'armor'>('all');
+  // Show filter persistence: read last-used value from localStorage (falls back to 'all')
+  const getSavedEquippedFilter = () => {
+    try {
+      const v = typeof window !== 'undefined' ? localStorage.getItem('aetherius:blacksmith:show') : null;
+      return (v === 'equipped' || v === 'companion') ? (v as 'equipped'|'companion') : 'all';
+    } catch (e) {
+      return 'all';
+    }
+  };
+  const [equippedFilterInternal, setEquippedFilterInternal] = useState<'all'|'equipped'|'companion'>(getSavedEquippedFilter);
+  // wrapper setter persists to localStorage so the choice persists across sessions
+  const setEquippedFilter = (mode: 'all'|'equipped'|'companion') => {
+    setEquippedFilterInternal(mode);
+    try { localStorage.setItem('aetherius:blacksmith:show', mode); } catch (e) {}
+  };
   const [sortOrder, setSortOrder] = useState<string>('name:asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSparks, setShowSparks] = useState(false);
@@ -154,11 +169,18 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
 
   // Category-filtered + deterministic sorting to match inventory/shop behavior
   const eligibleSorted = useMemo(() => {
-    const base = eligible.filter(i => {
+    let base = eligible.filter(i => {
       if (filterCategory === 'weapons') return i.type === 'weapon';
       if (filterCategory === 'armor') return i.type === 'apparel';
       return true;
     });
+
+    // Apply equipped filtering as an additional slice
+    if (equippedFilterInternal === 'equipped') {
+      base = base.filter(i => !!i.equipped);
+    } else if (equippedFilterInternal === 'companion') {
+      base = base.filter(i => !!i.equipped && !!i.equippedBy && i.equippedBy !== 'player');
+    }
 
     const parseSort = (s: string) => {
       const parts = (s || '').split(':');
@@ -191,6 +213,15 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
         const cmp = (getValue(a) - getValue(b)) || (a.name || '').localeCompare(b.name || '');
         return asc ? cmp : -cmp;
       });
+    } else if (parsed.key === 'favorite') {
+      // Sort by favorites flag (true/false) with optional tiebreak by name
+      sorted.sort((a, b) => {
+        const ia = a.isFavorite ? 1 : 0;
+        const ib = b.isFavorite ? 1 : 0;
+        const cmp = ia - ib; // ascending: non-fav -> fav
+        if (cmp === 0) return (a.name || '').localeCompare(b.name || '');
+        return asc ? cmp : -cmp;
+      });
     } else {
       // Fallback to inventory comparator
       sorted.sort((a, b) => {
@@ -200,7 +231,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
     }
 
     return sorted;
-  }, [eligible, filterCategory, sortOrder]);
+  }, [eligible, filterCategory, sortOrder, equippedFilterInternal]);
 
   // Search-filtered view (client-side, case-insensitive substring)
   const visibleEligible = useMemo(() => {
@@ -218,7 +249,23 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   }, [searchQuery, visibleEligible, selectedId]);
 
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
-  const { characterLevel, showToast } = useAppContext();
+
+  // Convenience: toggle favorite flag on an item (will mark it dirty for debounced persistence)
+  const { characterLevel, showToast, markEntityDirty } = useAppContext();
+
+  const toggleFavorite = (id: string) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, isFavorite: !(it.isFavorite) } : it));
+    // Mark for persistence
+    try { markEntityDirty(id); } catch (e) {}
+    // Play a small feedback sound if available
+    try {
+      audioService.playSoundEffect('toggle_favorite');
+    } catch (err) {
+      // ignore in test env or if sound is missing
+    }
+    // Show minimal feedback to the player
+    try { showToast?.('Favorite updated', 'success'); } catch (e) {}
+  };
 
   // Material requirements for the *next* upgrade (if any) and whether the current
   // shop stock satisfies them. When `shopItems` is not provided we do not block
@@ -435,9 +482,9 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                  )}
                </div>
 
-               <div className="flex items-center gap-3">
+               <div className="flex flex-wrap items-center gap-3">
                  {/* Sort selector (matches Inventory/Shop behaviour) */}
-                 <div data-testid="blacksmith-sort" className="shrink min-w-0">
+                 <div data-testid="blacksmith-sort" className="shrink-0">
                    <SortSelector
                      currentSort={sortOrder}
                      allowDirection={true}
@@ -446,22 +493,36 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                        { id: 'name', label: 'Name' },
                        { id: 'upgrade', label: 'Upgrade Level' },
                        { id: 'damage', label: 'Damage' },
-                       { id: 'value', label: 'Value' }
+                       { id: 'value', label: 'Value' },
+                       { id: 'favorite', label: 'Favorites' }
                      ]}
                    />
                  </div>
 
                  {/* Category filter */}
-                 <div className="flex gap-1 text-xs bg-black/20 p-1 rounded-lg flex-1">
+                 <div className="flex gap-1 text-xs bg-black/20 p-1 rounded-lg flex-1 min-w-0 flex-wrap">
                    {(['all', 'weapons', 'armor'] as const).map(cat => (
                      <button 
                        key={cat}
                        data-testid={`filter-${cat}`}
                        onClick={() => setFilterCategory(cat)} 
-                       className={`flex-1 py-1.5 rounded font-bold transition-all capitalize ${filterCategory === cat ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
+                       className={`py-1.5 rounded font-bold transition-all capitalize ${filterCategory === cat ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
                      >
                        {cat}
                      </button>
+                   ))}
+                 </div>
+
+                 {/* Equipped filter controls (wrap-friendly) */}
+                 <div className="flex items-center gap-2 ml-0 sm:ml-2 mt-2 sm:mt-0">
+                   <div className="text-xs text-stone-400 uppercase tracking-wider">Show</div>
+                   {(['all','equipped','companion'] as const).map(mode => (
+                     <button
+                       key={mode}
+                       data-testid={`filter-equipped-${mode}`}
+                       onClick={() => setEquippedFilter(mode)}
+                       className={`py-1 px-2 rounded font-bold text-xs transition-all ${equippedFilterInternal === mode ? 'bg-skyrim-gold text-skyrim-dark shadow-sm' : 'text-skyrim-text hover:bg-white/5'}`}
+                     >{mode === 'all' ? 'All' : mode === 'equipped' ? 'Equipped' : 'Companions'}</button>
                    ))}
                  </div>
                </div>
@@ -485,12 +546,36 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <div className={`font-serif truncate text-sm md:text-base transition-colors ${selectedId === it.id ? 'text-skyrim-gold' : 'text-gray-300 group-hover:text-skyrim-gold'}`}>{it.name}</div>
+                            <div className={`font-serif truncate text-sm md:text-base transition-colors ${selectedId === it.id ? 'text-skyrim-gold' : 'text-gray-300 group-hover:text-skyrim-gold'}`}>
+                              {it.name}
+                            </div>
                             {(it as any).rarity ? <span className="ml-2"><RarityBadge rarity={String((it as any).rarity)} /></span> : null}
+
+                            {/* Favorite toggle (stopPropagation to avoid selecting the row) */}
+                            <div className="ml-auto flex-shrink-0">
+                              <button
+                                type="button"
+                                data-testid={`toggle-favorite-${it.id}`}
+                                aria-pressed={!!it.isFavorite}
+                                aria-label={it.isFavorite ? 'Unmark favorite' : 'Mark favorite'}
+                                onClick={(e) => { e.stopPropagation(); toggleFavorite(it.id); }}
+                                className="p-1 rounded hover:bg-white/5 text-yellow-400"
+                              >
+                                <Star size={16} className={`${it.isFavorite ? 'text-yellow-400' : 'text-gray-500'}`} />
+                              </button>
+                            </div>
                           </div>
+
                           <div className="text-xs text-stone-500 truncate flex items-center justify-between mt-0.5">
                               <span>Lvl {it.upgradeLevel || 0} / {getMaxUpgradeForItem(it)}</span>
                               <div className="flex flex-col items-end gap-1">
+                                {it.equipped && (
+                                  <div data-testid={`equipped-${it.id}`} className="text-[10px] text-green-300 uppercase tracking-wider font-bold flex items-center gap-1">
+                                    <Check size={12} /> <span>Equipped</span>
+                                  </div>
+                                )}
+
+
 
                                 {selectedId === it.id && <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-bold">Selected</span>}
                               </div>

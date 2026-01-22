@@ -255,12 +255,13 @@ describe('Spell classification: healing and summons', () => {
     expect(comp).toBeDefined();
     expect(comp.companionMeta && comp.companionMeta.decayActive).toBeTruthy();
 
-    // Next player-turn start should apply decay damage (50% of current health)
+    // Next player-turn start should apply decay damage (reduce to at most half of current health)
     newState = advanceTurn(newState); // to enemy
     const beforeHealth = comp.currentHealth;
     newState = advanceTurn(newState); // to player -> decay applied
     const compAfter = newState.allies.find(a => a.id === comp.id) as any;
-    expect(compAfter.currentHealth).toBeLessThanOrEqual(Math.floor(beforeHealth * 0.5) + (beforeHealth - Math.floor(beforeHealth * 0.5)));
+    // expect the summoned companion's health to be reduced to at most half of prior health
+    expect(compAfter.currentHealth).toBeLessThanOrEqual(Math.floor(beforeHealth / 2));
   });
 
   it('normalizes misclassified summoned companions (moves from enemies to allies) on turn advance', () => {

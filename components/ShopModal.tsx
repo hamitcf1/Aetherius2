@@ -103,6 +103,12 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'steel_warhammer', name: 'Steel Warhammer', type: 'weapon', description: 'Massive steel hammer. Breaks bones.', price: 170, category: 'Weapons', requiredLevel: 5 },
   { id: 'long_bow', name: 'Long Bow', type: 'weapon', description: 'A longer bow with better range.', price: 80, category: 'Weapons', requiredLevel: 5 },
   { id: 'steel_arrows', name: 'Steel Arrows (20)', type: 'weapon', description: 'A bundle of steel-tipped arrows.', price: 20, category: 'Weapons', requiredLevel: 5 },
+  // Elemental & specialty arrows
+  { id: 'fire_arrows', name: 'Fire Arrows (10)', type: 'weapon', description: 'Arrows tipped in flammable oil and coal. Adds fire damage and burning.', price: 30, category: 'Weapons' },
+  { id: 'ice_arrows', name: 'Ice Arrows (10)', type: 'weapon', description: 'Arrows infused with frost — chills and may slow targets.', price: 30, category: 'Weapons' },
+  { id: 'shock_arrows', name: 'Shock Arrows (10)', type: 'weapon', description: 'Conductive-tipped arrows that deal shock damage and may stun.', price: 35, category: 'Weapons' },
+  { id: 'paralyze_arrows', name: 'Paralyze Arrows (5)', type: 'weapon', description: 'Special toxins that can paralyze a target briefly.', price: 45, category: 'Weapons' },
+  { id: 'allycall_arrows', name: 'Command Arrows (5)', type: 'weapon', description: 'A signal arrow that commands a nearby ally to strike the target.', price: 50, category: 'Weapons' },
 
   // === Curated mid-tier items (new): balanced, level-gated, varied rarities ===
   { id: 'travelers_shortsword', name: "Traveler's Shortsword", type: 'weapon', description: 'A light, well-balanced shortsword for travelers.', price: 35, category: 'Weapons', requiredLevel: 1, rarity: 'common' },

@@ -17,7 +17,7 @@ describe('Blacksmith — eligible items layout', () => {
       { id: 'i2', characterId: 'c1', name: 'Steel Shield', type: 'apparel', armor: 10, value: 50, quantity: 1, upgradeLevel: 0 }
     ];
 
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 2400 } as any);
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 2400, markEntityDirty: (_id: string) => {} } as any);
 
     const { unmount } = render(
       <AppContext.Provider value={mockCtx}>
@@ -131,7 +131,7 @@ describe('Blacksmith — eligible items layout', () => {
       { id: 'w2', characterId: 'c1', name: 'Gamma Axe', type: 'weapon', upgradeLevel: 2, value: 10, quantity: 1 }
     ];
 
-    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 2400 } as any);
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 2400, markEntityDirty: (_id: string) => {} } as any);
 
     render(
       <AppContext.Provider value={mockCtx}>
@@ -197,5 +197,127 @@ describe('Blacksmith — eligible items layout', () => {
     fireEvent.change(input, { target: { value: '' } });
     const allVisible = screen.getAllByRole('button').map(b => b.textContent || '');
     expect(allVisible.some(t => /Twin Sword/i.test(t))).toBe(true);
+  });
+
+  it('shows equipped and favorite indicators and supports favorites sorting', () => {
+    const items = [
+      { id: 'f1', characterId: 'c1', name: 'Fav Sword', type: 'weapon', damage: 5, upgradeLevel: 0, value: 1, isFavorite: true, equipped: false },
+      { id: 'f2', characterId: 'c1', name: 'Other Sword', type: 'weapon', damage: 8, upgradeLevel: 0, value: 1, isFavorite: false, equipped: true }
+    ];
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 100 } as any);
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={items as any} setItems={() => {}} gold={100} setGold={() => {}} />
+      </AppContext.Provider>
+    );
+
+    // Favorite item shows the favorite toggle button as pressed
+    expect(screen.getByText(/Fav Sword/i)).toBeTruthy();
+    const favToggle = screen.getByTestId('toggle-favorite-f1');
+    expect(favToggle).toBeTruthy();
+    expect(favToggle.getAttribute('aria-pressed')).toBe('true');
+
+    // Equipped indicator rendered on the equipped item
+    expect(screen.getByTestId('equipped-f2')).toBeTruthy();
+
+    // Ensure favorites sorting puts the favorite first when selecting Favorites sort
+    const sortControl = screen.getByTestId('blacksmith-sort');
+    const sortToggle = within(sortControl).getByText(/Name/i);
+    fireEvent.click(sortToggle);
+    const favCandidates = within(sortControl).getAllByText(/Favorites/i);
+    const favOption = favCandidates.find(el => el.tagName === 'BUTTON' && el.className.includes('w-full')) || favCandidates[favCandidates.length - 1];
+    fireEvent.click(favOption);
+    // flip direction so favorites appear first (SortSelector toggles on repeat)
+    fireEvent.click(sortToggle);
+    const favCandidates2 = within(sortControl).getAllByText(/Favorites/i);
+    const favOption2 = favCandidates2.find(el => el.tagName === 'BUTTON' && el.className.includes('w-full')) || favCandidates2[favCandidates2.length - 1];
+    fireEvent.click(favOption2);
+
+    const scroller = screen.getByTestId('blacksmith-sort').closest('.overflow-hidden')?.querySelector('.custom-scrollbar') as HTMLElement;
+    const ordered = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(ordered[0]).toMatch(/Fav Sword/i);
+  });
+
+  it('filters equipped and companion equipped items', () => {
+    const items = [
+      { id: 'p1', characterId: 'c1', name: 'Player Sword', type: 'weapon', equipped: true, equippedBy: 'player' },
+      { id: 'c1', characterId: 'c1', name: 'Comp Shield', type: 'apparel', equipped: true, equippedBy: 'comp_1' },
+      { id: 'u1', characterId: 'c1', name: 'Unequipped', type: 'weapon', equipped: false }
+    ];
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 100, markEntityDirty: (_id: string) => {} } as any);
+    render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={items as any} setItems={() => {}} gold={100} setGold={() => {}} />
+      </AppContext.Provider>
+    );
+
+    const heading = screen.getByText(/Eligible Items/i);
+    const column = heading.closest('div.overflow-hidden');
+    const scroller = column?.querySelector('.custom-scrollbar') as HTMLElement;
+
+    // Default (All) shows everything
+    let visible = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(visible.some(t => /Player Sword/i.test(t))).toBe(true);
+    expect(visible.some(t => /Comp Shield/i.test(t))).toBe(true);
+    expect(visible.some(t => /Unequipped/i.test(t))).toBe(true);
+
+    // Click Equipped filter
+    const eqBtn = screen.getByTestId('filter-equipped-equipped');
+    fireEvent.click(eqBtn);
+    visible = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(visible.some(t => /Player Sword/i.test(t))).toBe(true);
+    expect(visible.some(t => /Comp Shield/i.test(t))).toBe(true);
+    expect(visible.some(t => /Unequipped/i.test(t))).toBe(false);
+
+    // Click Companion filter
+    const compBtn = screen.getByTestId('filter-equipped-companion');
+    fireEvent.click(compBtn);
+    visible = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(visible.some(t => /Player Sword/i.test(t))).toBe(false);
+    expect(visible.some(t => /Comp Shield/i.test(t))).toBe(true);
+
+    // Reset to All
+    const allBtn = screen.getByTestId('filter-equipped-all');
+    fireEvent.click(allBtn);
+    visible = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(visible.some(t => /Unequipped/i.test(t))).toBe(true);
+  });
+
+  it('remembers last selected Show filter using localStorage', () => {
+    // Prepare persisted state
+    localStorage.setItem('aetherius:blacksmith:show', 'equipped');
+
+    const items = [
+      { id: 'p1', characterId: 'c1', name: 'Player Sword', type: 'weapon', equipped: true, equippedBy: 'player' },
+      { id: 'c1', characterId: 'c1', name: 'Comp Shield', type: 'apparel', equipped: true, equippedBy: 'comp_1' },
+      { id: 'u1', characterId: 'c1', name: 'Unequipped', type: 'weapon', equipped: false }
+    ];
+
+    const mockCtx = ({ showToast: () => {}, characterLevel: 99, gold: 100, markEntityDirty: (_id: string) => {} } as any);
+    const { rerender } = render(
+      <AppContext.Provider value={mockCtx}>
+        <BlacksmithModal open={true} onClose={() => {}} items={items as any} setItems={() => {}} gold={100} setGold={() => {}} />
+      </AppContext.Provider>
+    );
+
+    const heading = screen.getByText(/Eligible Items/i);
+    const column = heading.closest('div.overflow-hidden');
+    const scroller = column?.querySelector('.custom-scrollbar') as HTMLElement;
+
+    // persisted 'equipped' should filter on mount
+    let visible = within(scroller!).getAllByRole('button').map(b => b.textContent || '');
+    expect(visible.some(t => /Player Sword/i.test(t))).toBe(true);
+    expect(visible.some(t => /Comp Shield/i.test(t))).toBe(true);
+    expect(visible.some(t => /Unequipped/i.test(t))).toBe(false);
+
+    // clicking All should update storage
+    const allBtn = screen.getByTestId('filter-equipped-all');
+    fireEvent.click(allBtn);
+    expect(localStorage.getItem('aetherius:blacksmith:show')).toBe('all');
+
+    // cleanup
+    localStorage.removeItem('aetherius:blacksmith:show');
   });
 });

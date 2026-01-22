@@ -36,6 +36,7 @@ import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
 import { LoadoutManager } from './LoadoutManager';
 import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
+import ArrowPicker from './ArrowPicker';
 import { getItemBaseAndBonus } from '../services/upgradeService';
 import { getItemRestorationValues } from '../services/nutritionData';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
@@ -885,6 +886,24 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     });
   };
 
+  // Toggle whether we show the loot modal automatically when combat ends (default: true)
+  const [showLootOnEnd, setShowLootOnEnd] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem('aetherius:combatShowLootOnEnd');
+      return v === null ? true : v === 'true';
+    } catch { return true; }
+  });
+  const toggleShowLootOnEnd = (v?: boolean) => {
+    setShowLootOnEnd(prev => {
+      const next = typeof v === 'boolean' ? v : !prev;
+      try { localStorage.setItem('aetherius:combatShowLootOnEnd', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Menu state for loot options (popover) — not an on/off toggle in header
+  const [showLootMenuOpen, setShowLootMenuOpen] = useState<boolean>(false);
+
   // Helper to compute scaled milliseconds for waits/animations — divides base delays by multiplier
   const ms = (base: number) => Math.max(0, Math.floor(base * timeScale / Math.max(1, speedMultiplier)));
 
@@ -987,16 +1006,22 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   // Trigger loot phase after combat ends - show loot modal for player to review before finalizing
   useEffect(() => {
     if (combatState.result === 'victory') {
-      const populatedState = populatePendingLoot(combatState);
+      if (showLootOnEnd) {
+        const populatedState = populatePendingLoot(combatState);
 
-      // Populate pending loot on the combat state so the existing LootModal (rendered when
-      // `combatState.lootPending` is true) will display. Avoid setting `lootPhase` which
-      // duplicates the modal UI.
-      setCombatState(prev => ({ ...populatedState, lootPending: true } as any));
-      // Informational toast
-      showToast?.('Victory! Review your loot and confirm to finish combat.', 'success');
+        // Populate pending loot on the combat state so the existing LootModal (rendered when
+        // `combatState.lootPending` is true) will display. Avoid setting `lootPhase` which
+        // duplicates the modal UI.
+        setCombatState(prev => ({ ...populatedState, lootPending: true } as any));
+        // Informational toast
+        showToast?.('Victory! Review your loot and confirm to finish combat.', 'success');
+      } else {
+        // Auto-finalize as skipped loot (player chose not to review)
+        // Funnel through canonical finalizer to keep behavior consistent
+        handleFinalizeLoot(null);
+      }
     }
-  }, [combatState.result]);
+  }, [combatState.result, showLootOnEnd]);
 
   const handleFinalizeLoot = (selectedItems: Array<{ name: string; quantity: number }> | null) => {
     const { newState, updatedInventory, grantedXp, grantedGold, grantedItems } = finalizeLoot(
@@ -1052,8 +1077,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   };
 
   const handleLootCancel = () => {
-    // Cancel should simply close the loot modal and leave combat state waiting
-    setCombatState(prev => ({ ...prev, lootPending: false }));
+    // Cancel/Close should finalize loot as skipped (treat as skip/no selection)
+    handleFinalizeLoot(null);
   };
 
   // Process enemy turns
@@ -1674,18 +1699,50 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (cancelled) return;
 
       try {
-        // Prefer a damaging magical ability if affordable, otherwise perform a basic attack
+        // Compute player's current health percentage
+        const healthPct = Math.max(0, Math.min(100, Math.round((playerStats.currentHealth || 0) / Math.max(1, playerStats.maxHealth || 1) * 100)));
+
         const abilities = (playerStats.abilities || []);
+
+        // If player's health is below threshold, prefer healing abilities (if affordable)
         let chosen: any = undefined;
+        if (healthPct < 75) {
+          for (const ab of abilities) {
+            const affordable = (ab.cost === 0) || ((playerStats.currentMagicka || 0) >= (ab.cost || 0));
+            const isHealing = !!(ab.heal || (ab.effects && ab.effects.some((ef: any) => ef.type === 'heal')));
+            if (isHealing && affordable) { chosen = ab; break; }
+          }
+          if (chosen) {
+            handlePlayerAction('magic', chosen.id);
+            return;
+          }
+        }
+
+        // Otherwise prefer a damaging magical ability if affordable, otherwise perform a basic attack
         for (const ab of abilities) {
           const affordable = (ab.cost === 0) || ((playerStats.currentMagicka || 0) >= (ab.cost || 0));
           if (ab.type === 'magic' && affordable && (ab.damage || (ab.effects && ab.effects.length > 0))) {
             chosen = ab; break;
           }
         }
+
         if (chosen) {
           handlePlayerAction('magic', chosen.id);
         } else {
+          // Before performing a default attack, if we lack stamina, try using an unarmed strike (cost 0) when available
+          try {
+            const basic = (playerStats.abilities || []).find(a => a.id === 'basic_attack' || (a.type === 'melee' && typeof a.cost === 'number'));
+            const basicCost = (basic && typeof basic.cost === 'number') ? basic.cost : 0;
+            const currentStamina = playerStats.currentStamina || 0;
+            if (basicCost > currentStamina) {
+              const unarmed = (playerStats.abilities || []).find(a => (a as any).unarmed || a.id === 'unarmed_strike');
+              if (unarmed) {
+                handlePlayerAction('attack', unarmed.id);
+                return;
+              }
+            }
+          } catch (e) { /* best-effort fallback */ }
+
           handlePlayerAction('attack');
         }
       } catch (e) {
@@ -1696,6 +1753,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     return () => { cancelled = true; };
   }, [autoCombat, isPlayerTurn, isAnimating, pendingTargeting, playerStats, speedMultiplier]);
+
+  // Arrow picker modal state
+  const [arrowPickerOpen, setArrowPickerOpen] = useState(false);
+  const [arrowPickerAbility, setArrowPickerAbility] = useState<CombatAbility | null>(null);
 
   // When clicking an ability, decide whether to open explicit target selection (for heals/buffs)
   const handleAbilityClick = (ability: CombatAbility) => {
@@ -1709,6 +1770,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return;
     }
 
+    // If this is a ranged attack and the player currently has a bow equipped, show the arrow picker
+    try {
+      const equippedBow = (inventory || []).find(it => it.equipped && it.slot === 'weapon' && (it.name || '').toLowerCase().includes('bow'));
+      if (ability.type === 'ranged' && equippedBow) {
+        setArrowPickerAbility(ability);
+        setArrowPickerOpen(true);
+        return;
+      }
+    } catch (e) { /* best-effort, fall through to default behavior */ }
+
     // If the user very recently changed target, defer the ability click one tick so selectedTarget stabilizes
     if (Date.now() - (lastUserTargetChangeAt.current || 0) < 80) {
       lastAbilityClickAt.current = Date.now();
@@ -1719,6 +1790,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Default immediate execution
     lastAbilityClickAt.current = Date.now();
     handlePlayerAction('attack', ability.id);
+  };
+
+  // Arrow selection helper - itemId is the arrow bundle id (e.g., 'fire_arrows')
+  const chooseArrowAndAttack = (arrowItemId?: string) => {
+    if (!arrowPickerAbility) return;
+    setArrowPickerOpen(false);
+    const abilityId = arrowPickerAbility.id;
+    lastAbilityClickAt.current = Date.now();
+    handlePlayerAction('attack', abilityId, arrowItemId);
+    setArrowPickerAbility(null);
   };
 
   // Get usable items for combat (potions and food)
@@ -1734,6 +1815,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--skyrim-dark, #0f0f0f)' }}>
+      <ArrowPicker open={arrowPickerOpen} onClose={() => { setArrowPickerOpen(false); setArrowPickerAbility(null); }} onChoose={(arrowId) => chooseArrowAndAttack(arrowId)} />
+
       <div className="bg-gradient-to-b from-stone-900 to-transparent p-2 sm:p-4 border-b border-amber-900/30 relative">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
@@ -1762,6 +1845,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             })() }
           </div>
           <div className="flex items-center gap-3">
+
             <div className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg text-xs sm:text-base ${isPlayerTurn ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
               {isPlayerTurn ? '🎯 Your Turn' : '⏳ Enemy Turn'}
             </div>
@@ -1792,6 +1876,36 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               >
                 Auto {autoCombat ? 'ON' : 'OFF'}
               </button>
+
+              {/* Loot popup menu (not an on/off toggle) */}
+              <div className="relative ml-2">
+                <button
+                  onClick={() => setShowLootMenuOpen(prev => !prev)}
+                  aria-expanded={showLootMenuOpen}
+                  title="Loot options"
+                  className="px-2 py-1 text-xs rounded font-semibold transition-colors bg-stone-800 text-stone-300 border border-stone-600"
+                >
+                  Loot
+                </button>
+
+                {showLootMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-stone-900 border border-stone-700 rounded shadow-lg p-2 z-70">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={showLootOnEnd}
+                        onChange={() => toggleShowLootOnEnd()}
+                        className="w-4 h-4 accent-amber-400"
+                      />
+                      <span>Show loot on victory</span>
+                    </label>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => { const populated = populatePendingLoot(combatState); setCombatState(prev => ({ ...populated, lootPending: true } as any)); showToast?.('Loot modal opened', 'info'); setShowLootMenuOpen(false); }} className="px-3 py-1 bg-amber-700 rounded text-white text-sm">Show Loot Now</button>
+                      <button onClick={() => setShowLootMenuOpen(false)} className="px-3 py-1 bg-stone-700 rounded text-white text-sm">Close</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

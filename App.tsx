@@ -5375,6 +5375,10 @@ const App: React.FC = () => {
       setEffectsEnabled,
       userSettings,
       updateUserSettings,
+      // Mark an entity (item/character/quest/etc) as dirty to schedule persistence
+      markEntityDirty: (id: string) => {
+        setDirtyEntities(prev => new Set([...prev, id]));
+      },
       // New Feature Modals
       openAlchemy: () => setAlchemyModalOpen(true),
       openCooking: () => setCookingModalOpen(true),

@@ -20,6 +20,8 @@ import { modifyPlayerCombatStat } from './vitals';
 import { resolvePotionEffect } from './potionResolver';
 import { getLearnedSpellIds, createAbilityFromSpell } from './spells';
 import { PERK_DEFINITIONS } from '../data/perkDefinitions';
+import { audioService } from './audioService';
+import { applyArrowEffects } from './arrowEffects';
 
 // ============================================================================
 // COMBAT PERK SYSTEM - Perk effects in combat
@@ -1327,6 +1329,8 @@ export const executePlayerAction = (
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
   let narrative = '';
+  // Used item consumed this action (if any)
+  let usedItem: InventoryItem | undefined;
   // Collector for AoE per-target details (engine -> UI contract)
   const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
 

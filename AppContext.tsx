@@ -72,6 +72,8 @@ export interface AppContextType {
   // User settings (Firebase persistent)
   userSettings: UserSettings | null;
   updateUserSettings: ((updates: Partial<UserSettings>) => void) | null;
+  // Mark an entity (character, item, quest, etc.) as dirty so it will be persisted in the debounced save loop
+  markEntityDirty: (id: string) => void;
   // New Feature Modals
   openAlchemy?: () => void;
   openCooking?: () => void;
