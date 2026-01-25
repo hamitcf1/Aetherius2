@@ -154,7 +154,7 @@ import type { PreferredAIModel } from './services/geminiService';
 import type { UserSettings } from './services/firestore';
 import LevelUpModal from './components/LevelUpModal';
 import { applyLevelUpToCharacter } from './utils/levelUpHelpers';
-import { getXPForNextLevel, getXPProgress, getTotalXPForLevel } from './utils/levelingSystem';
+import { getXPForNextLevel, getXPProgress, getTotalXPForLevel, LEVELING_CONFIG } from './utils/levelingSystem';
 import PerkTreeModal from './components/PerkTreeModal';
 import CompanionsModal from './components/CompanionsModal';
 import CompanionDialogueModal from './components/CompanionDialogueModal';
@@ -4878,20 +4878,55 @@ const App: React.FC = () => {
       return updated;
     }));
 
-    // Check for new tier unlock and generate events
+    // Check for new tier unlock and generate events for this level
     checkAndGenerateNewEvents(p.newLevel);
 
-    setPendingLevelUp(null);
-    // Remove any available-level entry for this character (applied now)
-    setAvailableLevelUps(prev => {
-      const copy = { ...prev };
-      delete copy[p.charId];
-      return copy;
-    });
-    // Reset queued guard so subsequent level-ups can be queued in future
-    levelUpQueuedRef.current = false;
-    setSaveMessage(`Level ${p.newLevel} applied.`);
-    setTimeout(() => setSaveMessage(null), 2500);
+    // After applying this level, check whether remaining XP qualifies for another level
+    const xpProgressAfter = getXPProgress(p.remainingXP, p.newLevel);
+    const xpForNextAfter = getXPForNextLevel(p.newLevel);
+
+    if (xpProgressAfter.current >= xpForNextAfter && p.newLevel < LEVELING_CONFIG.maxLevel) {
+      // Queue another pending level up immediately (user must confirm each level)
+      const nextPending = {
+        charId: p.charId,
+        charName: p.charName,
+        newLevel: p.newLevel + 1,
+        remainingXP: p.remainingXP,
+        archetype: p.archetype,
+        previousXP: p.previousXP
+      };
+
+      // Unmount then remount the modal so internal modal effects (default choice, etc.) run cleanly
+      setPendingLevelUp(null);
+      setTimeout(() => {
+        setPendingLevelUp(nextPending);
+        showLevelUpNotification(p.charName, nextPending.newLevel);
+
+        // Keep the queued guard set so further XP changes don't interfere
+        levelUpQueuedRef.current = true;
+
+        // Ensure there is no stale available-level entry
+        setAvailableLevelUps(prev => {
+          const copy = { ...prev };
+          delete copy[p.charId];
+          return copy;
+        });
+
+        setSaveMessage(`${p.charName} can level up again — confirm to apply.`);
+        setTimeout(() => setSaveMessage(null), 3500);
+      }, 50);
+    } else {
+      // No more immediate levels — finalize
+      setPendingLevelUp(null);
+      setAvailableLevelUps(prev => {
+        const copy = { ...prev };
+        delete copy[p.charId];
+        return copy;
+      });
+      levelUpQueuedRef.current = false;
+      setSaveMessage(`Level ${p.newLevel} applied.`);
+      setTimeout(() => setSaveMessage(null), 2500);
+    }
   };
 
   const cancelLevelUp = () => {

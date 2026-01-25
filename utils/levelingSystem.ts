@@ -113,7 +113,7 @@ export function checkLevelUp(currentXP: number, currentLevel: number): {
     
     return {
       shouldLevelUp: true,
-      newLevel: newLevel + 1,
+      newLevel: newLevel,
       remainingXP: currentXP // Keep total XP, level is calculated from it
     };
   }
