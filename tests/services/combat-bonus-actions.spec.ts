@@ -29,4 +29,14 @@ describe('combat — bonus action support', () => {
     const res: any = executePlayerAction(state, playerStats, 'magic', undefined, 'summon_wolf', undefined, undefined, 15, { perks: [], skills: [] } as any);
     expect(res.consumedAction).toBe('bonus');
   });
+
+  it('healing abilities consume the bonus action', () => {
+    const healAbility: any = { id: 'heal_minor', name: 'Healing Touch', type: 'magic', cost: 10, heal: 25, cooldown: 1 };
+    const state: any = initializeCombat([{ id: 'e1', name: 'Bandit', level: 1, maxHealth: 20, currentHealth: 20 } as any], 'road');
+    const playerStats: any = { currentHealth: 10, maxHealth: 100, currentMagicka: 50, maxMagicka: 50, abilities: [healAbility] };
+
+    const res: any = executePlayerAction(state, playerStats, 'magic', undefined, 'heal_minor', undefined, undefined, 12, { perks: [], skills: [] } as any);
+    expect(res.consumedAction).toBe('bonus');
+    expect(res.newPlayerStats.currentHealth).toBeGreaterThan(10);
+  });
 });
