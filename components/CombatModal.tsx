@@ -1332,9 +1332,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     // Pre-check: determine whether this requested action consumes a main or bonus action.
     let intendedActionKind = (() => {
+      // Skip and End Turn are non-consuming actions (allow them regardless of main/bonus usage)
+      if (action === 'skip') return 'none' as const;
+      if (action === 'end_turn') return 'none' as const;
       if (action === 'item') return 'bonus' as const;
       if (action === 'defend') return 'bonus' as const;
-      if (action === 'end_turn') return 'main' as const;
       if (action === 'magic' && abilityId) {
         const ab = playerStats.abilities.find(a => a.id === abilityId);
         if (ab && ab.effects && ab.effects.some((ef: any) => ef.type === 'summon')) return 'bonus' as const;
