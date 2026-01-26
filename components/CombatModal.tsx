@@ -39,6 +39,7 @@ import { audioService } from '../services/audioService';
 import ArrowPicker from './ArrowPicker';
 import { getItemBaseAndBonus } from '../services/upgradeService';
 import { getItemRestorationValues } from '../services/nutritionData';
+import { getSpellEffectType, SpellEffectState, ScreenFlash, ParticleEffect, EnergyRing, LightningBolt, HolyLight, PortalRift, ArcEffect } from './SpellEffects';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
 // Play combat sound based on action type and actor info (enemy/ally/player)
@@ -718,6 +719,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, []);
 
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
+  const [spellEffects, setSpellEffects] = useState<Array<SpellEffectState>>([]);
+  const [screenFlash, setScreenFlash] = useState<SpellEffectState['type'] | null>(null);
   const [awaitingCompanionAction, setAwaitingCompanionAction] = useState(false);
   const enemyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
@@ -1459,6 +1462,30 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         playCombatSound('block', undefined);
       } else {
         playCombatSound(actionType as 'melee' | 'ranged' | 'magic' | 'shout', targetEnemy, ability);
+      }
+
+      // Trigger visual effects based on ability type
+      if (action === 'magic' && ability) {
+        const effectType = getSpellEffectType(ability);
+        if (effectType !== 'none') {
+          // Flash screen with effect color
+          setScreenFlash(effectType);
+          setTimeout(() => setScreenFlash(null), 400);
+
+          // Add spell effect to state so they render
+          const effectId = `spell_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+          setSpellEffects(effects => [...effects, {
+            id: effectId,
+            type: effectType,
+            startTime: Date.now(),
+            duration: 1000
+          }]);
+
+          // Clean up effect after duration
+          setTimeout(() => {
+            setSpellEffects(effects => effects.filter(e => e.id !== effectId));
+          }, 1500);
+        }
       }
 
       // If the engine returned an AoE summary, present richer feedback (SFX + floating indicators)
@@ -3050,7 +3077,58 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         />
       )}
 
+      {/* Screen flash effects */}
+      {screenFlash && <ScreenFlash effectType={screenFlash} duration={300} />}
 
+      {/* Spell visual effects */}
+      {spellEffects.map((effect) => {
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+
+        return (
+          <div key={effect.id}>
+            {/* Render different effects based on spell type */}
+            {effect.type === 'healing' && (
+              <>
+                <HolyLight x={centerX} y={centerY - 100} duration={800} />
+                <ParticleEffect x={centerX} y={centerY} effectType="healing" count={15} />
+                <EnergyRing x={centerX} y={centerY} effectType="healing" duration={600} />
+              </>
+            )}
+            {effect.type === 'conjuration' && (
+              <>
+                <PortalRift x={centerX} y={centerY} duration={800} />
+                <ParticleEffect x={centerX} y={centerY} effectType="conjuration" count={20} />
+              </>
+            )}
+            {effect.type === 'fire' && (
+              <>
+                <ParticleEffect x={centerX} y={centerY} effectType="fire" count={18} />
+                <EnergyRing x={centerX} y={centerY} effectType="fire" duration={500} />
+              </>
+            )}
+            {effect.type === 'frost' && (
+              <>
+                <ParticleEffect x={centerX} y={centerY} effectType="frost" count={18} />
+                <EnergyRing x={centerX} y={centerY} effectType="frost" duration={500} />
+              </>
+            )}
+            {effect.type === 'shock' && (
+              <>
+                <LightningBolt
+                  fromX={centerX}
+                  fromY={centerY - 200}
+                  toX={centerX}
+                  toY={centerY + 200}
+                  duration={150}
+                />
+                <ParticleEffect x={centerX} y={centerY} effectType="shock" count={20} />
+                <EnergyRing x={centerX} y={centerY} effectType="shock" duration={400} />
+              </>
+            )}
+          </div>
+        );
+      })}
 
       {/* Floating damage / hit indicators */}
       {floatingHits.map((hit) => {
