@@ -274,6 +274,7 @@ const EnemyCard: React.FC<{
   isCurrentTurn?: boolean;
   onToggleAutoControl?: () => void;
 }> = ({ enemy, isTarget, onClick, containerRef, isHighlighted, isCurrentTurn, onToggleAutoControl }) => {
+  const { effectsEnabled } = useAppContext();
   const healthPercent = (enemy.currentHealth / enemy.maxHealth) * 100;
   const isDead = enemy.currentHealth <= 0;
   const isDecaying = !!(enemy as any).companionMeta?.decayActive;
@@ -374,15 +375,32 @@ const EnemyCard: React.FC<{
         return null;
       })()}
 
-      {/* Status effects */}
+      {/* Status effects (visual badges) */}
       {enemy.activeEffects && enemy.activeEffects.length > 0 && (
-        <div className="flex gap-1 flex-wrap">
-          {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => (
-            <span key={`${enemy.id}-effect-${ae.effect?.type || 'unknown'}-${i}`} className="px-1.5 py-0.5 bg-purple-900/60 rounded text-xs text-purple-300">
-              {ae.effect.type} ({ae.turnsRemaining})
-            </span>
-          ))}
+        <div className="flex gap-2 items-center">
+          {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => {
+            const t = ae.effect?.type || 'unknown';
+            const cls = t === 'fire' || t === 'burn' ? 'effect-fire' : t === 'frost' ? 'effect-frost' : t === 'shock' ? 'effect-shock' : t === 'conjuration' ? 'effect-conjuration' : '';
+            return (
+              <div key={`${enemy.id}-effect-${t}-${i}`} className={`enemy-effect-badge ${cls}`} title={`${t} (${ae.turnsRemaining})`}>
+                <span className="effect-icon">{t === 'fire' || t === 'burn' ? '🔥' : t === 'frost' ? '❄️' : t === 'shock' ? '⚡' : t === 'conjuration' ? '✨' : '🔸'}</span>
+                <span className="text-xs">{t}{ae.turnsRemaining ? ` ${ae.turnsRemaining}` : ''}</span>
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      {/* Per-enemy embedded flame indicator (for persistent fire) */}
+      {effectsEnabled && (enemy.activeEffects || []).some((ae: any) => ['fire','burn'].includes(ae.effect?.type)) && (
+        <div className="enemy-flame-embed" aria-hidden>
+          <div className="ember" />
+        </div>
+      )}
+
+      {/* brief impact pulse when hit (transient) */}
+      {isHighlighted && (
+        <div className="enemy-impact-pulse" aria-hidden></div>
       )}
       
       {/* Death overlay */}
@@ -752,6 +770,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
   const [spellEffects, setSpellEffects] = useState<Array<SpellEffectState>>([]);
   const [screenFlash, setScreenFlash] = useState<SpellEffectState['type'] | null>(null);
+
+  // Transient per-enemy hit/pulse effects (e.g., burning impact briefly on the enemy card)
+  const [recentEnemyHitEffects, setRecentEnemyHitEffects] = useState<Record<string, string | null>>({});
+  const triggerEnemyHitEffect = (enemyId: string, effectType: string, msDuration = 900) => {
+    if (!effectsEnabled) return;
+    setRecentEnemyHitEffects(prev => ({ ...prev, [enemyId]: effectType }));
+    setTimeout(() => setRecentEnemyHitEffects(prev => ({ ...prev, [enemyId]: null })), msDuration);
+  };
+
   const [awaitingCompanionAction, setAwaitingCompanionAction] = useState(false);
   const enemyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
@@ -1598,6 +1625,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             // brief highlight
             setRecentlyHighlighted(d.id);
             setTimeout(() => setRecentlyHighlighted(null), ms(900));
+
+            // Brief per-enemy hit pulse/impact + anchored particle for the ability's effect type
+            try {
+              if (effectType && d.id) {
+                triggerEnemyHitEffect(d.id, effectType);
+              }
+            } catch (e) {}
+
             setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           });
 
@@ -3214,8 +3249,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       {/* Spell visual effects */}
       {spellEffects.map((effect) => {
-        const centerX = window.innerWidth / 2;
-        const centerY = window.innerHeight / 2;
+        // If effect targets a specific entity, anchor to that entity if possible
+        let centerX = window.innerWidth / 2;
+        let centerY = window.innerHeight / 2;
+        if ((effect as any).targetId) {
+          const t = (effect as any).targetId;
+          if (t === 'player' && playerRef.current) {
+            const r = playerRef.current.getBoundingClientRect();
+            centerX = r.left + r.width / 2;
+            centerY = r.top + r.height / 2;
+          } else if (enemyRefs.current && enemyRefs.current[t]) {
+            const r = enemyRefs.current[t]!.getBoundingClientRect();
+            centerX = r.left + r.width / 2;
+            centerY = r.top + r.height / 2;
+          }
+        }
 
         return (
           <div key={effect.id}>

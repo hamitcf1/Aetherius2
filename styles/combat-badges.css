@@ -34,3 +34,64 @@
 
 /* Strong override to remove remaining tailwind pulse animations on these selectors */
 .combat-badge, .bonus-pill, .combat-badge > span, .bonus-pill > span { animation: none !important; }
+
+/* Enemy status effect badges (fire/frost/shock) */
+.enemy-effect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+
+.enemy-effect-badge .effect-icon { transform-origin: center; }
+
+.enemy-effect-badge.effect-fire { background: linear-gradient(90deg,#c2410c,#f97316); }
+.enemy-effect-badge.effect-frost { background: linear-gradient(90deg,#0369a1,#60a5fa); }
+.enemy-effect-badge.effect-shock { background: linear-gradient(90deg,#d97706,#facc15); }
+.enemy-effect-badge.effect-conjuration { background: linear-gradient(90deg,#7c3aed,#c084fc); }
+
+/* small burning ember pulse on container */
+.enemy-flame-embed {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.enemy-flame-embed .ember {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #fff, #ffbb00 30%, rgba(255,85,0,0.95) 60%);
+  box-shadow: 0 0 8px rgba(255,120,20,0.9), 0 0 20px rgba(255,80,10,0.6);
+  animation: emberRise 900ms ease-out infinite;
+}
+@keyframes emberRise {
+  0% { transform: translateY(0) scale(0.9); opacity: 1; }
+  50% { transform: translateY(-8px) scale(1.05); opacity: 0.9; }
+  100% { transform: translateY(-14px) scale(0.9); opacity: 0; }
+}
+
+/* subtle impact pulse (used when a target is hit) */
+.enemy-impact-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  box-shadow: 0 0 0 rgba(255,255,255,0.0);
+  animation: impactPulse 420ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes impactPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.12); transform: scale(1); }
+  50% { box-shadow: 0 0 40px 6px rgba(255,255,255,0.06); transform: scale(1.02); }
+  100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); transform: scale(1); }
+}
