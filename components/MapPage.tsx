@@ -381,18 +381,33 @@ export const MapPage: React.FC<MapPageProps> = ({
   // Merge all locations
   const allLocations = useMemo(() => {
     const baseLocations = SKYRIM_LOCATIONS.filter(loc => loc.type !== 'hold');
-    const discovered: MapLocation[] = discoveredLocations.map(dl => ({
-      id: `discovered_${dl.name.toLowerCase().replace(/\s+/g, '_')}`,
-      name: dl.name,
-      type: dl.type,
-      x: dl.x,
-      y: dl.y,
-      hold: dl.hold,
-      description: dl.description,
-      dangerLevel: dl.dangerLevel,
-      faction: dl.faction,
-      rumors: dl.rumors,
-    }));
+    const discovered: MapLocation[] = discoveredLocations.map(dl => {
+      // Support legacy string entries as well as full objects
+      const isString = typeof dl === 'string';
+      const name = isString ? dl : dl?.name || 'Unknown';
+      const type = isString ? 'landmark' : dl?.type || 'landmark';
+      const x = isString ? 50 : (dl?.x ?? 50);
+      const y = isString ? 50 : (dl?.y ?? 50);
+      const hold = isString ? undefined : dl?.hold;
+      const description = isString ? undefined : dl?.description;
+      const dangerLevel = isString ? undefined : dl?.dangerLevel;
+      const faction = isString ? undefined : dl?.faction;
+      const rumors = isString ? [] : (dl?.rumors || []);
+
+      return {
+        id: `discovered_${String(name).toLowerCase().replace(/\s+/g, '_')}`,
+        name: String(name),
+        type: type as MapLocation['type'],
+        x,
+        y,
+        hold,
+        description,
+        dangerLevel,
+        faction,
+        rumors,
+      } as MapLocation;
+    });
+
     const existingNames = new Set(baseLocations.map(l => l.name.toLowerCase()));
     const newDiscovered = discovered.filter(d => !existingNames.has(d.name.toLowerCase()));
     return [...baseLocations, ...newDiscovered];

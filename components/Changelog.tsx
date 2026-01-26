@@ -18,6 +18,31 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.6',
+    date: '2026-01-26',
+    title: 'Combat: VFX & Tests',
+    changes: [
+      { type: 'combat', text: 'Combat: Restored healing and conjuration visual effects and screen flashes; spell visuals now anchor to their targets' },
+      { type: 'improvement', text: 'Combat: Increased VFX z-index and standardized timing (ms helper) so effects render above modals and persist reliably' },
+      { type: 'fix', text: 'Tests: added unit tests for healing and conjuration visuals and improved test stability for spell effects' },
+    ]
+  },
+  {
+    version: '1.0.5',
+    date: '2026-01-26',
+    title: 'Hotfixes: Modals, Combat & Map Stability',
+    changes: [
+      { type: 'fix', text: 'Factions modal now uses the shared `ModalWrapper` — centers properly and gains consistent ESC/backdrop behavior' },
+      { type: 'fix', text: 'Travel modal now uses the shared `ModalWrapper` and centers correctly' },
+      { type: 'fix', text: 'Map: fixed crash when `discoveredLocations` contained legacy string entries — MapPage now accepts string or object entries' },
+      { type: 'fix', text: 'Combat: Healing (bonus action) abilities correctly consume the Bonus Action to prevent infinite healing loops' },
+      { type: 'fix', text: 'Accessibility: Blacksmith modal item rows no longer nest <button> elements (converted to accessible `div role="button"`), fixing hydration and nesting errors' },
+      { type: 'improvement', text: 'Modal consistency: multiple modals (Travel, Factions, etc.) now share `ModalWrapper` for consistent overlay, z-index, and scroll-lock behavior' },
+      { type: 'improvement', text: 'Tests: added unit test ensuring healing abilities consume bonus action; added robustness improvements for map-related tests' },
+      { type: 'fix', text: 'Various small build/test cleanups and reliability fixes' },
+    ]
+  },
+  {
     version: '1.0.4',
     date: '2026-01-19',
     title: 'Event Gameplay Integration - Real Consequences',

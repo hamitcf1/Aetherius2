@@ -1578,21 +1578,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (action === 'magic' && ability) {
         const effectType = getSpellEffectType(ability);
         if (effectType !== 'none' && effectsEnabled) {
-          setTimeout(() => setScreenFlash(null), 400);
+          // show a brief screen flash for the effect
+          setScreenFlash(effectType);
+          setTimeout(() => setScreenFlash(null), ms(400));
 
-          // Add spell effect to state so they render
+          // Add spell effect to state so they render (anchor to target when possible)
           const effectId = `spell_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+          const targetIdForEffect = (typeof targetToUse !== 'undefined' && targetToUse !== null) ? targetToUse : (selectedTarget || 'player');
           setSpellEffects(effects => [...effects, {
             id: effectId,
             type: effectType,
             startTime: Date.now(),
-            duration: 1000
+            duration: 1000,
+            targetId: targetIdForEffect
           }]);
 
-          // Clean up effect after duration
+          // Clean up effect after duration (use ms-based scaling, but keep a small minimum)
           setTimeout(() => {
             setSpellEffects(effects => effects.filter(e => e.id !== effectId));
-          }, 1500);
+          }, Math.max(150, ms(1200)));
         }
       }
 
@@ -1675,8 +1679,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       const effectId = `heal_item_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
       if (effectsEnabled) {
         setScreenFlash('healing');
-        setSpellEffects(effects => [...effects, { id: effectId, type: 'healing', startTime: Date.now(), duration: 1000 }]);
-        setTimeout(() => setSpellEffects(effects => effects.filter(e => e.id !== effectId)), ms(1200));
+        setTimeout(() => setScreenFlash(null), ms(400));
+        setSpellEffects(effects => [...effects, { id: effectId, type: 'healing', startTime: Date.now(), duration: 1000, targetId: 'player' }]);
+        setTimeout(() => setSpellEffects(effects => effects.filter(e => e.id !== effectId)), Math.max(150, ms(1200)));
       }
       if (showToast) {
         showToast(`Restored ${newPlayerStats.currentHealth - playerStats.currentHealth} health!`, 'success');
@@ -1963,7 +1968,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     // Default immediate execution
     lastAbilityClickAt.current = Date.now();
-    handlePlayerAction('attack', ability.id);
+    const actionForAbility = (ability.type === 'magic' || ability.type === 'shout') ? 'magic' : 'attack';
+    handlePlayerAction(actionForAbility, ability.id);
   };
 
   // Arrow selection helper - itemId is the arrow bundle id (e.g., 'fire_arrows')
@@ -2640,7 +2646,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                         // If this is the player's turn, delegate to existing handler
                         if (isPlayerTurn) {
                           // Use setTimeout to ensure state is updated before action
-                          setTimeout(() => handlePlayerAction('attack', abilityIdToUse), 0);
+                          const abilityToUse = playerStats.abilities.find(a => a.id === abilityIdToUse);
+                          const actionForAbility = (abilityToUse && (abilityToUse.type === 'magic' || abilityToUse.type === 'shout')) ? 'magic' : 'attack';
+                          setTimeout(() => handlePlayerAction(actionForAbility, abilityIdToUse), 0);
                           return;
                         }
 
@@ -2712,7 +2720,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
                         if (isPlayerTurn) {
                           lastAbilityClickAt.current = Date.now();
-                          handlePlayerAction('attack', abilityIdToUse);
+                          const abilityToUse = playerStats.abilities.find(a => a.id === abilityIdToUse);
+                          const actionForAbility = (abilityToUse && (abilityToUse.type === 'magic' || abilityToUse.type === 'shout')) ? 'magic' : 'attack';
+                          handlePlayerAction(actionForAbility, abilityIdToUse);
                           return;
                         }
 

@@ -533,10 +533,13 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
               {/* Reserved gutter + RTL places the scrollbar on the LEFT; inner children preserve normal LTR layout */}
               {visibleEligible.map((it) => {
                 return (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     aria-pressed={selectedId === it.id}
                     key={it.id}
                     onClick={() => setSelectedId(it.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(it.id); } }}
                     className={`w-full text-left p-3 rounded border transition-all relative z-0 group ${selectedId === it.id ? 'border-skyrim-gold bg-skyrim-gold/10 ring-1 ring-skyrim-gold/30' : 'border-skyrim-border/50 bg-skyrim-paper/40 hover:border-skyrim-gold/40 hover:bg-skyrim-paper/60'}`}
                   >
                     <div className="flex items-center justify-between min-w-0">
@@ -583,7 +586,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 

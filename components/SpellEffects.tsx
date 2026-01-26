@@ -97,7 +97,7 @@ export const ScreenFlash: React.FC<{
 
   return (
     <div
-      className={`fixed inset-0 pointer-events-none z-40 ${bgColor}`}
+      className={`fixed inset-0 pointer-events-none z-[100] ${bgColor}`}
       style={{
         opacity,
         transition: `opacity ${duration}ms ease-out`,
@@ -182,7 +182,7 @@ export const ParticleEffect: React.FC<{
   }
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-30">
+    <div className="fixed inset-0 pointer-events-none z-[95]">
       {particles.map((p) => (
         <div
           key={p.id}
@@ -244,7 +244,7 @@ export const EnergyRing: React.FC<{
 
   return (
     <div
-      className="fixed pointer-events-none z-30"
+      className="fixed pointer-events-none z-[95]"
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -303,7 +303,7 @@ export const LightningBolt: React.FC<{
 
   return (
     <svg
-      className="fixed pointer-events-none z-30"
+      className="fixed pointer-events-none z-[95]"
       style={{
         left: 0,
         top: 0,
@@ -364,7 +364,7 @@ export const HolyLight: React.FC<{
 
   return (
     <div
-      className="fixed pointer-events-none z-30"
+      className="fixed pointer-events-none z-[95]"
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -407,7 +407,7 @@ export const PortalRift: React.FC<{
 }> = ({ x, y, duration = 800 }) => {
   return (
     <div
-      className="fixed pointer-events-none z-30"
+      className="fixed pointer-events-none z-[95]"
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -499,7 +499,7 @@ export const ArcEffect: React.FC<{
 
   return (
     <svg
-      className="fixed pointer-events-none z-30"
+      className="fixed pointer-events-none z-[95]"
       style={{
         left: 0,
         top: 0,

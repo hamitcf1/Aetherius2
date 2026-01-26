@@ -2069,6 +2069,9 @@ export const executePlayerAction = (
           newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, (newPlayerStats.currentHealth || 0) + healAmount);
         }
 
+        // Healing consumes the BONUS action
+        consumedAction = 'bonus';
+
         // Set cooldown if any
         if (ability.cooldown) {
           newState.abilityCooldowns[ability.id] = ability.cooldown;
@@ -2218,6 +2221,11 @@ export const executePlayerAction = (
         // Set cooldown
         if (ability.cooldown) {
           newState.abilityCooldowns[ability.id] = ability.cooldown;
+        }
+
+        // Utility/buff abilities that are 'buff' in nature consume the bonus action by convention
+        if (ability.effects && ability.effects.some((ef: any) => ef.type === 'buff' || ef.type === 'heal')) {
+          consumedAction = 'bonus';
         }
 
         narrative = `You use ${ability.name} on ${target.name}.${narrative}`;
