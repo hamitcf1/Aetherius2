@@ -6,7 +6,7 @@ This document explains how to use the console demo commands for testing and deve
 
 The demo commands are automatically loaded when the application starts. Open your browser's developer console (F12) to access them.
 
-## Available Commands
+## Available Commandss
 
 ### Character Management
 
