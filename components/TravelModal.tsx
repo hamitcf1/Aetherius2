@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import ModalWrapper from './ModalWrapper';
 import { 
   SKYRIM_LOCATIONS, 
   TravelLocation, 
@@ -123,7 +124,7 @@ const TravelModal: React.FC<TravelModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay travel-modal" onClick={onClose}>
+    <ModalWrapper open={isOpen} onClose={onClose} className="travel-modal" zIndex="z-[80]">
       <div 
         className="modal-content"
         onClick={e => e.stopPropagation()}
@@ -554,7 +555,7 @@ const TravelModal: React.FC<TravelModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </ModalWrapper>
   );
 };
 
