@@ -652,7 +652,7 @@ export const generatePlayerAbilities = (
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
   abilities.push({
     id: 'basic_attack',
-    name: weapon ? `Strike with ${weapon.name}` : 'Unarmed Strike',
+    name: weapon ? `Strike with ${weapon.name}` : 'Basic Attack',
     type: 'melee',
     damage: weapon?.damage || 10,
     cost: 10, // stamina
@@ -1441,8 +1441,13 @@ export const generatePlayerAbilities = (
 
   // Learned spells (from spells registry) -> turn into abilities
   try {
-    const learned = getLearnedSpellIds(character.id || '');
+    // Only load learned spells when we have a canonical character id
+    const learned = character && character.id ? getLearnedSpellIds(character.id) : [];
     learned.forEach(spellId => {
+      // Ensure empowered/variant spells are actually unlocked by character level/perks
+      try {
+        if (!isSpellVariantUnlocked(character, spellId)) return;
+      } catch (e) {}
       const ab = createAbilityFromSpell(spellId);
       if (ab) abilities.push(ab as any);
     });

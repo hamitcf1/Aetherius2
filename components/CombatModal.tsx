@@ -41,6 +41,7 @@ import ArrowPicker from './ArrowPicker';
 import { getItemBaseAndBonus } from '../services/upgradeService';
 import { getItemRestorationValues } from '../services/nutritionData';
 import { getSpellEffectType, SpellEffectState, ScreenFlash, ParticleEffect, EnergyRing, LightningBolt, HolyLight, PortalRift, ArcEffect } from './SpellEffects';
+import '../styles/combat-badges.css';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
 // Play combat sound based on action type and actor info (enemy/ally/player)
@@ -273,6 +274,7 @@ const EnemyCard: React.FC<{
   isCurrentTurn?: boolean;
   onToggleAutoControl?: () => void;
 }> = ({ enemy, isTarget, onClick, containerRef, isHighlighted, isCurrentTurn, onToggleAutoControl }) => {
+  const { effectsEnabled } = useAppContext();
   const healthPercent = (enemy.currentHealth / enemy.maxHealth) * 100;
   const isDead = enemy.currentHealth <= 0;
   const isDecaying = !!(enemy as any).companionMeta?.decayActive;
@@ -373,15 +375,32 @@ const EnemyCard: React.FC<{
         return null;
       })()}
 
-      {/* Status effects */}
+      {/* Status effects (visual badges) */}
       {enemy.activeEffects && enemy.activeEffects.length > 0 && (
-        <div className="flex gap-1 flex-wrap">
-          {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => (
-            <span key={`${enemy.id}-effect-${ae.effect?.type || 'unknown'}-${i}`} className="px-1.5 py-0.5 bg-purple-900/60 rounded text-xs text-purple-300">
-              {ae.effect.type} ({ae.turnsRemaining})
-            </span>
-          ))}
+        <div className="flex gap-2 items-center">
+          {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => {
+            const t = ae.effect?.type || 'unknown';
+            const cls = t === 'fire' || t === 'burn' ? 'effect-fire' : t === 'frost' ? 'effect-frost' : t === 'shock' ? 'effect-shock' : t === 'conjuration' ? 'effect-conjuration' : '';
+            return (
+              <div key={`${enemy.id}-effect-${t}-${i}`} className={`enemy-effect-badge ${cls}`} title={`${t} (${ae.turnsRemaining})`}>
+                <span className="effect-icon">{t === 'fire' || t === 'burn' ? '🔥' : t === 'frost' ? '❄️' : t === 'shock' ? '⚡' : t === 'conjuration' ? '✨' : '🔸'}</span>
+                <span className="text-xs">{t}{ae.turnsRemaining ? ` ${ae.turnsRemaining}` : ''}</span>
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      {/* Per-enemy embedded flame indicator (for persistent fire) */}
+      {effectsEnabled && (enemy.activeEffects || []).some((ae: any) => ['fire','burn'].includes(ae.effect?.type)) && (
+        <div className="enemy-flame-embed" aria-hidden>
+          <div className="ember" />
+        </div>
+      )}
+
+      {/* brief impact pulse when hit (transient) */}
+      {isHighlighted && (
+        <div className="enemy-impact-pulse" aria-hidden></div>
       )}
       
       {/* Death overlay */}
@@ -628,6 +647,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     return () => clearTimeout(t);
   }, [selectedTarget]);
 
+  // App context (get user settings & update handler for server-side persistence)
+  const { userSettings, updateUserSettings, effectsEnabled } = useAppContext();
+
   // One-time tip for new players explaining the Main/Bonus actions (persisted server-side)
   useEffect(() => {
     try {
@@ -641,6 +663,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       // ignore errors
     }
   }, [showToast, userSettings?.seenBonusIntro, updateUserSettings]);
+
+  // Small helper to avoid spamming the same toast repeatedly (debounce per message)
+  const lastToastRef = useRef<{ msg: string; at: number } | null>(null);
+  const showThrottledToast = (msg: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', minMs = 1200) => {
+    try {
+      if (!showToast) return;
+      const now = Date.now();
+      if (lastToastRef.current && lastToastRef.current.msg === msg && now - lastToastRef.current.at < minMs) return;
+      lastToastRef.current = { msg, at: now };
+      showToast(msg, type);
+    } catch (e) {}
+  }
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
   // When an invalid-target is detected we briefly suppress rendering of the textual "Roll:" label
@@ -654,10 +688,6 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const lastInvalidTargetRef = useRef(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
   const [rollActor, setRollActor] = useState<'player' | 'enemy' | 'ally' | null>(null);
-
-  // App context (get user settings & update handler for server-side persistence)
-  const { userSettings, updateUserSettings } = useAppContext();
-
 
   // Animation helper state & ref for D20 wheel-style roll animation
   const rollAnimRef = useRef<number | null>(null);
@@ -740,6 +770,15 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
   const [spellEffects, setSpellEffects] = useState<Array<SpellEffectState>>([]);
   const [screenFlash, setScreenFlash] = useState<SpellEffectState['type'] | null>(null);
+
+  // Transient per-enemy hit/pulse effects (e.g., burning impact briefly on the enemy card)
+  const [recentEnemyHitEffects, setRecentEnemyHitEffects] = useState<Record<string, string | null>>({});
+  const triggerEnemyHitEffect = (enemyId: string, effectType: string, msDuration = 900) => {
+    if (!effectsEnabled) return;
+    setRecentEnemyHitEffects(prev => ({ ...prev, [enemyId]: effectType }));
+    setTimeout(() => setRecentEnemyHitEffects(prev => ({ ...prev, [enemyId]: null })), msDuration);
+  };
+
   const [awaitingCompanionAction, setAwaitingCompanionAction] = useState(false);
   const enemyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const playerRef = useRef<HTMLDivElement | null>(null);
@@ -1319,10 +1358,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     setIsAnimating(true);
 
     // Pre-check: determine whether this requested action consumes a main or bonus action.
-    const intendedActionKind = (() => {
+    let intendedActionKind = (() => {
+      // Skip and End Turn are non-consuming actions (allow them regardless of main/bonus usage)
+      if (action === 'skip') return 'none' as const;
+      if (action === 'end_turn') return 'none' as const;
       if (action === 'item') return 'bonus' as const;
       if (action === 'defend') return 'bonus' as const;
-      if (action === 'end_turn') return 'main' as const;
       if (action === 'magic' && abilityId) {
         const ab = playerStats.abilities.find(a => a.id === abilityId);
         if (ab && ab.effects && ab.effects.some((ef: any) => ef.type === 'summon')) return 'bonus' as const;
@@ -1330,14 +1371,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return 'main' as const;
     })();
 
+    // Determine ability if provided and allow it to modify action kind detection
+    const preCheckAbility = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
+    if (preCheckAbility) {
+      if (preCheckAbility.effects && preCheckAbility.effects.some((ef: any) => ef.type === 'summon')) intendedActionKind = 'bonus';
+      else if (preCheckAbility.heal || (preCheckAbility.effects && preCheckAbility.effects.some((ef: any) => ef.type === 'heal' || ef.type === 'buff'))) intendedActionKind = 'bonus';
+    }
+
     // Prevent repeated usage of the same action type within a player turn
     if (intendedActionKind === 'main' && combatState.playerMainActionUsed) {
-      if (showToast) showToast('Main action already used this turn.', 'warning');
+      showThrottledToast('Main action already used this turn.', 'warning');
       setIsAnimating(false);
       return;
     }
     if (intendedActionKind === 'bonus' && combatState.playerBonusActionUsed) {
-      if (showToast) showToast('Bonus action already used this turn.', 'warning');
+      showThrottledToast('Bonus action already used this turn.', 'warning');
       setIsAnimating(false);
       return;
     }
@@ -1529,9 +1577,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       // Trigger visual effects based on ability type
       if (action === 'magic' && ability) {
         const effectType = getSpellEffectType(ability);
-        if (effectType !== 'none') {
-          // Flash screen with effect color
-          setScreenFlash(effectType);
+        if (effectType !== 'none' && effectsEnabled) {
           setTimeout(() => setScreenFlash(null), 400);
 
           // Add spell effect to state so they render
@@ -1579,6 +1625,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             // brief highlight
             setRecentlyHighlighted(d.id);
             setTimeout(() => setRecentlyHighlighted(null), ms(900));
+
+            // Brief per-enemy hit pulse/impact + anchored particle for the ability's effect type
+            try {
+              if (effectType && d.id) {
+                triggerEnemyHitEffect(d.id, effectType);
+              }
+            } catch (e) {}
+
             setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           });
 
@@ -1617,6 +1671,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     if (action === 'item' && newPlayerStats.currentHealth > playerStats.currentHealth) {
       setIsHealing(true);
       setTimeout(() => setIsHealing(false), ms(1000));
+      // Add a healing visual effect for item use
+      const effectId = `heal_item_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+      if (effectsEnabled) {
+        setScreenFlash('healing');
+        setSpellEffects(effects => [...effects, { id: effectId, type: 'healing', startTime: Date.now(), duration: 1000 }]);
+        setTimeout(() => setSpellEffects(effects => effects.filter(e => e.id !== effectId)), ms(1200));
+      }
       if (showToast) {
         showToast(`Restored ${newPlayerStats.currentHealth - playerStats.currentHealth} health!`, 'success');
       }
@@ -1893,7 +1954,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // If the user very recently changed target, defer the ability click one tick so selectedTarget stabilizes
     if (Date.now() - (lastUserTargetChangeAt.current || 0) < 80) {
       lastAbilityClickAt.current = Date.now();
-      setTimeout(() => handlePlayerAction('attack', ability.id), 0);
+      setTimeout(() => {
+        const actionForAbility = (ability.type === 'magic' || ability.type === 'shout') ? 'magic' : 'attack';
+        handlePlayerAction(actionForAbility, ability.id);
+      }, 0);
       return;
     }
 
@@ -2076,7 +2140,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
 
       {/* Main combat area - reorganized for mobile */}
-      <div className="flex-1 overflow-auto grid gap-8 lg:grid-cols-[280px_1.8fr_320px_420px] items-stretch min-h-0 p-1 sm:p-4 w-full pb-32 lg:pb-4">
+      <div className="flex-1 overflow-auto grid gap-8 lg:grid-cols-[280px_1.8fr_320px_420px] items-stretch min-h-0 p-1 sm:p-4 w-full pb-32 lg:pb-4 h-[calc(100vh-120px)]">
         {/* Mobile Turn List (scrolls with content) */}
         <div className="lg:hidden w-full">
            <TurnList
@@ -2090,7 +2154,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </div>
 
         {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
-        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0 lg:pr-6 lg:border-r lg:border-stone-800/20">
+        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0 lg:pr-6 lg:border-r lg:border-stone-800/20 h-full">
           <div 
             ref={playerRef} 
             className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''} ${selectedTarget === 'player' ? 'ring-2 ring-green-400/50' : ''} ${pendingTargeting ? 'cursor-pointer hover:ring-2 hover:ring-green-400/30' : ''}`} 
@@ -2154,23 +2218,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             })()}
 
             {/* ACTIONS (moved from right column) */}
-            <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700">
+            <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700 max-h-[360px] overflow-y-auto">
               <h4 className="text-sm font-semibold text-stone-300 mb-2">ACTIONS</h4>
 
               {/* Main / Bonus action indicators (enhanced visuals) */}
-              <div className="flex gap-2 mb-3 items-center">
-                <div data-tooltip="Primary action — Attack, Spell, or Power. Use once per turn." className={`relative px-3 py-1 rounded-full text-xs font-semibold transition-all ${!combatState.playerMainActionUsed ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white ring-2 ring-amber-400/30 animate-pulse shadow-lg' : 'bg-amber-700 text-white opacity-80'}`}>
-                  <span className="inline-block mr-2">⚔️</span>
+              <div className="flex gap-2 mb-3 items-center flex-wrap overflow-hidden">
+                <div data-tooltip="Primary action — Attack, Spell, or Power. Use once per turn." className={`combat-badge main-badge relative px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${!combatState.playerMainActionUsed ? 'bg-amber-500 text-white' : 'bg-amber-700 text-white opacity-80'}`}>
+                  <span className="inline-block mr-1">⚔️</span>
                   <span>Main</span>
                   <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerMainActionUsed ? 'Used' : 'Available'}</span>
-                  {!combatState.playerMainActionUsed && <span className="absolute -top-2 -right-2 text-[10px] px-1 py-0.5 rounded-full bg-amber-300/90 text-amber-900 font-bold animate-pulse">GO</span>}
                 </div>
 
-                <div data-tooltip="Bonus action — Potions, Defend, or Summons. Use once per turn." className={`relative px-3 py-1 rounded-full text-xs font-semibold transition-all ${!combatState.playerBonusActionUsed ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white ring-2 ring-purple-400/30 animate-pulse shadow-lg' : 'bg-amber-700 text-white opacity-80'}`}>
-                  <span className="inline-block mr-2">✨</span>
+                <div data-tooltip="Bonus action — Potions, Defend, or Summons. Use once per turn." className={`combat-badge bonus-badge relative px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${!combatState.playerBonusActionUsed ? 'bg-purple-700 text-white' : 'bg-amber-700 text-white opacity-80'}`}>
+                  <span className="inline-block mr-1">✨</span>
                   <span>Bonus</span>
                   <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerBonusActionUsed ? 'Used' : 'Available'}</span>
-                  {!combatState.playerBonusActionUsed && <span className="absolute -top-2 -right-2 text-[10px] px-1 py-0.5 rounded-full bg-pink-300/90 text-pink-900 font-bold animate-pulse">★</span>}
                 </div>
 
                 <button onClick={() => handlePlayerAction('end_turn')} disabled={!isPlayerTurn || isAnimating} className="ml-auto px-2 py-1 rounded text-xs bg-stone-700 text-white hover:bg-stone-600 disabled:opacity-50">🔚 End Turn</button>
@@ -2188,7 +2250,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     const predicted = Math.min(3, 1 + (perkBonus || 0));
                     return `🛡️ Defend${(combatState as any).playerGuardUsed ? ' (used)' : ''} — ${predicted}r`;
                   })()}
-                  <span data-tooltip="Defend consumes your Bonus action." className={`absolute -top-2 -right-2 text-[10px] px-2 py-0.5 rounded-full font-semibold ${combatState.playerBonusActionUsed ? 'bg-amber-700 text-white opacity-80' : 'bg-indigo-600 text-white shadow-md animate-pulse'}`}>{combatState.playerBonusActionUsed ? 'Used' : 'BONUS'}</span>
+                  <span data-tooltip="Defend consumes your Bonus action." className={`bonus-pill absolute -top-2 -right-2 text-[10px] px-2 py-0.5 rounded-full font-semibold ${combatState.playerBonusActionUsed ? 'bg-amber-700 text-white opacity-80' : 'bg-indigo-600 text-white'}`}>{combatState.playerBonusActionUsed ? 'Used' : 'BONUS'}</span>
                 </button>
 
                 {combatState.fleeAllowed && (
@@ -2214,7 +2276,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 <button
                   onClick={() => handlePlayerAction('skip')}
                   disabled={!isPlayerTurn || isAnimating}
-                  className="w-full p-2 rounded border border-skyrim-border text-skyrim-text hover:bg-stone-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full p-2 rounded bg-stone-700/40 border border-stone-600 text-stone-300 hover:bg-stone-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   ⏭️ Skip Turn
                 </button>
@@ -2222,14 +2284,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
             
             {/* Turn List */}
-            <div className="flex-1 overflow-y-auto max-h-[46vh]">
+            <div className="flex-1 overflow-y-auto max-h-full">
               <TurnList
                 turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
                 currentTurnActor={combatState.currentTurnActor}
                 player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
                 enemies={combatState.enemies}
                 allies={combatState.allies || []}
-                className=""
+                className="h-full"
               />
             </div>
           </div>
@@ -2809,7 +2871,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-left"
                           >
                             <div className="flex justify-between items-center">
-                              <span className="font-medium">{item.name} <span data-tooltip="Using this item consumes your Bonus action." className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-sm animate-pulse">BONUS</span></span>
+                              <span className="font-medium">{item.name} <span data-tooltip="Using this item consumes your Bonus action." className="bonus-pill ml-2 inline-block text-[10px] px-1 py-0.5 rounded-full bg-indigo-600 text-white">BONUS</span></span>
                               <span className="text-xs text-stone-400 bg-stone-800/60 px-1.5 py-0.5 rounded">x{item.quantity}</span>
                             </div>
                             {/* Restoration values display */}
@@ -3041,7 +3103,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                               return;
                             }
                             lastAbilityClickAt.current = Date.now();
-                            handlePlayerAction('attack', ability.id);
+                            const actionForAbility = (ability.type === 'magic' || ability.type === 'shout') ? 'magic' : 'attack';
+                            handlePlayerAction(actionForAbility, ability.id);
                           }}
                           title={ability.description || `${ability.name} - ${ability.type} ability`}
                           data-sfx="button_click"
@@ -3049,7 +3112,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           style={!isDisabledBtn ? { background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.45))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` } : undefined}
                         >
                           <span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ backgroundColor: accent }} />
-                          <span className="truncate">{ability.name}{(ability.effects || []).some((ef: any) => ef.type === 'summon') && <span data-tooltip="Summons consume your Bonus action." className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white shadow-sm animate-pulse">BONUS</span>}</span>
+                          <span className="truncate">{ability.name}{(ability.effects || []).some((ef: any) => ef.type === 'summon') && <span data-tooltip="Summons consume your Bonus action." className="bonus-pill ml-2 inline-block text-[10px] px-1 py-0.5 rounded-full bg-purple-600 text-white">BONUS</span>}</span>
                           {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
                             <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
                           )}
@@ -3186,8 +3249,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
       {/* Spell visual effects */}
       {spellEffects.map((effect) => {
-        const centerX = window.innerWidth / 2;
-        const centerY = window.innerHeight / 2;
+        // If effect targets a specific entity, anchor to that entity if possible
+        let centerX = window.innerWidth / 2;
+        let centerY = window.innerHeight / 2;
+        if ((effect as any).targetId) {
+          const t = (effect as any).targetId;
+          if (t === 'player' && playerRef.current) {
+            const r = playerRef.current.getBoundingClientRect();
+            centerX = r.left + r.width / 2;
+            centerY = r.top + r.height / 2;
+          } else if (enemyRefs.current && enemyRefs.current[t]) {
+            const r = enemyRefs.current[t]!.getBoundingClientRect();
+            centerX = r.left + r.width / 2;
+            centerY = r.top + r.height / 2;
+          }
+        }
 
         return (
           <div key={effect.id}>

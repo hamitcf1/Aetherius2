@@ -786,7 +786,7 @@ const ActionBar: React.FC = () => {
                           </label>
                         </div>
 
-                        {/* Effects Enabled Toggle */}
+                        {/* Effects Enabled Toggle (always visible regardless of weather) */}
                         <div className="mt-3">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
@@ -799,7 +799,7 @@ const ActionBar: React.FC = () => {
                               }}
                               className="accent-skyrim-gold w-4 h-4"
                             />
-                            <span className="text-sm text-skyrim-text">Enable weather & particle effects</span>
+                            <span className="text-sm text-skyrim-text">Enable visual effects (spells, particles, screen flashes)</span>
                           </label>
                         </div>
 
