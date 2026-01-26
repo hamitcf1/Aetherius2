@@ -200,15 +200,16 @@ const rollDice = (count: number, sides: number) => {
 };
 // Resolve attack using nat-only mapping. The nat (1-20) fully determines hit/tier per design.
 // If opts.natRoll is provided it is used; otherwise a d20 is rolled.
+// Dodge is checked AFTER hit determination: if the attack would hit, we apply dodge chance to potentially avoid it.
 const resolveAttack = (opts: {
   attackerLevel: number;
   attackBonus?: number;
   targetArmor: number;
-  targetDodge?: number;
+  targetDodge?: number; // Dodge ability percentage (0-100), applies after hit roll
   critChance?: number;
   natRoll?: number;
-}): { hit: boolean; isCrit: boolean; natRoll: number; rollTier: 'fail' | 'miss' | 'low' | 'mid' | 'high' | 'crit' } => {
-  const { natRoll } = opts;
+}): { hit: boolean; isCrit: boolean; natRoll: number; rollTier: 'fail' | 'miss' | 'low' | 'mid' | 'high' | 'crit'; dodged?: boolean } => {
+  const { natRoll, targetDodge = 0 } = opts;
   const d20 = natRoll && natRoll >= 1 && natRoll <= 20 ? { rolls: [natRoll] } : rollDice(1, 20);
   const nat = d20.rolls[0];
 
@@ -218,17 +219,33 @@ const resolveAttack = (opts: {
   // 5-9 -> low damage
   // 10-14 -> mid damage
   // 15-19 -> high damage
-  // 20 -> absolute success (crit)
-  // Special case: nat === 7 is treated as a critical hit
+  // 20 -> absolute success (crit) - cannot be dodged
+  // Special case: nat === 7 is treated as a critical hit (cannot be dodged)
 
   if (nat === 1) return { hit: false, isCrit: false, natRoll: nat, rollTier: 'fail' };
   if (nat >= 2 && nat <= 4) return { hit: false, isCrit: false, natRoll: nat, rollTier: 'miss' };
-  if (nat === 7) return { hit: true, isCrit: true, natRoll: nat, rollTier: 'crit' };
+  
+  // Critical hits and nat 7 cannot be dodged
+  if (nat === 7 || nat === 20) {
+    return { hit: true, isCrit: true, natRoll: nat, rollTier: nat === 7 ? 'crit' : 'crit' };
+  }
+  
+  // For normal hits, check if the target dodges (before damage tier is determined)
+  // Dodge only applies if hit would have landed
+  const dodgeRoll = Math.random() * 100;
+  const wasDodged = dodgeRoll < targetDodge;
+  
+  if (wasDodged) {
+    return { hit: false, isCrit: false, natRoll: nat, rollTier: 'miss', dodged: true };
+  }
+  
+  // Determine damage tier based on nat roll (only if not dodged)
   if (nat >= 5 && nat <= 9) return { hit: true, isCrit: false, natRoll: nat, rollTier: 'low' };
   if (nat >= 10 && nat <= 14) return { hit: true, isCrit: false, natRoll: nat, rollTier: 'mid' };
   if (nat >= 15 && nat <= 19) return { hit: true, isCrit: false, natRoll: nat, rollTier: 'high' };
-  // nat === 20
-  return { hit: true, isCrit: true, natRoll: nat, rollTier: 'crit' };
+  
+  // nat should not reach here, but default to high
+  return { hit: true, isCrit: false, natRoll: nat, rollTier: 'high' };
 };
 
 // Deterministic damage calculation derived from nat roll and tier.
@@ -1688,9 +1705,10 @@ export const executePlayerAction = (
       // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure or miss)
       if (!attackResolved.hit && (attackResolved.rollTier === 'fail' || attackResolved.rollTier === 'miss')) {
         const hasRerollPerk = !!(character && (character.perks || []).find((p: any) => p.id === 'reroll_on_failure' && (p.rank || 0) > 0));
-        const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : 'miss';
-        if (hasRerollPerk) {
-          // Reroll once automatically
+        const wasDodged = attackResolved.dodged;
+        const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : (wasDodged ? 'dodged' : 'miss');
+        if (hasRerollPerk && !wasDodged) {
+          // Reroll once automatically (but not if dodged, since dodge is an ability check)
           const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
           // Log both rolls (first failed/missed, second result)
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
@@ -1703,7 +1721,8 @@ export const executePlayerAction = (
             narrative = `You roll ${attackResolved.natRoll} - CRITICAL FAILURE! Your ${ability.name} goes horribly wrong, dealing ${selfDamage} damage to yourself!`;
             pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: selfDamage, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
           } else {
-            narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.`;
+            const dodgeText = wasDodged ? ` ${target.name} nimbly sidesteps the attack!` : '';
+            narrative = `You roll ${attackResolved.natRoll} (${rollText}) and ${ability.name} against ${target.name} fails to connect.${dodgeText}`;
             pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative, timestamp: Date.now() });
           }
           break;
@@ -2651,11 +2670,6 @@ export const executeEnemyTurn = (
     appliedDamage = Math.max(0, d);
   }
 
-  // Dodge check still allows extra chance
-  if (appliedDamage > 0 && Math.random() * 100 < playerStats.dodgeChance) {
-    appliedDamage = 0;
-  }
-
   // Tactical Guard (playerActiveEffects) — multiplicative with armor/perks/potions
   const guard = (newState.playerActiveEffects || []).find((pe: any) => pe.effect && ((pe.effect.type === 'buff' && pe.effect.stat === 'guard') || pe.effect.type === 'guard') && pe.turnsRemaining > 0);
   if (guard && appliedDamage > 0) {
@@ -2832,7 +2846,8 @@ export const executeEnemyTurn = (
     }
 
     if (!resolved.hit) {
-      narrative = `${actor.name} uses ${chosenAbility.name} and rolls ${resolved.natRoll} (${resolved.rollTier}), missing ${targetedAlly.name}.`;
+      const dodgeIndicator = resolved.dodged ? ` ${targetedAlly.name} dodges nimbly!` : '';
+      narrative = `${actor.name} uses ${chosenAbility.name} and rolls ${resolved.natRoll} (${resolved.rollTier}), missing ${targetedAlly.name}.${dodgeIndicator}`;
     } else if (appliedDamage === 0) {
       narrative = `${actor.name} attacks ${targetedAlly.name} but deals no damage.`;
     } else {
@@ -2888,7 +2903,8 @@ export const executeEnemyTurn = (
   // Build narrative
   narrative = `${actor.name} uses ${chosenAbility.name}`;
   if (!resolved.hit) {
-    narrative += ` and rolls ${resolved.natRoll} (${resolved.rollTier}), missing you.`;
+    const dodgeIndicator = resolved.dodged ? ' You nimbly dodge the attack!' : '';
+    narrative += ` and rolls ${resolved.natRoll} (${resolved.rollTier}), missing you.${dodgeIndicator}`;
   } else if (appliedDamage === 0) {
     narrative += ` but you avoid the attack!`;
   } else {
@@ -3048,12 +3064,14 @@ export const advanceTurn = (state: CombatState): CombatState => {
   // If we've cycled back to start, increment turn
   if (nextIndex <= currentIndex || nextIndex === 0) {
     newState.turn++;
-    // Reduce cooldowns
-    Object.keys(newState.abilityCooldowns).forEach(key => {
-      if (newState.abilityCooldowns[key] > 0) {
-        newState.abilityCooldowns[key]--;
-      }
-    });
+    // Reduce cooldowns (safety check for undefined abilityCooldowns)
+    if (newState.abilityCooldowns) {
+      Object.keys(newState.abilityCooldowns).forEach(key => {
+        if (newState.abilityCooldowns[key] > 0) {
+          newState.abilityCooldowns[key]--;
+        }
+      });
+    }
     // NOTE: Do NOT unconditionally reset `playerDefending` here — Tactical Guard is round-based and is tracked in playerActiveEffects.
 
     // Decrement playerTurnsRemaining for pending summons and flag newly expired summons to start decaying

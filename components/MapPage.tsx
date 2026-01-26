@@ -203,9 +203,10 @@ export const generateMapEvents = (playerLevel: number): MapEvent[] => {
     { name: 'Giant Camp Raid', type: 'combat', x: 38, y: 42, description: 'Giants are trampling crops. Help drive them away!', levelRequirement: 12, rewards: { gold: { min: 400, max: 900 }, xp: { min: 350, max: 600 }, items: ['Giant\'s Toe', 'Mammoth Tusk'] } },
   ];
 
-  // Filter by level and add dynamic properties
+  // Filter by level - only show events where player level matches exactly or exceeds the requirement
+  // This provides progression feeling - new events unlock as the player levels up
   return baseEvents
-    .filter(e => e.levelRequirement <= playerLevel + 5) // Show events slightly above level
+    .filter(e => e.levelRequirement <= playerLevel) // Only show events matching player level
     .map((e, i) => ({
       ...e,
       id: `event_${i}_${Date.now()}`,
@@ -341,12 +342,12 @@ export const MapPage: React.FC<MapPageProps> = ({
   // Get current game time for expiration checks
   const currentGameTime = character?.time ? getGameTimeInHours(character.time) : 0;
 
-  // Dynamic events - filter active ones that haven't expired
+  // Dynamic events - filter active ones that haven't expired and match player level
   const activeDynamicEvents = useMemo(() => {
     if (!dynamicEventState?.activeEvents) return [];
     return dynamicEventState.activeEvents.filter(e => 
       (e.status === 'available' || e.status === 'active') &&
-      e.levelRequirement <= playerLevel &&
+      e.levelRequirement <= playerLevel && // Only show events matching player level for progression
       (currentGameTime < e.createdAtGameTime + e.durationHours)
     );
   }, [dynamicEventState?.activeEvents, playerLevel, currentGameTime]);
@@ -371,9 +372,9 @@ export const MapPage: React.FC<MapPageProps> = ({
     return () => clearInterval(interval);
   }, [playerLevel]);
 
-  // Filter available missions by level
+  // Filter available missions by level - only show missions matching player progression
   const availableMissions = useMemo(() => 
-    MAP_MISSIONS.filter(m => m.levelRequirement <= playerLevel + 5 && !m.isCompleted),
+    MAP_MISSIONS.filter(m => m.levelRequirement <= playerLevel && !m.isCompleted),
     [playerLevel]
   );
 
@@ -397,9 +398,15 @@ export const MapPage: React.FC<MapPageProps> = ({
     return [...baseLocations, ...newDiscovered];
   }, [discoveredLocations]);
 
-  // Filter locations
+  // Filter locations with progression-based visibility
+  // Locked dungeons/missions/events are hidden until player reaches the required level
   const filteredLocations = useMemo(() => {
     return allLocations.filter(loc => {
+      // Always hide locations if they exceed player level (except for quests)
+      if (loc.levelRequirement && loc.levelRequirement > playerLevel && filterType !== 'quests') {
+        return false;
+      }
+      
       if (filterType === 'all') return true;
       if (filterType === 'cities') return ['city', 'town', 'village'].includes(loc.type);
       if (filterType === 'dungeons') return ['dungeon', 'ruin', 'cave', 'fort', 'camp'].includes(loc.type);

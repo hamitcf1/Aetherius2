@@ -165,7 +165,6 @@ import AlchemyModal from './components/AlchemyModal';
 import CookingModal from './components/CookingModal';
 import TravelModal from './components/TravelModal';
 import FactionModal from './components/FactionModal';
-import WeatherHUD from './components/WeatherHUD';
 // Additional Feature Modals
 import ShoutsModal from './components/ShoutsModal';
 import EnchantingModal from './components/EnchantingModal';
@@ -602,9 +601,6 @@ const App: React.FC = () => {
   
   // Dynamic weather state
   const [currentWeather, setCurrentWeather] = useState(() => generateWeather('whiterun', 8));
-  
-  // Weather HUD visibility
-  const [weatherHUDVisible, setWeatherHUDVisible] = useState<boolean>(true);
   
   // ========== EXTENDED GAME SYSTEMS STATES ==========
   // Shouts Modal
@@ -7042,14 +7038,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           />
         )}
         
-        {/* Weather HUD */}
-        {weatherHUDVisible && activeCharacter && (
-          <WeatherHUD
-            weather={currentWeather}
-            currentHour={getGameTimeInHours(activeCharacter.gameTime || 480) % 24}
-            showDetails={false}
-          />
-        )}
+
 
       </div>
     </AppContext.Provider>
