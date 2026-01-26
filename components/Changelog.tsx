@@ -24,6 +24,7 @@ const CHANGELOG: ChangelogEntry[] = [
     changes: [
       { type: 'combat', text: 'Combat: Restored healing and conjuration visual effects and screen flashes; spell visuals now anchor to their targets' },
       { type: 'improvement', text: 'Combat: Increased VFX z-index and standardized timing (ms helper) so effects render above modals and persist reliably' },
+      { type: 'improvement', text: 'UX: Normalize incoming status effect names and icons (e.g., DOTs, generic "buff" names) for clearer buffs/debuffs display' },
       { type: 'fix', text: 'Tests: added unit tests for healing and conjuration visuals and improved test stability for spell effects' },
     ]
   },

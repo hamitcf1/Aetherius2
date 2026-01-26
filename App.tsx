@@ -129,6 +129,7 @@ import { updateMusicForContext, AmbientContext, audioService, playMusic } from '
 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
 import { getRateLimitStats, generateAdventureResponse } from './services/geminiService';
 import { learnSpell, getSpellById, mergeLearnedSpellsFromCharacter, getLearnedSpellIds } from './services/spells';
+import { normalizeStatusEffect } from './utils/statusHelpers';
 import { storage } from './services/storage';
 import { applyCompanionXp } from './services/companionsService';
 import { ShopModal, SHOP_INVENTORY } from './components/ShopModal';
@@ -4584,7 +4585,7 @@ const App: React.FC = () => {
 
       // 5d. New status effects to add (buffs/debuffs)
       if (updates.statusEffects && updates.statusEffects.length) {
-        const normalized = updates.statusEffects.map((s: any) => ({ id: s.id || `status_${uniqueId()}`, ...s }));
+        const normalized = updates.statusEffects.map((s: any) => normalizeStatusEffect(s || {}, `status_${uniqueId()}`));
         setStatusEffects(prev => [...prev, ...normalized]);
         normalized.forEach((effect: any) => {
           showToast(effect.description || `Effect applied: ${effect.name}`, 'success');
