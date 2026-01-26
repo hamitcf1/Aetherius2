@@ -6,6 +6,8 @@
 **Want to know when you unlock spells?**  
 → Read: [SKILL_UNLOCK_CHART.md](SKILL_UNLOCK_CHART.md)
 
+**Combat turns:** Each player turn grants one **Main** action and one **Bonus** action (order is flexible). Using a potion/food, **Defend**, or **Conjuration** consumes the *Bonus* action — you can use both actions in the same turn or press **End Turn** to finish early.
+
 **Want build recommendations?**  
 → Read: [SKILL_UNLOCK_CHART.md](SKILL_UNLOCK_CHART.md) - Build Examples section
 

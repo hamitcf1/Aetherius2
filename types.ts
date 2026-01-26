@@ -536,7 +536,7 @@ export interface GameStateUpdate {
 // COMBAT SYSTEM TYPES
 // ============================================================================
 
-export type CombatActionType = 'attack' | 'power_attack' | 'magic' | 'shout' | 'item' | 'defend' | 'flee' | 'surrender' | 'skip';
+export type CombatActionType = 'attack' | 'power_attack' | 'magic' | 'shout' | 'item' | 'defend' | 'flee' | 'surrender' | 'skip' | 'end_turn';
 
 export interface CombatAbility {
   id: string;
@@ -619,6 +619,9 @@ export interface CombatState {
   playerDefending: boolean;
   /** Tactical Guard: once-per-combat usage flag */
   playerGuardUsed?: boolean;
+  // Track whether player has used main/bonus actions this player turn
+  playerMainActionUsed?: boolean;
+  playerBonusActionUsed?: boolean;
   playerActiveEffects: Array<{ effect: CombatEffect; turnsRemaining: number }>;
   // Cooldowns for player abilities
   abilityCooldowns: Record<string, number>;

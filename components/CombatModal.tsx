@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useAppContext } from '../AppContext';
 import { waitMs } from '../utils/animation';
 import { 
   Character, 
@@ -626,6 +627,20 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     const t = setTimeout(() => setRecentlyHighlighted(null), ms(900));
     return () => clearTimeout(t);
   }, [selectedTarget]);
+
+  // One-time tip for new players explaining the Main/Bonus actions (persisted server-side)
+  useEffect(() => {
+    try {
+      if (!showToast) return;
+      // If the server-side flag hasn't been set, show the tip and persist it
+      if (!userSettings?.seenBonusIntro) {
+        showToast('Tip: Each turn grants a Main and a Bonus action. Potions/Defend/Conjuration use the Bonus action.', 'info');
+        updateUserSettings && updateUserSettings({ seenBonusIntro: true });
+      }
+    } catch (e) {
+      // ignore errors
+    }
+  }, [showToast, userSettings?.seenBonusIntro, updateUserSettings]);
   const [elapsedSecDisplay, setElapsedSecDisplay] = useState<number>(0);
   const [showRoll, setShowRoll] = useState(false);
   // When an invalid-target is detected we briefly suppress rendering of the textual "Roll:" label
@@ -639,6 +654,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const lastInvalidTargetRef = useRef(false);
   const [rollValue, setRollValue] = useState<number | null>(null);
   const [rollActor, setRollActor] = useState<'player' | 'enemy' | 'ally' | null>(null);
+
+  // App context (get user settings & update handler for server-side persistence)
+  const { userSettings, updateUserSettings } = useAppContext();
+
 
   // Animation helper state & ref for D20 wheel-style roll animation
   const rollAnimRef = useRef<number | null>(null);
@@ -1299,6 +1318,44 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     setIsAnimating(true);
 
+    // Pre-check: determine whether this requested action consumes a main or bonus action.
+    const intendedActionKind = (() => {
+      if (action === 'item') return 'bonus' as const;
+      if (action === 'defend') return 'bonus' as const;
+      if (action === 'end_turn') return 'main' as const;
+      if (action === 'magic' && abilityId) {
+        const ab = playerStats.abilities.find(a => a.id === abilityId);
+        if (ab && ab.effects && ab.effects.some((ef: any) => ef.type === 'summon')) return 'bonus' as const;
+      }
+      return 'main' as const;
+    })();
+
+    // Prevent repeated usage of the same action type within a player turn
+    if (intendedActionKind === 'main' && combatState.playerMainActionUsed) {
+      if (showToast) showToast('Main action already used this turn.', 'warning');
+      setIsAnimating(false);
+      return;
+    }
+    if (intendedActionKind === 'bonus' && combatState.playerBonusActionUsed) {
+      if (showToast) showToast('Bonus action already used this turn.', 'warning');
+      setIsAnimating(false);
+      return;
+    }
+
+    // Special handling: End turn immediately without roll animation
+    if (action === 'end_turn') {
+      // Advance turn and apply regen if appropriate
+      let finalState = advanceTurn(combatState);
+      if (finalState.currentTurnActor === 'player') {
+        const regenRes = applyTurnRegen(finalState, playerStats);
+        finalState = regenRes.newState;
+        setPlayerStats(regenRes.newPlayerStats);
+      }
+      setCombatState(finalState);
+      setIsAnimating(false);
+      return;
+    }
+
     // Determine ability and enforce selection rules before rolling
     const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
     const isHealingAbility = !!(ability && (ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal' || ef.type === 'buff'))));
@@ -1451,6 +1508,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     const narrative = execRes.narrative;
     const usedItem = execRes.usedItem;
 
+    // Apply which action was consumed (main/bonus) so UI state can reflect it
+    const consumed = (execRes as any).consumedAction || (action === 'item' || action === 'defend' ? 'bonus' : 'main');
+    if (consumed === 'main') newState.playerMainActionUsed = true;
+    if (consumed === 'bonus') newState.playerBonusActionUsed = true;
+
     // Play combat sound based on action/ability type
     if (action === 'attack' || action === 'power_attack' || action === 'magic' || action === 'shout') {
       const ability = abilityId ? playerStats.abilities.find(a => a.id === abilityId) : undefined;
@@ -1597,8 +1659,29 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     
     // Check combat end
     let finalState = checkCombatEnd(newState, newPlayerStats);
-    
-    if (finalState.active && (action !== 'flee' || !narrative.includes('failed'))) {
+
+    // Decide whether to advance the turn based on which action was consumed.
+    const consumedAction = consumed;
+    let shouldAdvance = false;
+    if (!finalState.active) {
+      shouldAdvance = false; // combat ended — leave state as-is (loot phase handled elsewhere)
+    } else if (action === 'flee' && narrative && narrative.includes('failed')) {
+      // failed flee -> do not advance
+      shouldAdvance = false;
+    } else if (consumedAction === 'main') {
+      // If main action used and bonus already used earlier this turn, advance.
+      if (finalState.playerBonusActionUsed) shouldAdvance = true;
+      // Otherwise do not advance so the player can take their bonus action (or end turn manually)
+    } else if (consumedAction === 'bonus') {
+      // If bonus used after main, and main already used, advance
+      if (finalState.playerMainActionUsed) shouldAdvance = true;
+      // Otherwise do not advance (allow player to still use main action)
+    } else {
+      // fallback for skip/surrender/etc: advance
+      shouldAdvance = action === 'skip' || action === 'surrender' || (action === 'flee' && narrative && !narrative.includes('failed'));
+    }
+
+    if (shouldAdvance) {
       finalState = advanceTurn(finalState);
       // Only apply regen when the turn advanced to the player
       if (finalState.currentTurnActor === 'player') {
@@ -2073,18 +2156,39 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             {/* ACTIONS (moved from right column) */}
             <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700">
               <h4 className="text-sm font-semibold text-stone-300 mb-2">ACTIONS</h4>
+
+              {/* Main / Bonus action indicators (enhanced visuals) */}
+              <div className="flex gap-2 mb-3 items-center">
+                <div data-tooltip="Primary action — Attack, Spell, or Power. Use once per turn." className={`relative px-3 py-1 rounded-full text-xs font-semibold transition-all ${!combatState.playerMainActionUsed ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white ring-2 ring-amber-400/30 animate-pulse shadow-lg' : 'bg-amber-700 text-white opacity-80'}`}>
+                  <span className="inline-block mr-2">⚔️</span>
+                  <span>Main</span>
+                  <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerMainActionUsed ? 'Used' : 'Available'}</span>
+                  {!combatState.playerMainActionUsed && <span className="absolute -top-2 -right-2 text-[10px] px-1 py-0.5 rounded-full bg-amber-300/90 text-amber-900 font-bold animate-pulse">GO</span>}
+                </div>
+
+                <div data-tooltip="Bonus action — Potions, Defend, or Summons. Use once per turn." className={`relative px-3 py-1 rounded-full text-xs font-semibold transition-all ${!combatState.playerBonusActionUsed ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white ring-2 ring-purple-400/30 animate-pulse shadow-lg' : 'bg-amber-700 text-white opacity-80'}`}>
+                  <span className="inline-block mr-2">✨</span>
+                  <span>Bonus</span>
+                  <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerBonusActionUsed ? 'Used' : 'Available'}</span>
+                  {!combatState.playerBonusActionUsed && <span className="absolute -top-2 -right-2 text-[10px] px-1 py-0.5 rounded-full bg-pink-300/90 text-pink-900 font-bold animate-pulse">★</span>}
+                </div>
+
+                <button onClick={() => handlePlayerAction('end_turn')} disabled={!isPlayerTurn || isAnimating} className="ml-auto px-2 py-1 rounded text-xs bg-stone-700 text-white hover:bg-stone-600 disabled:opacity-50">🔚 End Turn</button>
+              </div>
+
               <div className="space-y-2">
                 <button
                   onClick={() => handlePlayerAction('defend')}
                   disabled={!isPlayerTurn || isAnimating || !!(combatState as any).playerGuardUsed}
                   title={(combatState as any).playerGuardUsed ? 'Guard used this combat' : `Tactical Guard — 40% DR for ${Math.min(3, 1 + (getCombatPerkBonus(character, 'defendDuration') || 0))} round(s) (once per combat)`}
-                  className="w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="relative w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(() => {
                     const perkBonus = character ? getCombatPerkBonus(character, 'defendDuration') : 0;
                     const predicted = Math.min(3, 1 + (perkBonus || 0));
                     return `🛡️ Defend${(combatState as any).playerGuardUsed ? ' (used)' : ''} — ${predicted}r`;
                   })()}
+                  <span data-tooltip="Defend consumes your Bonus action." className={`absolute -top-2 -right-2 text-[10px] px-2 py-0.5 rounded-full font-semibold ${combatState.playerBonusActionUsed ? 'bg-amber-700 text-white opacity-80' : 'bg-indigo-600 text-white shadow-md animate-pulse'}`}>{combatState.playerBonusActionUsed ? 'Used' : 'BONUS'}</span>
                 </button>
 
                 {combatState.fleeAllowed && (
@@ -2705,7 +2809,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                             className="w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200 hover:bg-green-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-left"
                           >
                             <div className="flex justify-between items-center">
-                              <span className="font-medium">{item.name}</span>
+                              <span className="font-medium">{item.name} <span data-tooltip="Using this item consumes your Bonus action." className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-sm animate-pulse">BONUS</span></span>
                               <span className="text-xs text-stone-400 bg-stone-800/60 px-1.5 py-0.5 rounded">x{item.quantity}</span>
                             </div>
                             {/* Restoration values display */}
@@ -2945,7 +3049,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           style={!isDisabledBtn ? { background: `linear-gradient(135deg, ${accent}22, ${accent}11, rgba(0,0,0,0.45))`, color: getTextColorForAccent(accent), boxShadow: `inset 4px 0 0 ${accent}`, borderColor: `${accent}88` } : undefined}
                         >
                           <span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ backgroundColor: accent }} />
-                          <span className="truncate">{ability.name}</span>
+                          <span className="truncate">{ability.name}{(ability.effects || []).some((ef: any) => ef.type === 'summon') && <span data-tooltip="Summons consume your Bonus action." className="ml-2 inline-block text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white shadow-sm animate-pulse">BONUS</span>}</span>
                           {(combatState.abilityCooldowns[ability.id] || 0) > 0 && (
                             <span className="text-[10px] ml-1">({combatState.abilityCooldowns[ability.id]})</span>
                           )}

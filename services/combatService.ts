@@ -1808,6 +1808,9 @@ export const initializeCombat = (
     }],
     playerDefending: false,
     playerGuardUsed: false,
+    // Track whether player has used their main/bonus actions on their current turn
+    playerMainActionUsed: false,
+    playerBonusActionUsed: false,
     playerActiveEffects: [],
     abilityCooldowns: {},
     lastActorActions: {}
@@ -1860,12 +1863,14 @@ export const executePlayerAction = (
   inventory?: InventoryItem[],
   natRoll?: number,
   character?: Character
-): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; usedItem?: InventoryItem; aoeSummary?: { damaged: Array<any>; healed: Array<any> } } => {
+): { newState: CombatState; newPlayerStats: PlayerCombatStats; narrative: string; usedItem?: InventoryItem; aoeSummary?: { damaged: Array<any>; healed: Array<any> }; consumedAction?: 'main' | 'bonus' | 'none' } => {
   let newState = { ...state };
   let newPlayerStats = { ...playerStats };
   let narrative = '';
   // Used item consumed this action (if any)
   let usedItem: InventoryItem | undefined;
+  // Which kind of action this consumes (main/bonus/none)
+  let consumedAction: 'main' | 'bonus' | 'none' = 'main';
   // Collector for AoE per-target details (engine -> UI contract)
   const aoeSummary: { damaged: Array<any>; healed: Array<any> } = { damaged: [], healed: [] };
 
@@ -1882,7 +1887,7 @@ export const executePlayerAction = (
     const remainingAfter = Math.max(0, remainingBefore - 1);
     const stNarr = `You are stunned and skip your turn.${remainingAfter > 0 ? ` (${remainingAfter} turns remaining)` : ''}`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'stunned', narrative: stNarr, timestamp: Date.now() });
-    return { newState, newPlayerStats, narrative: stNarr, aoeSummary };
+    return { newState, newPlayerStats, narrative: stNarr, aoeSummary, consumedAction: 'none' };
   }
   switch (action) {
     case 'attack':
@@ -1909,11 +1914,11 @@ export const executePlayerAction = (
       const actionKey = ability.type === 'magic' ? 'magic' : ability.type === 'melee' ? (ability.id || 'melee') : ability.type;
       newState.playerActionCounts[actionKey] = (newState.playerActionCounts[actionKey] || 0) + 1;
 
-      // Defensive: if this ability is a conjuration and there is already an active summon,
-      // block early before consuming resources to avoid accidentally spending magicka. Support multiple summons
-      // when a conjuration perk (e.g., twin_souls) increases the allowed limit.
+          // Determine whether this ability consumes a main or bonus action. Conjuration spells (summons)
+      // are treated as BONUS actions so players can summon and still attack on the same turn.
       const hasSummonEffectEarly = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
       if (hasSummonEffectEarly) {
+        consumedAction = 'bonus';
         const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
         const pending = (newState.pendingSummons || []).length;
         const activeSummonCount = aliveSummons + pending;
@@ -1921,7 +1926,7 @@ export const executePlayerAction = (
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative: msg, aoeSummary };
+          return { newState, newPlayerStats, narrative: msg, aoeSummary, consumedAction: 'none' };
         }
       }
 
@@ -1985,7 +1990,7 @@ export const executePlayerAction = (
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative: msg, aoeSummary };
+          return { newState, newPlayerStats, narrative: msg, aoeSummary, consumedAction: 'none' };
         }
       }
 
@@ -2726,11 +2731,12 @@ export const executePlayerAction = (
     }
 
     case 'defend': {
+      consumedAction = 'bonus';
         // Once-per-combat Tactical Guard (duration is perk-upgradeable; base = 1 round, cap = 3)
       if ((newState as any).playerGuardUsed) {
         const msg = 'You have already used Guard in this combat.';
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'defend', target: 'self', damage: 0, narrative: msg, timestamp: Date.now() });
-        return { newState, newPlayerStats, narrative: msg, aoeSummary };
+        return { newState, newPlayerStats, narrative: msg, aoeSummary, consumedAction: 'none' };
       }
 
       (newState as any).playerGuardUsed = true;
@@ -2743,11 +2749,12 @@ export const executePlayerAction = (
       newState.playerDefending = true;
       newState.playerActionCounts = newState.playerActionCounts || {};
       newState.playerActionCounts['defend'] = (newState.playerActionCounts['defend'] || 0) + 1;
+      narrative = `You assume a guarded stance — Tactical Guard active for ${duration} round${duration>1? 's': ''} (40% DR).`;
       pushCombatLogUnique(newState, {
         turn: newState.turn,
         actor: 'player',
         action: 'defend',
-        narrative: `You assume a guarded stance — Tactical Guard active for ${duration} round${duration>1? 's': ''} (40% DR).`,
+        narrative,
         timestamp: Date.now()
       });
       break;
@@ -2842,12 +2849,13 @@ export const executePlayerAction = (
         const mod = modifyPlayerCombatStat(newPlayerStats, resolved.stat, amount);
 
         if (mod.actual > 0) {
+          consumedAction = 'bonus';
           newPlayerStats = mod.newPlayerStats;
           usedItem = { ...item, quantity: item.quantity - 1 };
 
           narrative = `You use ${item.name} and recover ${mod.actual} ${resolved.stat}.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative, usedItem, aoeSummary };
+          return { newState, newPlayerStats, narrative, usedItem, aoeSummary, consumedAction };
         }
 
         narrative = `The ${item.name} had no effect.`;
@@ -2861,6 +2869,7 @@ export const executePlayerAction = (
         const healAmount = nutrition ? Math.floor((nutrition.hungerReduction || 0) / 2) + 10 : 15;
         const actualHeal = Math.min(healAmount, newPlayerStats.maxHealth - newPlayerStats.currentHealth);
         if (actualHeal > 0) {
+          consumedAction = 'bonus';
           newPlayerStats.currentHealth = newPlayerStats.currentHealth + actualHeal;
           usedItem = { ...item, quantity: item.quantity - 1 };
           // Also apply survival deltas so food in combat reduces hunger/thirst accordingly
@@ -2870,7 +2879,7 @@ export const executePlayerAction = (
 
           narrative = `You consume ${item.name} and recover ${actualHeal} health.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
-          return { newState, newPlayerStats, narrative, usedItem, aoeSummary };
+          return { newState, newPlayerStats, narrative, usedItem, aoeSummary, consumedAction };
         }
         narrative = `You cannot use ${item.name} right now.`;
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, narrative, isCrit: false, timestamp: Date.now() });
@@ -2885,7 +2894,7 @@ export const executePlayerAction = (
     }
   }
 
-  return { newState, newPlayerStats, narrative, aoeSummary };
+  return { newState, newPlayerStats, narrative, aoeSummary, consumedAction };
 };
 
 export const executeEnemyTurn = (
@@ -3578,10 +3587,18 @@ export const advanceTurn = (state: CombatState): CombatState => {
   }
   
   newState.currentTurnActor = newState.turnOrder[nextIndex];
+
+  // Reset per-turn action usage flags when player turn begins (covers both cycling and direct set)
+  if (newState.currentTurnActor === 'player') {
+    newState.playerMainActionUsed = false;
+    newState.playerBonusActionUsed = false;
+  }
   
   // If we've cycled back to start, increment turn
   if (nextIndex <= currentIndex || nextIndex === 0) {
     newState.turn++;
+    // Decrement playerTurnsRemaining for pending summons and flag newly expired summons to start decaying
+
     // Reduce cooldowns (safety check for undefined abilityCooldowns)
     if (newState.abilityCooldowns) {
       Object.keys(newState.abilityCooldowns).forEach(key => {

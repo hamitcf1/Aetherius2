@@ -460,6 +460,8 @@ export interface UserSettings {
   musicEnabled?: boolean;
   // Weather UI settings
   weatherMouseInteractionEnabled?: boolean;
+  // One-time UI tips (persisted server-side)
+  seenBonusIntro?: boolean;
   // Achievement notification tracking (per character)
   notifiedAchievements?: Record<string, string[]>; // characterId -> array of notified achievement IDs
 } 
@@ -497,6 +499,8 @@ export const saveUserSettings = async (uid: string, settings: UserSettings): Pro
     musicEnabled: settings.musicEnabled,
     // Weather settings
     weatherMouseInteractionEnabled: settings.weatherMouseInteractionEnabled,
+    // One-time UI tips (persisted server-side)
+    seenBonusIntro: settings.seenBonusIntro,
     // Achievement notifications (legacy fallback)
     notifiedAchievements: settings.notifiedAchievements,
     createdAt: settings.createdAt ?? now,
