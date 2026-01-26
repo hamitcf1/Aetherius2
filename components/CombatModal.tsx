@@ -630,7 +630,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   }, [selectedTarget]);
 
   // App context (get user settings & update handler for server-side persistence)
-  const { userSettings, updateUserSettings } = useAppContext();
+  const { userSettings, updateUserSettings, effectsEnabled } = useAppContext();
 
   // One-time tip for new players explaining the Main/Bonus actions (persisted server-side)
   useEffect(() => {
@@ -1550,9 +1550,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       // Trigger visual effects based on ability type
       if (action === 'magic' && ability) {
         const effectType = getSpellEffectType(ability);
-        if (effectType !== 'none') {
-          // Flash screen with effect color
-          setScreenFlash(effectType);
+        if (effectType !== 'none' && effectsEnabled) {
           setTimeout(() => setScreenFlash(null), 400);
 
           // Add spell effect to state so they render
@@ -1640,9 +1638,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setTimeout(() => setIsHealing(false), ms(1000));
       // Add a healing visual effect for item use
       const effectId = `heal_item_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-      setScreenFlash('healing');
-      setSpellEffects(effects => [...effects, { id: effectId, type: 'healing', startTime: Date.now(), duration: 1000 }]);
-      setTimeout(() => setSpellEffects(effects => effects.filter(e => e.id !== effectId)), ms(1200));
+      if (effectsEnabled) {
+        setScreenFlash('healing');
+        setSpellEffects(effects => [...effects, { id: effectId, type: 'healing', startTime: Date.now(), duration: 1000 }]);
+        setTimeout(() => setSpellEffects(effects => effects.filter(e => e.id !== effectId)), ms(1200));
+      }
       if (showToast) {
         showToast(`Restored ${newPlayerStats.currentHealth - playerStats.currentHealth} health!`, 'success');
       }
