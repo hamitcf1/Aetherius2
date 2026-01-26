@@ -204,12 +204,21 @@ import TransformationModal from './components/TransformationModal';
 import HousingModal from './components/HousingModal';
 
 // Set document title using REACT_APP_ENV to indicate dev builds
+const hostname = window.location.hostname;
+const isLocal =
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "::1";
+
 const isDev = import.meta.env.VITE_ENV === "dev";
 
-document.title = isDev
-  ? "SkyAetherius [DEV]"
-  : "SkyAetherius";
-
+if (isLocal) {
+  document.title = "SkyAetherius [LOCAL]";
+} else if (isDev) {
+  document.title = "SkyAetherius [DEV]";
+} else {
+  document.title = "SkyAetherius";
+}
 const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
