@@ -652,7 +652,7 @@ export const generatePlayerAbilities = (
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
   abilities.push({
     id: 'basic_attack',
-    name: weapon ? `Strike with ${weapon.name}` : 'Unarmed Strike',
+    name: weapon ? `Strike with ${weapon.name}` : 'Basic Attack',
     type: 'melee',
     damage: weapon?.damage || 10,
     cost: 10, // stamina
