@@ -213,9 +213,9 @@ const isLocal =
 const isDev = import.meta.env.VITE_ENV === "dev";
 
 if (isLocal) {
-  document.title = "SkyAetherius [LOCAL]";
+  document.title = "[LOCAL] SkyAetherius ";
 } else if (isDev) {
-  document.title = "SkyAetherius [DEV]";
+  document.title = "[DEV] SkyAetherius ";
 } else {
   document.title = "SkyAetherius";
 }
