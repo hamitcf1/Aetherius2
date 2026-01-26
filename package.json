@@ -12,6 +12,8 @@
     "html2canvas": "1.4.1",
     "jspdf": "2.5.1",
     "lucide-react": "^0.562.0",
+    "node-addon-api": "^8.5.0",
+    "node-gyp": "^12.1.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "uuid": "^13.0.0",

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import ModalWrapper from './ModalWrapper';
 import {
   FactionId,
   FACTIONS,
@@ -46,8 +47,6 @@ const FactionModal: React.FC<FactionModalProps> = ({
   const joinedFactions = useMemo(() => {
     return factionReputations.filter(r => r.joined);
   }, [factionReputations]);
-
-  if (!isOpen) return null;
 
   const getReputationColor = (level: ReputationLevel): string => {
     const colors: Record<ReputationLevel, string> = {
@@ -115,7 +114,7 @@ const FactionModal: React.FC<FactionModalProps> = ({
   const selectedRep = selectedFaction ? getReputation(selectedFaction) : null;
 
   return (
-    <div className="modal-overlay faction-modal" onClick={onClose}>
+    <ModalWrapper open={isOpen} onClose={onClose} className="faction-modal" zIndex="z-[80]">
       <div 
         className="modal-content"
         onClick={e => e.stopPropagation()}
@@ -376,8 +375,7 @@ const FactionModal: React.FC<FactionModalProps> = ({
                         {selectedFactionData.headquarters}
                       </span>
                     </div>
-                  )}
-                  {selectedFactionData.leader && (
+                  )}                  {selectedFactionData.leader && (
                     <div style={{ marginBottom: '8px' }}>
                       <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>
                         👤 Leader:
@@ -533,7 +531,7 @@ const FactionModal: React.FC<FactionModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </ModalWrapper>
   );
 };
 
