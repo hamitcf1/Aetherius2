@@ -49,3 +49,34 @@ When in doubt
 - Prefer small, type-safe changes. Run `npm run dev` locally to validate UI changes.
 
 If anything here is unclear or you want this tailored for a specific task (tests, refactor, feature), tell me which area and I will expand the instructions.
+
+---
+
+## Daily Changelog Automation (for AI agents) 🔁
+
+**Goal**: each calendar day the agent should create (and publish) a top changelog entry in `components/Changelog.tsx` for meaningful commits made since the last changelog entry. The agent must determine today's date programmatically and only create an entry when there are meaningful changes.
+
+**Rules**
+- Use ISO date format (YYYY-MM-DD) for the `date` field.
+- Versioning: parse `CHANGELOG[0].version` and increment the patch number (major.minor.patch -> patch + 1). Example: 1.0.4 -> 1.0.5.
+- Update `package.json`'s `version` to match the new version.
+- Do not publish an entry if there are no meaningful changes (skip docs-only/chore-only commits). If `latestDate === dateStr` and meaningful changes are present, append them to today's entry and increment the patch version instead of creating a second entry for the same date.
+- Always run `npm test` and `npm run build`. If tests or build fail, do **not** abort the automation; instead proceed to produce a changelog draft and include failure logs. The agent must still not publish, commit, or push changes automatically; a maintainer must review and finalize the draft.
+- The agent must also write an **agent activity log** to `docs/agent-activity/` that records the action, summarized changed files, and links to any generated artifacts (draft path, test/build logs); the activity log should be referenced in the draft.
+
+**High-level algorithm**
+1. Get today's date: `const dateStr = new Date().toISOString().split('T')[0];`
+2. Read `components/Changelog.tsx` and determine `latestVersion` and `latestDate` from the first entry.
+3. If `latestDate === dateStr` then scan the workspace for files whose modification time (mtime) is >= `latestDate`. If **meaningful** changes are found, append concise bullets describing those changes to the existing top changelog entry for today (do not create a duplicate entry for the same date), increment the patch number, and continue to run tests/build and produce/update the draft. If no meaningful changes are found, exit (nothing to publish).
+4. Collect changes since the `latestDate` without executing git commands. Do NOT run any git commands.
+   - Preferred method: scan the workspace for files whose modification time (mtime) is >= `latestDate` and summarize changes (file paths changed, high-level diff snippets, and affected components).
+5. Generate concise bullets (1 sentence) per change, dedupe similar items, and prefer human-readable phrasing rather than raw diffs.
+6. Construct a new changelog entry and insert it at the top of `CHANGELOG`.
+7. Write an **agent activity log** to `docs/agent-activity/` recording the date, action (`new-entry` or `append`), summarized changed files, and links to any generated artifacts (draft path, test/build logs). Reference this activity log in the draft for maintainers to review.
+8". Update `package.json` version to the new version.
+9. Run `npm test` and `npm run build`. If either fails, do not abort; save test/build logs to `docs/updates/{dateStr}-changelog-failure.log`, note the failures clearly in the draft, and still produce the changelog draft and the suggested commit message and tag. Do NOT automatically commit, push, or publish the changelog — a maintainer must review and finalize the changes.
+10. **Important:** The agent MUST NOT run git commands, create PRs, use the GitHub API to publish releases, or push to remote. Instead, if tests pass and build succeeds, the agent should:
+    - Write the new `CHANGELOG` entry into `components/Changelog.tsx` and update `package.json` `version` to the new version.
+    - Produce a draft summary markdown at `docs/updates/{dateStr}-changelog-draft.md` that contains the new changelog entry, suggested commit message (`chore(changelog): publish v{newVersion} — automated daily changelog for {dateStr}`), and suggested tag (`v{newVersion}`).
+    - Leave the workspace changes unstaged/uncommitted and notify maintainers that a changelog draft is ready for manual review/publish. The notification should include the draft path and test/build logs if available.
+11. A maintainer MUST manually review, commit, tag, push, and create any Release — the agent must not perform those actions.

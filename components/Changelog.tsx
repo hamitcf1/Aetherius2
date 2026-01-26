@@ -18,6 +18,16 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.6',
+    date: '2026-01-26',
+    title: 'Combat: VFX & Tests',
+    changes: [
+      { type: 'combat', text: 'Combat: Restored healing and conjuration visual effects and screen flashes; spell visuals now anchor to their targets' },
+      { type: 'improvement', text: 'Combat: Increased VFX z-index and standardized timing (ms helper) so effects render above modals and persist reliably' },
+      { type: 'fix', text: 'Tests: added unit tests for healing and conjuration visuals and improved test stability for spell effects' },
+    ]
+  },
+  {
     version: '1.0.5',
     date: '2026-01-26',
     title: 'Hotfixes: Modals, Combat & Map Stability',
