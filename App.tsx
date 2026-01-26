@@ -203,6 +203,12 @@ import TransformationModal from './components/TransformationModal';
 // Housing Modal
 import HousingModal from './components/HousingModal';
 
+// Set document title using REACT_APP_ENV to indicate dev builds
+const isDev = process.env.REACT_APP_ENV === "dev";
+if (typeof document !== 'undefined') {
+  document.title = isDev ? "SkyAetherius [DEV]" : "SkyAetherius";
+}
+
 const uniqueId = () => Math.random().toString(36).substring(2, 11);
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
