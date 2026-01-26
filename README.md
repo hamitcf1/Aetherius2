@@ -1,10 +1,10 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # Skyrim Aetherius
 
-**Version 1.0.1** | [Changelog](components/Changelog.tsx)
+**Version 1.0.6** | [Changelog](components/Changelog.tsx)
+
+**Recent:**
+- **v1.0.6 (2026-01-26):** Restored healing & conjuration visual effects and screen flashes; increased VFX z-index and standardized timing (ms helper) for reliable rendering. Added unit tests for spell visuals.
+- **v1.0.5 (2026-01-26):** Hotfixes: Modals, Combat & Map Stability (modal wrapper consistency, map crash fix, small reliability fixes).
 
 Skyrim Aetherius is a web app for running a Skyrim-flavored roleplay campaign like a game: you create characters, track inventory and quests, write story/journal entries, and use an AI GM to generate narrative + structured game-state updates.
 
@@ -232,6 +232,8 @@ npm test
 npx vitest --watch
 ```
 
+> Note: An automated test run on 2026-01-26 reported **49 failing tests** across several suites. See `docs/updates/2026-01-26-test.log` for the full output and status while triage is ongoing.
+
 - Add component tests using @testing-library/react and `tests/*.spec.tsx` naming convention.
 
 - E2E (Playwright) (optional): install and run Playwright tests with:
@@ -345,5 +347,5 @@ Project developed for Skyrim roleplay community.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: January 2026
+**Version**: 1.0.6  
+**Last Updated**: January 27, 2026
