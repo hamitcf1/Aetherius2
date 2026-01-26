@@ -1338,7 +1338,7 @@ const App: React.FC = () => {
     if (!currentUser?.uid || !currentCharacterId || !achievementsLoaded) return;
 
     const localKey = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
-    const notifiedArray = Array.from(achievementState.notifiedAchievements);
+    const notifiedArray = Array.from(achievementState.notifiedAchievements) as string[];
     const localStorageData = {
       unlockedAchievements: achievementState.unlockedAchievements,
       notifiedAchievements: notifiedArray,
@@ -6013,7 +6013,7 @@ const App: React.FC = () => {
                   // Absorb souls from all killed dragons
                   killedDragons.forEach(dragon => {
                     const soulResult = absorbDragonSoul(shoutState, dragon.name);
-                    setShoutState(soulResult.newState);
+                    setShoutState(soulResult.state);
                     showToast(soulResult.message, 'success');
                   });
                   
@@ -6593,24 +6593,21 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             shoutState={shoutState}
             onLearnWord={(shoutId: string, wordIndex: number) => {
               const result = learnShoutWord(shoutState, shoutId, wordIndex);
-              if (result.success) {
-                setShoutState(result.newState);
-                showToast(result.message, 'success');
-              } else {
-                showToast(result.message, 'error');
-              }
-            }}
+              // learnShoutWord returns { state, message } — update state and show the message
+              setShoutState(result.state);
+              showToast(result.message, 'info');
+            }} 
             onUnlockWord={(shoutId: string, wordIndex: number) => {
-              const result = unlockShoutWord(shoutState, shoutId, wordIndex);
+              const result = unlockShoutWord(shoutState, shoutId);
               if (result.success) {
-                setShoutState(result.newState);
+                setShoutState(result.state);
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
               }
             }}
             onSetActiveShout={(shoutId: string | null) => {
-              setShoutState(prev => ({ ...prev, activeShout: shoutId }));
+              setShoutState(prev => ({ ...prev, activeShoutId: shoutId }));
               if (shoutId) {
                 const shout = SHOUTS[shoutId];
                 showToast(`${shout?.name || 'Shout'} readied`, 'info');
@@ -6637,19 +6634,12 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 item,
                 enchantmentId,
                 soulGemId,
-                activeCharacter.skills?.Enchanting || 15,
                 customName
               );
               if (result.success && result.enchantedItem) {
-                setEnchantingState(result.newState);
-                // Replace item in inventory
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  const newInventory = (prev.inventory || []).map(i => 
-                    i.id === itemId ? result.enchantedItem! : i
-                  );
-                  return { ...prev, inventory: newInventory };
-                });
+                setEnchantingState(result.state);
+                // Replace item in inventory (update global characters array)
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, inventory: (ch.inventory || []).map(i => i.id === itemId ? result.enchantedItem! : i) } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -6663,13 +6653,9 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }
               const result = disenchantItem(enchantingState, item, activeCharacter.skills?.Enchanting || 15);
               if (result.success) {
-                setEnchantingState(result.newState);
+                setEnchantingState(result.state);
                 // Remove item from inventory (destroyed in disenchanting)
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  const newInventory = (prev.inventory || []).filter(i => i.id !== itemId);
-                  return { ...prev, inventory: newInventory };
-                });
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, inventory: (ch.inventory || []).filter(i => i.id !== itemId) } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -6757,66 +6743,53 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             bountyState={bountyState}
             playerGold={activeCharacter.gold || 0}
             onPayBounty={(holdId: string) => {
-              const result = payBounty(bountyState, holdId, activeCharacter.gold || 0);
+              const result = payBounty(bountyState, holdId as any, activeCharacter.gold || 0);
               if (result.success) {
-                setBountyState(result.newState);
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  return { ...prev, gold: (prev.gold || 0) - result.goldPaid };
-                });
+                setBountyState(result.state);
+                // Deduct gold from active character
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldSpent } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
               }
             }}
             onBribeGuard={(holdId: string) => {
-              const bribeCost = Math.floor((bountyState.holdBounties[holdId] || 0) * 0.5) + 100;
+              const bribeCost = Math.floor((bountyState.holdBounties[holdId as any] || 0) * 0.5) + 100;
               if ((activeCharacter.gold || 0) < bribeCost) {
                 showToast('Not enough gold to bribe the guard', 'error');
                 return;
               }
-              const result = bribeGuard(bountyState, holdId, activeCharacter.gold || 0, activeCharacter.skills?.Speech || 15);
+              const result = bribeGuard(bountyState, holdId as any, activeCharacter.gold || 0, activeCharacter.skills?.Speech || 15);
               if (result.success) {
-                setBountyState(result.newState);
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  return { ...prev, gold: (prev.gold || 0) - result.goldPaid };
-                });
+                setBountyState(result.state);
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldSpent } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
               }
             }}
             onGoToJail={(holdId: string) => {
-              const result = goToJail(bountyState, holdId);
-              if (result.success) {
-                setBountyState(result.newState);
-                showToast(result.message, 'info');
-              } else {
-                showToast(result.message, 'error');
-              }
+              const result = goToJail(bountyState, holdId as any);
+              setBountyState(result.state);
+              showToast(result.message, 'info');
             }}
             onServeTime={() => {
               const result = serveJailTime(bountyState);
-              if (result.success) {
-                setBountyState(result.newState);
-                // Skill loss from serving time
-                if (result.skillLoss > 0) {
-                  showToast(`${result.message} Lost some skill progress.`, 'warning');
-                } else {
-                  showToast(result.message, 'success');
-                }
+              setBountyState(result.state);
+              // Skill penalties from serving time
+              if (result.skillPenalties && Object.keys(result.skillPenalties).length > 0) {
+                showToast(`${result.message} Lost some skill progress.`, 'warning');
               } else {
-                showToast(result.message, 'error');
+                showToast(result.message, 'success');
               }
             }}
-            onAttemptEscape={() => {
+            onEscape={() => {
               const result = attemptJailEscape(bountyState, activeCharacter.skills?.Sneak || 15, activeCharacter.skills?.Lockpicking || 15);
               if (result.success) {
-                setBountyState(result.newState);
+                setBountyState(result.state);
                 showToast(result.message, 'success');
               } else {
-                setBountyState(result.newState);
+                setBountyState(result.state);
                 showToast(result.message, 'error');
               }
             }}
@@ -6841,25 +6814,16 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               const currentSkillLevel = (activeCharacter.skills as Record<string, number>)?.[skillName] || 15;
               const result = trainSkill(
                 trainingState,
-                trainerName,
-                skillName,
-                currentSkillLevel,
                 activeCharacter.level || 1,
-                activeCharacter.gold || 0
+                currentSkillLevel,
+                trainer.maxTrainingLevel,
+                activeCharacter.gold || 0,
+                skillName
               );
               if (result.success) {
                 setTrainingState(result.newState);
-                // Deduct gold and increase skill
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  const newSkills = { ...(prev.skills || {}) };
-                  (newSkills as Record<string, number>)[skillName] = currentSkillLevel + 1;
-                  return { 
-                    ...prev, 
-                    gold: (prev.gold || 0) - result.goldSpent,
-                    skills: newSkills
-                  };
-                });
+                // Deduct gold and increase skill (update characters array)
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldCost, skills: { ...(ch.skills || {}), [skillName]: currentSkillLevel + 1 } } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -6892,7 +6856,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }
             }}
             onFeedWerewolf={() => {
-              const result = feedAsWerewolf(transformationState);
+              const result = feedAsWerewolf(transformationState, 'nearby corpse');
               if (result.success) {
                 setTransformationState(result.newState);
                 showToast(result.message, 'success');
@@ -6917,7 +6881,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }
             }}
             onFeedVampire={() => {
-              const result = feedAsVampire(transformationState);
+              const result = feedAsVampire(transformationState, 'nearby corpse');
               if (result.success) {
                 setTransformationState(result.newState);
                 showToast(result.message, 'success');
@@ -6971,10 +6935,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               const result = purchaseHouse(housingState, houseId, activeCharacter.gold || 0);
               if (result.success) {
                 setHousingState(result.newState);
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  return { ...prev, gold: (prev.gold || 0) - result.goldSpent };
-                });
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldSpent } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -6984,10 +6945,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               const result = upgradeHouseRoom(housingState, houseId, roomType, activeCharacter.gold || 0);
               if (result.success) {
                 setHousingState(result.newState);
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  return { ...prev, gold: (prev.gold || 0) - result.goldSpent };
-                });
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldSpent } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -7006,10 +6964,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               const result = collectSpouseIncome(housingState);
               if (result.success) {
                 setHousingState(result.newState);
-                setActiveCharacter(prev => {
-                  if (!prev) return prev;
-                  return { ...prev, gold: (prev.gold || 0) + result.goldEarned };
-                });
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) + result.goldCollected } : ch));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
