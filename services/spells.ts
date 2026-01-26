@@ -267,6 +267,283 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     type: 'damage',
     effects: [ { type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' } ],
     prerequisites: { level: 18 }
+  },
+
+  // === NEW EXPANSION SPELLS ===
+  // DESTRUCTION - Fire Track
+  fire_bolt: {
+    id: 'fire_bolt',
+    name: 'Fire Bolt',
+    description: 'A bolt of concentrated fire damage.',
+    cost: 20,
+    perkCost: 1,
+    type: 'damage',
+    damage: 20,
+    prerequisites: { level: 30 }
+  },
+  // DESTRUCTION - Frost Track
+  frostbite: {
+    id: 'frostbite',
+    name: 'Frostbite',
+    description: 'A bolt of frost that slows enemies.',
+    cost: 22,
+    perkCost: 1,
+    type: 'damage',
+    damage: 18,
+    prerequisites: { level: 30 }
+  },
+  // DESTRUCTION - Mid-tier
+  inferno: {
+    id: 'inferno',
+    name: 'Inferno',
+    description: 'A powerful fire spell that burns all nearby enemies.',
+    cost: 38,
+    perkCost: 2,
+    type: 'damage',
+    damage: 28,
+    effects: [{ type: 'aoe_damage', value: 28 }],
+    prerequisites: { level: 50 }
+  },
+  absolute_zero: {
+    id: 'absolute_zero',
+    name: 'Absolute Zero',
+    description: 'Extreme frost that freezes enemies, dealing heavy damage.',
+    cost: 45,
+    perkCost: 2,
+    type: 'damage',
+    damage: 32,
+    prerequisites: { level: 55 }
+  },
+  blizzard: {
+    id: 'blizzard',
+    name: 'Blizzard',
+    description: 'A devastating ice storm that freezes all enemies, dealing damage over time.',
+    cost: 70,
+    perkCost: 3,
+    type: 'damage',
+    damage: 25,
+    effects: [{ type: 'aoe_damage', value: 25 }],
+    prerequisites: { level: 85 }
+  },
+  meteor_storm: {
+    id: 'meteor_storm',
+    name: 'Meteor Storm',
+    description: 'Rain meteors on all enemies, dealing massive AoE damage.',
+    cost: 90,
+    perkCost: 4,
+    type: 'damage',
+    damage: 50,
+    effects: [{ type: 'aoe_damage', value: 50 }],
+    prerequisites: { level: 90 }
+  },
+
+  // RESTORATION - Single Target
+  close_wounds: {
+    id: 'close_wounds',
+    name: 'Close Wounds',
+    description: 'Heal yourself more effectively.',
+    cost: 28,
+    perkCost: 1,
+    type: 'heal',
+    heal: 40,
+    prerequisites: { level: 35 }
+  },
+  cure_disease: {
+    id: 'cure_disease',
+    name: 'Cure Disease',
+    description: 'Cure all diseases and poisons affecting you.',
+    cost: 25,
+    perkCost: 1,
+    type: 'heal',
+    heal: 20,
+    prerequisites: { level: 40 }
+  },
+  magicka_restoration: {
+    id: 'magicka_restoration',
+    name: 'Magicka Restoration',
+    description: 'Restore your magicka pool.',
+    cost: 0,
+    perkCost: 1,
+    type: 'heal',
+    prerequisites: { level: 45 }
+  },
+  grand_healing: {
+    id: 'grand_healing',
+    name: 'Grand Healing',
+    description: 'Restore a large amount of health to yourself.',
+    cost: 55,
+    perkCost: 2,
+    type: 'heal',
+    heal: 60,
+    prerequisites: { level: 60 }
+  },
+  // RESTORATION - AoE
+  healing_circle: {
+    id: 'healing_circle',
+    name: 'Healing Circle',
+    description: 'A circle of healing light that restores health to you and all allies.',
+    cost: 45,
+    perkCost: 2,
+    type: 'heal',
+    heal: 30,
+    prerequisites: { level: 50 }
+  },
+  guardian_circle: {
+    id: 'guardian_circle',
+    name: 'Guardian Circle',
+    description: 'A powerful ward that heals and buffs all allies with increased armor.',
+    cost: 65,
+    perkCost: 2,
+    type: 'heal',
+    heal: 40,
+    prerequisites: { level: 70 }
+  },
+  mass_restoration: {
+    id: 'mass_restoration',
+    name: 'Mass Restoration',
+    description: 'Restore health and magicka to all allies.',
+    cost: 75,
+    perkCost: 3,
+    type: 'heal',
+    heal: 50,
+    prerequisites: { level: 80 }
+  },
+
+  // CONJURATION
+  soul_trap: {
+    id: 'soul_trap',
+    name: 'Soul Trap',
+    description: 'Damage an enemy while trapping its soul.',
+    cost: 20,
+    perkCost: 1,
+    type: 'damage',
+    damage: 15,
+    prerequisites: { level: 20 }
+  },
+  bound_weapon: {
+    id: 'bound_weapon',
+    name: 'Bound Weapon',
+    description: 'Conjure a spectral weapon to strike your foe.',
+    cost: 30,
+    perkCost: 1,
+    type: 'damage',
+    damage: 30,
+    prerequisites: { level: 30 }
+  },
+  conjure_daedra: {
+    id: 'conjure_daedra',
+    name: 'Conjure Daedra',
+    description: 'Summon a daedric servant to fight for you.',
+    cost: 50,
+    perkCost: 2,
+    type: 'utility',
+    prerequisites: { level: 50 }
+  },
+  summon_dremora_lord: {
+    id: 'summon_dremora_lord',
+    name: 'Summon Dremora Lord',
+    description: 'Summon a powerful Dremora Lord to dominate the battlefield.',
+    cost: 85,
+    perkCost: 3,
+    type: 'utility',
+    prerequisites: { level: 80 }
+  },
+
+  // ALTERATION
+  oakflesh: {
+    id: 'oakflesh',
+    name: 'Oakflesh',
+    description: 'Harden your skin, increasing armor.',
+    cost: 25,
+    perkCost: 1,
+    type: 'buff',
+    prerequisites: { level: 20 }
+  },
+  stoneskin: {
+    id: 'stoneskin',
+    name: 'Stoneskin',
+    description: 'Turn your skin to stone, increasing armor significantly.',
+    cost: 35,
+    perkCost: 1,
+    type: 'buff',
+    prerequisites: { level: 35 }
+  },
+  iron_skin: {
+    id: 'iron_skin',
+    name: 'Iron Skin',
+    description: 'Become nearly invulnerable for a short time.',
+    cost: 50,
+    perkCost: 2,
+    type: 'buff',
+    prerequisites: { level: 50 }
+  },
+  paralyze: {
+    id: 'paralyze',
+    name: 'Paralyze',
+    description: 'Paralyze an enemy, preventing them from acting.',
+    cost: 55,
+    perkCost: 2,
+    type: 'debuff',
+    damage: 10,
+    prerequisites: { level: 40 }
+  },
+  telekinesis: {
+    id: 'telekinesis',
+    name: 'Telekinesis',
+    description: 'Hurl objects at enemies with telekinetic force.',
+    cost: 40,
+    perkCost: 1,
+    type: 'damage',
+    damage: 20,
+    prerequisites: { level: 60 }
+  },
+
+  // ILLUSION
+  candlelight: {
+    id: 'candlelight',
+    name: 'Candlelight',
+    description: 'Create magical light around you.',
+    cost: 10,
+    perkCost: 0,
+    type: 'utility',
+    prerequisites: { level: 20 }
+  },
+  muffle: {
+    id: 'muffle',
+    name: 'Muffle',
+    description: 'Silence your footsteps.',
+    cost: 20,
+    perkCost: 1,
+    type: 'utility',
+    prerequisites: { level: 30 }
+  },
+  fear: {
+    id: 'fear',
+    name: 'Fear',
+    description: 'Fill an enemy with terror, reducing their damage.',
+    cost: 30,
+    perkCost: 1,
+    type: 'debuff',
+    prerequisites: { level: 35 }
+  },
+  mayhem: {
+    id: 'mayhem',
+    name: 'Mayhem',
+    description: 'Make all enemies attack each other.',
+    cost: 55,
+    perkCost: 2,
+    type: 'debuff',
+    prerequisites: { level: 50 }
+  },
+  mass_paralysis: {
+    id: 'mass_paralysis',
+    name: 'Mass Paralysis',
+    description: 'Paralyze all enemies in a wide area.',
+    cost: 80,
+    perkCost: 2,
+    type: 'debuff',
+    damage: 5,
+    prerequisites: { level: 65 }
   }
 };
 

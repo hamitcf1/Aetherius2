@@ -598,15 +598,15 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
   const level = character.level || 1;
   const perks = character.perks || [];
   
-  // Check for regen perks
+  // Check for regen perks (includes both old and new perk names)
   const hasHealthRegen = perks.some(p => p.id === 'health_regen' || p.name === 'Health Regeneration');
-  const hasMagickaRegen = perks.some(p => p.id === 'magicka_regen' || p.name === 'Magicka Regeneration');
-  const hasStaminaRegen = perks.some(p => p.id === 'stamina_regen' || p.name === 'Stamina Regeneration');
+  const hasMagickaRegen = perks.some(p => p.id === 'magicka_regen' || p.id === 'recovery' || p.name === 'Magicka Regeneration' || p.name === 'Recovery');
+  const hasStaminaRegen = perks.some(p => p.id === 'stamina_regen' || p.id === 'recovery' || p.name === 'Stamina Regeneration' || p.name === 'Recovery');
   
-  // Get perk ranks for scaling
+  // Get perk ranks for scaling (Recovery perk affects both magicka and stamina)
   const healthRegenPerk = perks.find(p => p.id === 'health_regen' || p.name === 'Health Regeneration');
-  const magickaRegenPerk = perks.find(p => p.id === 'magicka_regen' || p.name === 'Magicka Regeneration');
-  const staminaRegenPerk = perks.find(p => p.id === 'stamina_regen' || p.name === 'Stamina Regeneration');
+  const magickaRegenPerk = perks.find(p => p.id === 'magicka_regen' || p.id === 'recovery' || p.name === 'Magicka Regeneration' || p.name === 'Recovery');
+  const staminaRegenPerk = perks.find(p => p.id === 'stamina_regen' || p.id === 'recovery' || p.name === 'Stamina Regeneration' || p.name === 'Recovery');
   
   // Base regen rates (per second, applied per turn which is ~4s)
   const BASE_HEALTH_REGEN = 0.5;   // ~2 health per turn
@@ -800,6 +800,77 @@ export const generatePlayerAbilities = (
     });
   }
   
+  // === DESTRUCTION SPELLS - EXPANDED ===
+  // FIRE SPELLS
+  if (destructionSkill >= 30) {
+    abilities.push({
+      id: 'fire_bolt',
+      name: 'Fire Bolt',
+      type: 'magic',
+      damage: 20 + Math.floor(destructionSkill * 0.35),
+      cost: 20,
+      cooldown: 1,
+      description: 'A bolt of concentrated fire damage.',
+      effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 40 }]
+    });
+  }
+  // FROST SPELLS
+  if (destructionSkill >= 30) {
+    abilities.push({
+      id: 'frostbite',
+      name: 'Frostbite',
+      type: 'magic',
+      damage: 18 + Math.floor(destructionSkill * 0.32),
+      cost: 22,
+      cooldown: 1,
+      description: 'A bolt of frost that slows enemies.',
+      effects: [{ type: 'debuff', stat: 'stamina', value: -15, duration: 2 }]
+    });
+  }
+  // SHOCK SPELLS
+  if (destructionSkill >= 35) {
+    abilities.push({
+      id: 'spark',
+      name: 'Spark',
+      type: 'magic',
+      damage: 16 + Math.floor(destructionSkill * 0.3),
+      cost: 18,
+      cooldown: 0,
+      description: 'A small spark that shocks the target.',
+      effects: [{ type: 'damage', value: 5, chance: 25 }]
+    });
+  }
+  // MID-TIER DESTRUCTION
+  if (destructionSkill >= 50) {
+    abilities.push({
+      id: 'inferno',
+      name: 'Inferno',
+      type: 'magic',
+      damage: 28 + Math.floor(destructionSkill * 0.42),
+      cost: 38,
+      cooldown: 2,
+      description: 'A powerful fire spell that burns all nearby enemies.',
+      effects: [
+        { type: 'aoe_damage', value: 28 + Math.floor(destructionSkill * 0.42), aoeTarget: 'all_enemies' },
+        { type: 'dot', stat: 'health', value: 4, duration: 3, chance: 60 }
+      ]
+    });
+  }
+  if (destructionSkill >= 55) {
+    abilities.push({
+      id: 'absolute_zero',
+      name: 'Absolute Zero',
+      type: 'magic',
+      damage: 32 + Math.floor(destructionSkill * 0.45),
+      cost: 45,
+      cooldown: 3,
+      description: 'Extreme frost that freezes enemies, dealing heavy damage.',
+      effects: [
+        { type: 'aoe_damage', value: 32 + Math.floor(destructionSkill * 0.45), aoeTarget: 'all_enemies' },
+        { type: 'debuff', stat: 'stamina', value: -40, duration: 2 }
+      ]
+    });
+  }
   // AoE Destruction Spells (higher skill requirements)
   if (destructionSkill >= 65) {
     abilities.push({
@@ -843,8 +914,23 @@ export const generatePlayerAbilities = (
       ]
     });
   }
+  if (destructionSkill >= 90) {
+    abilities.push({
+      id: 'meteor_storm',
+      name: 'Meteor Storm',
+      type: 'magic',
+      damage: 50 + Math.floor(destructionSkill * 0.6),
+      cost: 90,
+      cooldown: 5,
+      description: 'Rain meteors on all enemies, dealing massive AoE damage.',
+      effects: [
+        { type: 'aoe_damage', value: 50 + Math.floor(destructionSkill * 0.6), aoeTarget: 'all_enemies' },
+        { type: 'stun', value: 2, duration: 1, chance: 40 }
+      ]
+    });
+  }
 
-  // Restoration spells
+  // === RESTORATION SPELLS - EXPANDED ===
   const restorationSkill = getSkillLevel('Restoration');
   if (restorationSkill >= 20) {
     abilities.push({
@@ -858,8 +944,42 @@ export const generatePlayerAbilities = (
       effects: [{ type: 'heal', stat: 'health', value: 25 + Math.floor(restorationSkill * 0.5) }]
     });
   }
-  
-  // AoE Restoration Spells (higher skill requirements)
+  if (restorationSkill >= 35) {
+    abilities.push({
+      id: 'close_wounds',
+      name: 'Close Wounds',
+      type: 'magic',
+      damage: 0,
+      cost: 28,
+      cooldown: 1,
+      description: 'Heal yourself more effectively.',
+      effects: [{ type: 'heal', stat: 'health', value: 40 + Math.floor(restorationSkill * 0.6) }]
+    });
+  }
+  if (restorationSkill >= 40) {
+    abilities.push({
+      id: 'cure_disease',
+      name: 'Cure Disease',
+      type: 'magic',
+      damage: 0,
+      cost: 25,
+      cooldown: 2,
+      description: 'Cure all diseases and poisons affecting you.',
+      effects: [{ type: 'buff', stat: 'health', value: 20, duration: 1 }]
+    });
+  }
+  if (restorationSkill >= 45) {
+    abilities.push({
+      id: 'magicka_restoration',
+      name: 'Magicka Restoration',
+      type: 'magic',
+      damage: 0,
+      cost: 0,
+      cooldown: 3,
+      description: 'Restore your magicka pool.',
+      effects: [{ type: 'heal', stat: 'magicka', value: 35 + Math.floor(restorationSkill * 0.5) }]
+    });
+  }
   if (restorationSkill >= 50) {
     abilities.push({
       id: 'healing_circle',
@@ -871,6 +991,18 @@ export const generatePlayerAbilities = (
       description: 'A circle of healing light that restores health to you and all allies.',
       effects: [{ type: 'aoe_heal', value: 30 + Math.floor(restorationSkill * 0.4), aoeTarget: 'all_allies' }],
       heal: 30 + Math.floor(restorationSkill * 0.4)
+    });
+  }
+  if (restorationSkill >= 60) {
+    abilities.push({
+      id: 'grand_healing',
+      name: 'Grand Healing',
+      type: 'magic',
+      damage: 0,
+      cost: 55,
+      cooldown: 2,
+      description: 'Restore a large amount of health to yourself.',
+      effects: [{ type: 'heal', stat: 'health', value: 60 + Math.floor(restorationSkill * 0.75) }]
     });
   }
   if (restorationSkill >= 70) {
@@ -889,9 +1021,35 @@ export const generatePlayerAbilities = (
       heal: 40 + Math.floor(restorationSkill * 0.5)
     });
   }
+  if (restorationSkill >= 80) {
+    abilities.push({
+      id: 'mass_restoration',
+      name: 'Mass Restoration',
+      type: 'magic',
+      damage: 0,
+      cost: 75,
+      cooldown: 4,
+      description: 'Restore health and magicka to all allies.',
+      effects: [
+        { type: 'aoe_heal', value: 50 + Math.floor(restorationSkill * 0.6), aoeTarget: 'all_allies' }
+      ],
+      heal: 50 + Math.floor(restorationSkill * 0.6)
+    });
+  }
 
-  // Conjuration - summon would be complex, so we'll do a damage spell
+  // === CONJURATION SPELLS - EXPANDED ===
   const conjurationSkill = getSkillLevel('Conjuration');
+  if (conjurationSkill >= 20) {
+    abilities.push({
+      id: 'soul_trap',
+      name: 'Soul Trap',
+      type: 'magic',
+      damage: 15 + Math.floor(conjurationSkill * 0.25),
+      cost: 20,
+      cooldown: 2,
+      description: 'Damage an enemy while trapping its soul.'
+    });
+  }
   if (conjurationSkill >= 30) {
     abilities.push({
       id: 'bound_weapon',
@@ -903,21 +1061,381 @@ export const generatePlayerAbilities = (
       description: 'Conjure a spectral weapon to strike your foe.'
     });
   }
+  if (conjurationSkill >= 35) {
+    abilities.push({
+      id: 'conjure_familiar',
+      name: 'Conjure Familiar',
+      type: 'magic',
+      damage: 0,
+      cost: 40,
+      cooldown: 4,
+      description: 'Summon a spectral familiar to aid you in combat.'
+    });
+  }
+  if (conjurationSkill >= 50) {
+    abilities.push({
+      id: 'conjure_daedra',
+      name: 'Conjure Daedra',
+      type: 'magic',
+      damage: 0,
+      cost: 50,
+      cooldown: 5,
+      description: 'Summon a daedric servant to fight for you.'
+    });
+  }
+  if (conjurationSkill >= 65) {
+    abilities.push({
+      id: 'summon_storm_atronach',
+      name: 'Summon Storm Atronach',
+      type: 'magic',
+      damage: 0,
+      cost: 70,
+      cooldown: 5,
+      description: 'Summon a powerful storm atronach to unleash lightning.'
+    });
+  }
+  if (conjurationSkill >= 80) {
+    abilities.push({
+      id: 'summon_dremora_lord',
+      name: 'Summon Dremora Lord',
+      type: 'magic',
+      damage: 0,
+      cost: 85,
+      cooldown: 6,
+      description: 'Summon a powerful Dremora Lord to dominate the battlefield.'
+    });
+  }
 
-  // Archery (if bow equipped)
+  // === ALTERATION SPELLS - NEW ===
+  const alterationSkill = getSkillLevel('Alteration');
+  if (alterationSkill >= 20) {
+    abilities.push({
+      id: 'oakflesh',
+      name: 'Oakflesh',
+      type: 'magic',
+      damage: 0,
+      cost: 25,
+      cooldown: 2,
+      description: 'Harden your skin, increasing armor by 20.',
+      effects: [{ type: 'buff', stat: 'armor', value: 20, duration: 4 }]
+    });
+  }
+  if (alterationSkill >= 35) {
+    abilities.push({
+      id: 'stoneskin',
+      name: 'Stoneskin',
+      type: 'magic',
+      damage: 0,
+      cost: 35,
+      cooldown: 2,
+      description: 'Turn your skin to stone, increasing armor significantly.',
+      effects: [{ type: 'buff', stat: 'armor', value: 40, duration: 3 }]
+    });
+  }
+  if (alterationSkill >= 50) {
+    abilities.push({
+      id: 'iron_skin',
+      name: 'Iron Skin',
+      type: 'magic',
+      damage: 0,
+      cost: 50,
+      cooldown: 3,
+      description: 'Become nearly invulnerable for a short time.',
+      effects: [{ type: 'buff', stat: 'armor', value: 60, duration: 2 }]
+    });
+  }
+  if (alterationSkill >= 40) {
+    abilities.push({
+      id: 'paralyze',
+      name: 'Paralyze',
+      type: 'magic',
+      damage: 10,
+      cost: 55,
+      cooldown: 4,
+      description: 'Paralyze an enemy, preventing them from acting.',
+      effects: [{ type: 'stun', value: 3, duration: 2, chance: 70 }]
+    });
+  }
+  if (alterationSkill >= 60) {
+    abilities.push({
+      id: 'telekinesis',
+      name: 'Telekinesis',
+      type: 'magic',
+      damage: 20 + Math.floor(alterationSkill * 0.3),
+      cost: 40,
+      cooldown: 2,
+      description: 'Hurl objects at enemies with telekinetic force.',
+      effects: [{ type: 'damage', value: 20, chance: 100 }]
+    });
+  }
+
+  // === ILLUSION SPELLS - NEW ===
+  const illusionSkill = getSkillLevel('Illusion');
+  if (illusionSkill >= 20) {
+    abilities.push({
+      id: 'candlelight',
+      name: 'Candlelight',
+      type: 'magic',
+      damage: 0,
+      cost: 10,
+      cooldown: 1,
+      description: 'Create magical light around you.',
+      effects: [{ type: 'buff', stat: 'damage', value: 5, duration: 2 }]
+    });
+  }
+  if (illusionSkill >= 30) {
+    abilities.push({
+      id: 'muffle',
+      name: 'Muffle',
+      type: 'magic',
+      damage: 0,
+      cost: 20,
+      cooldown: 2,
+      description: 'Silence your footsteps.',
+      effects: [{ type: 'buff', stat: 'sneak', value: 30, duration: 3 }]
+    });
+  }
+  if (illusionSkill >= 40) {
+    abilities.push({
+      id: 'invisibility',
+      name: 'Invisibility',
+      type: 'magic',
+      damage: 0,
+      cost: 50,
+      cooldown: 4,
+      description: 'Become invisible to enemies.',
+      effects: [{ type: 'buff', stat: 'sneak', value: 100, duration: 2 }]
+    });
+  }
+  if (illusionSkill >= 35) {
+    abilities.push({
+      id: 'fear',
+      name: 'Fear',
+      type: 'magic',
+      damage: 0,
+      cost: 30,
+      cooldown: 3,
+      description: 'Fill an enemy with terror, reducing their damage.',
+      effects: [{ type: 'debuff', stat: 'damage', value: -20, duration: 2, chance: 65 }]
+    });
+  }
+  if (illusionSkill >= 50) {
+    abilities.push({
+      id: 'mayhem',
+      name: 'Mayhem',
+      type: 'magic',
+      damage: 0,
+      cost: 55,
+      cooldown: 4,
+      description: 'Make all enemies attack each other.',
+      effects: [{ type: 'debuff', stat: 'damage', value: -25, duration: 3, chance: 70 }]
+    });
+  }
+  if (illusionSkill >= 65) {
+    abilities.push({
+      id: 'mass_paralysis',
+      name: 'Mass Paralysis',
+      type: 'magic',
+      damage: 5,
+      cost: 80,
+      cooldown: 5,
+      description: 'Paralyze all enemies in a wide area.',
+      effects: [
+        { type: 'aoe_damage', value: 5, aoeTarget: 'all_enemies' },
+        { type: 'stun', value: 2, duration: 2, chance: 60 }
+      ]
+    });
+  }
+
+  // === ARCHERY ABILITIES ===
   const bow = equipment.find(i => i.equipped && i.slot === 'weapon' && 
     i.name.toLowerCase().includes('bow'));
   if (bow) {
     const archerySkill = getSkillLevel('Archery');
+    
+    if (archerySkill >= 15) {
+      abilities.push({
+        id: 'power_shot',
+        name: 'Power Shot',
+        type: 'ranged',
+        damage: Math.floor((bow.damage || 15) * 1.4),
+        cost: 20,
+        cooldown: 1,
+        description: 'A carefully aimed shot with extra force.',
+        effects: [{ type: 'damage', value: Math.floor(archerySkill * 0.2), chance: 100 }]
+      });
+    }
+    
+    if (archerySkill >= 30) {
+      abilities.push({
+        id: 'multi_shot',
+        name: 'Multi Shot',
+        type: 'ranged',
+        damage: Math.floor((bow.damage || 15) * 1.2),
+        cost: 35,
+        cooldown: 2,
+        description: 'Fire multiple arrows that hit several enemies.',
+        effects: [{ type: 'aoe_damage', value: Math.floor((bow.damage || 15) * 1.2), aoeTarget: 'all_enemies' }]
+      });
+    }
+    
+    if (archerySkill >= 50) {
+      abilities.push({
+        id: 'arrow_barrage',
+        name: 'Arrow Barrage',
+        type: 'ranged',
+        damage: Math.floor((bow.damage || 15) * 1.3),
+        cost: 50,
+        cooldown: 3,
+        description: 'Rain arrows on all enemies.',
+        effects: [{ type: 'aoe_damage', value: Math.floor((bow.damage || 15) * 1.3), aoeTarget: 'all_enemies' }]
+      });
+    }
+    
+    if (archerySkill >= 70) {
+      abilities.push({
+        id: 'piercing_arrow',
+        name: 'Piercing Arrow',
+        type: 'ranged',
+        damage: Math.floor((bow.damage || 15) * 1.8),
+        cost: 45,
+        cooldown: 2,
+        description: 'A perfectly placed arrow that ignores armor.',
+        effects: [{ type: 'damage', value: Math.floor(archerySkill * 0.4), chance: 100 }]
+      });
+    }
+  }
+
+  // === ONE-HANDED WEAPON ABILITIES ===
+  const oneHandedSkill = getSkillLevel('One-Handed');
+  
+  if (oneHandedSkill >= 25) {
     abilities.push({
-      id: 'aimed_shot',
-      name: 'Aimed Shot',
-      type: 'ranged',
-      damage: Math.floor((bow.damage || 15) * 1.3),
+      id: 'riposte',
+      name: 'Riposte',
+      type: 'melee',
+      damage: Math.floor((weapon?.damage || 10) * 1.4),
       cost: 20,
-      cooldown: 1,
-      description: 'A carefully aimed arrow for extra damage.',
-      effects: [{ type: 'damage', value: Math.floor(archerySkill * 0.2), chance: 100 }]
+      cooldown: 2,
+      description: 'A quick counter attack that grants bonus damage.',
+      effects: [{ type: 'damage', value: Math.floor(oneHandedSkill * 0.15), chance: 100 }]
+    });
+  }
+  
+  if (oneHandedSkill >= 40) {
+    abilities.push({
+      id: 'slash',
+      name: 'Slash',
+      type: 'melee',
+      damage: Math.floor((weapon?.damage || 10) * 1.6),
+      cost: 30,
+      cooldown: 2,
+      description: 'A wide slashing attack that hits nearby enemies.',
+      effects: [{ type: 'aoe_damage', value: Math.floor((weapon?.damage || 10) * 1.2), aoeTarget: 'all_enemies' }]
+    });
+  }
+  
+  if (oneHandedSkill >= 60) {
+    abilities.push({
+      id: 'mortal_strike',
+      name: 'Mortal Strike',
+      type: 'melee',
+      damage: Math.floor((weapon?.damage || 10) * 2.0),
+      cost: 40,
+      cooldown: 3,
+      description: 'A devastating strike that reduces enemy damage temporarily.',
+      effects: [{ type: 'debuff', stat: 'damage', value: -15, duration: 2 }]
+    });
+  }
+
+  // === TWO-HANDED WEAPON ABILITIES ===
+  const twoHandedSkillVal = getSkillLevel('Two-Handed');
+  
+  if (twoHandedSkillVal >= 20) {
+    const twoWeapon = equipment.find(i => i.equipped && i.slot === 'weapon' && i.type === 'weapon' && (i.damage || 0) > 15);
+    if (twoWeapon && twoWeapon.damage! > 12) {
+      abilities.push({
+        id: 'overhead_strike',
+        name: 'Overhead Strike',
+        type: 'melee',
+        damage: Math.floor((twoWeapon.damage || 15) * 1.5),
+        cost: 25,
+        cooldown: 2,
+        description: 'A powerful overhead strike.',
+        effects: [{ type: 'stun', value: 1, duration: 1, chance: 30 }]
+      });
+    }
+  }
+
+  // === SHIELD ABILITIES ===
+  const shieldAbility = equipment.find(i => i.equipped && i.slot === 'offhand' && i.armor);
+  if (shieldAbility) {
+    const blockSkill = getSkillLevel('Block');
+    
+    abilities.push({
+      id: 'shield_bash',
+      name: 'Shield Bash',
+      type: 'melee',
+      damage: Math.floor(shieldAbility.armor! * 0.5),
+      cost: 15,
+      cooldown: 2,
+      effects: [{ type: 'stun', value: 1, duration: 1, chance: 50 }],
+      description: 'Bash with your shield, potentially stunning the enemy.'
+    });
+    
+    if (blockSkill >= 30) {
+      abilities.push({
+        id: 'shield_wall',
+        name: 'Shield Wall',
+        type: 'melee',
+        damage: 0,
+        cost: 25,
+        cooldown: 3,
+        description: 'Increase your armor significantly.',
+        effects: [{ type: 'buff', stat: 'armor', value: 40, duration: 2 }]
+      });
+    }
+    
+    if (blockSkill >= 60) {
+      abilities.push({
+        id: 'anchorsmith',
+        name: 'Anchorsmith',
+        type: 'melee',
+        damage: Math.floor(shieldAbility.armor! * 0.8),
+        cost: 35,
+        cooldown: 2,
+        description: 'Create an area of protection for you and allies.',
+        effects: [{ type: 'buff', stat: 'armor', value: 30, duration: 3 }]
+      });
+    }
+  }
+
+  // === SNEAK ABILITIES (NON-CONJURATION) ===
+  const sneakSkill = getSkillLevel('Sneak');
+  
+  if (sneakSkill >= 20) {
+    abilities.push({
+      id: 'evasion',
+      name: 'Evasion',
+      type: 'melee',
+      damage: 0,
+      cost: 15,
+      cooldown: 2,
+      description: 'Dodge the next attack with increased agility.',
+      effects: [{ type: 'buff', stat: 'dodge', value: 50, duration: 1 }]
+    });
+  }
+  
+  if (sneakSkill >= 40) {
+    abilities.push({
+      id: 'shadow_clone',
+      name: 'Shadow Clone',
+      type: 'melee',
+      damage: 0,
+      cost: 40,
+      cooldown: 4,
+      description: 'Create a shadow duplicate to confuse enemies.',
+      effects: [{ type: 'debuff', stat: 'accuracy', value: -30, duration: 2 }]
     });
   }
 

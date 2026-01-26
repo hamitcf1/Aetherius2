@@ -107,6 +107,8 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'summoner', name: 'Summoner', skill: 'Conjuration', description: 'Summoned creatures have 15% more health per rank.', requires: ['conjuration_novice:1'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'summonHealth', amount: 15 } },
   { id: 'atromancy', name: 'Atromancy', skill: 'Conjuration', description: 'Summoned Atronachs last 25% longer per rank.', requires: ['summoner:2'], maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'atronachDuration', amount: 25 } },
   { id: 'twin_souls', name: 'Twin Souls', skill: 'Conjuration', description: 'Can summon an additional creature per rank (up to 3 total when fully ranked).', requires: ['atromancy:2', 'summoner:3'], maxRank: 2, masteryCost: 4 },
+  { id: 'pact_warrior', name: 'Pact Warrior', skill: 'Conjuration', description: 'Summoned creatures deal 20% more damage per rank.', requires: ['summoner:2'], maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'summonDamage', amount: 20 } },
+  { id: 'spell_shield', name: 'Spell Shield', skill: 'Conjuration', description: 'Summoned creatures grant you 15% damage reduction per rank.', requires: ['summoner:3'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'summonArmorBonus', amount: 15 } },
   
   // === COMBAT PERKS - SNEAK ===
   { id: 'stealth', name: 'Stealth', skill: 'Sneak', description: 'You are 15% harder to detect per rank.', maxRank: 5, masteryCost: 2, effect: { type: 'combat', key: 'sneakBonus', amount: 15 } },
@@ -114,12 +116,34 @@ export const PERK_DEFINITIONS: PerkDef[] = [
   { id: 'deadly_aim', name: 'Deadly Aim', skill: 'Sneak', description: 'Sneak attacks with bows deal 2x damage (per rank: +1x).', requires: ['stealth:2'], maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'sneakBowMultiplier', amount: 100 } },
   { id: 'assassins_blade', name: "Assassin's Blade", skill: 'Sneak', description: 'Sneak attacks with daggers deal 15x damage.', requires: ['backstab:3'], maxRank: 1, masteryCost: 4, effect: { type: 'combat', key: 'daggerSneakMultiplier', amount: 1500 } },
   { id: 'shadow_warrior', name: 'Shadow Warrior', skill: 'Sneak', description: '15% chance per rank to enter stealth mid-combat when crouching.', requires: ['stealth:5'], maxRank: 2, masteryCost: 4, effect: { type: 'combat', key: 'combatStealth', amount: 15 } },
+  { id: 'phantom_strike', name: 'Phantom Strike', skill: 'Sneak', description: 'Sneak attacks ignore 25% of target armor per rank.', requires: ['backstab:2'], maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'sneakArmorPen', amount: 25 } },
+  { id: 'poison_mastery', name: 'Poison Mastery', skill: 'Sneak', description: 'Poisons applied to sneak attacks are 30% more potent per rank.', requires: ['stealth:3'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'poisonPotency', amount: 30 } },
   
   // === SPECIAL PERKS ===
   { id: 'berserker_rage', name: 'Berserker Rage', skill: 'Combat', description: 'When below 25% health, deal 20% more damage per rank.', maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'lowHealthDamage', amount: 20 } },
   { id: 'vampiric_strikes', name: 'Vampiric Strikes', skill: 'Combat', description: 'Melee attacks restore 3% of damage dealt as health per rank.', requires: ['level:15'], maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'lifesteal', amount: 3 } },
   { id: 'executioner', name: 'Executioner', skill: 'Combat', description: 'Attacks against enemies below 20% health deal 25% more damage per rank.', requires: ['level:10'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'executeDamage', amount: 25 } },
   { id: 'dragon_skin', name: 'Dragon Skin', skill: 'Combat', description: 'Take 5% less damage from all sources per rank.', requires: ['level:20'], maxRank: 3, masteryCost: 4, effect: { type: 'combat', key: 'damageReduction', amount: 5 } },
+  { id: 'ricochet', name: 'Ricochet', skill: 'Archery', description: 'Arrows have 15% chance per rank to ricochet and hit another enemy.', requires: ['overdraw:3'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'arrowRicochet', amount: 15 } },
+  { id: 'piercing_shot', name: 'Piercing Shot', skill: 'Archery', description: 'Arrow attacks ignore 20% of enemy armor per rank.', requires: ['overdraw:2'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'arrowArmorPen', amount: 20 } },
+  
+  // === ALTERATION PERKS ===
+  { id: 'alteration_novice', name: 'Novice Alteration', skill: 'Alteration', description: 'Novice-level alteration spells cost 25% less magicka per rank.', maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'noviceAlterationCost', amount: -25 } },
+  { id: 'stoneskin', name: 'Stoneskin', skill: 'Alteration', description: 'Increase armor by 30 per rank when cast.', requires: ['alteration_novice:1'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'stoneskinArmor', amount: 30 } },
+  { id: 'blur', name: 'Blur', skill: 'Alteration', description: 'Decrease enemy accuracy by 10% per rank when cast.', requires: ['alteration_novice:1'], maxRank: 3, masteryCost: 2, effect: { type: 'combat', key: 'blurAccuracy', amount: -10 } },
+  { id: 'paralysis_mastery', name: 'Paralysis Mastery', skill: 'Alteration', description: 'Paralysis effects have 15% higher chance per rank to trigger.', requires: ['alteration_novice:1'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'paralysisChance', amount: 15 } },
+  
+  // === ILLUSION PERKS ===
+  { id: 'illusion_novice', name: 'Novice Illusion', skill: 'Illusion', description: 'Novice-level illusion spells cost 25% less magicka per rank.', maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'noviceIllusionCost', amount: -25 } },
+  { id: 'confidence', name: 'Confidence', skill: 'Illusion', description: 'Fear effects cause 20% more damage to affected enemies per rank.', requires: ['illusion_novice:1'], maxRank: 2, masteryCost: 2, effect: { type: 'combat', key: 'fearDamage', amount: 20 } },
+  { id: 'Fury', name: 'Fury', skill: 'Illusion', description: 'Chaotic spells make enemies attack each other 30% more often per rank.', requires: ['illusion_novice:1'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'furyEffect', amount: 30 } },
+  { id: 'invisibility_mastery', name: 'Invisibility Mastery', skill: 'Illusion', description: 'Invisibility lasts 25% longer per rank.', requires: ['illusion_novice:2'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'invisibilityDuration', amount: 25 } },
+  
+  // === EVOCATION PERKS ===
+  { id: 'spell_absorption', name: 'Spell Absorption', skill: 'Destruction', description: 'Absorb 10% of spell damage taken as magicka per rank.', requires: ['destruction_novice:2'], maxRank: 3, masteryCost: 3, effect: { type: 'combat', key: 'spellAbsorption', amount: 10 } },
+  { id: 'inferno', name: 'Inferno', skill: 'Destruction', description: 'Fire spells spread to nearby enemies, dealing 40% damage per rank.', requires: ['augmented_flames:2'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'fireSpread', amount: 40 } },
+  { id: 'absolute_zero', name: 'Absolute Zero', skill: 'Destruction', description: 'Frost spells freeze enemies solid, disabling them for 2 turns per rank.', requires: ['augmented_frost:3'], maxRank: 1, masteryCost: 4 },
+  { id: 'overcharge', name: 'Overcharge', skill: 'Destruction', description: 'Shock spells restore 15% of magicka spent per rank when they hit.', requires: ['augmented_shock:2'], maxRank: 2, masteryCost: 3, effect: { type: 'combat', key: 'shockRestore', amount: 15 } },
 ];
 
 export default PERK_DEFINITIONS;
