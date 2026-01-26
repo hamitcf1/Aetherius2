@@ -1,0 +1,36 @@
+/* Combat badges - visual reset for clearer, less distracting UI */
+.combat-badge {
+  animation: none !important;
+  transition: background-color .12s ease, color .12s ease !important;
+  box-shadow: none !important;
+  font-size: 0.78rem !important;
+  padding: 0.18rem 0.5rem !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  line-height: 1 !important;
+}
+
+.combat-badge * { animation: none !important; }
+
+.combat-badge.main-badge { /* subtle tone */ }
+.combat-badge.bonus-badge { /* subtle tone */ }
+
+.bonus-pill {
+  animation: none !important;
+  font-size: 0.65rem !important;
+  padding: 0 .25rem !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  box-shadow: none !important;
+}
+
+.bonus-pill * { animation: none !important; }
+
+/* Reduce ring visual intensity when used for focus/availability */
+.combat-badge:focus, .combat-badge:active { outline: 2px solid rgba(255,255,255,0.06); }
+
+/* Strong override to remove remaining tailwind pulse animations on these selectors */
+.combat-badge, .bonus-pill, .combat-badge > span, .bonus-pill > span { animation: none !important; }

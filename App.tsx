@@ -1296,6 +1296,17 @@ const App: React.FC = () => {
         remoteData?.unlockedAchievements || {}
       );
 
+      // Sanitize unlocked achievements: only keep namespaced keys for this character
+      const sanitizedUnlocked: Record<string, any> = {};
+      if (mergedUnlocked) {
+        Object.entries(mergedUnlocked).forEach(([key, val]) => {
+          if (key && typeof key === 'string' && key.startsWith(`${currentCharacterId}:`)) {
+            sanitizedUnlocked[key] = val;
+          }
+          // Legacy plain ids are intentionally ignored to avoid leaking other characters' unlocks
+        });
+      }
+
       const legacyNotified = userSettings?.notifiedAchievements?.[currentCharacterId] || [];
       const notifiedSet = new Set<string>([
         ...(localData?.notifiedAchievements || []),
@@ -1304,7 +1315,7 @@ const App: React.FC = () => {
       ]);
 
       let nextState: AchievementState = {
-        unlockedAchievements: mergedUnlocked,
+        unlockedAchievements: sanitizedUnlocked,
         notifiedAchievements: notifiedSet,
         stats: mergedStats
       };
@@ -5701,8 +5712,13 @@ const App: React.FC = () => {
                 
                 {/* Persistent Level Badge (HUD) */}
                 {activeCharacter && (
-                  <div className="ml-2 hidden sm:block">
+                  <div className="ml-2 hidden sm:block relative">
                     <LevelBadge level={activeCharacter.level} size={40} compact />
+                    {availableLevelUps[activeCharacter.id] && (
+                      <div title="Level up available" className="absolute -top-1 -right-1 bg-skyrim-gold text-skyrim-dark rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-skyrim-border">
+                        !
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -1441,8 +1441,13 @@ export const generatePlayerAbilities = (
 
   // Learned spells (from spells registry) -> turn into abilities
   try {
-    const learned = getLearnedSpellIds(character.id || '');
+    // Only load learned spells when we have a canonical character id
+    const learned = character && character.id ? getLearnedSpellIds(character.id) : [];
     learned.forEach(spellId => {
+      // Ensure empowered/variant spells are actually unlocked by character level/perks
+      try {
+        if (!isSpellVariantUnlocked(character, spellId)) return;
+      } catch (e) {}
       const ab = createAbilityFromSpell(spellId);
       if (ab) abilities.push(ab as any);
     });
