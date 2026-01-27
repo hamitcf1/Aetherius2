@@ -236,9 +236,38 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
 
   const displayedCharacters = profileId ? characters.filter(c => c.profileId === profileId) : [];
 
+  // Exit animation state used when selecting a character to transition to the Hero page
+  const [isExiting, setIsExiting] = useState(false);
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
+
+  // Helper to respect user's reduced motion preference
+  const prefersReducedMotion = (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test');
+
+  const handleSelectWithTransition = (charId: string) => {
+    if (prefersReducedMotion) {
+      // If user prefers reduced motion, skip animation
+      onSelectCharacter(charId);
+      return;
+    }
+
+    // Play a subtle clicking sound and begin exit animation
+    try { audioService.playSoundEffect('ui_confirm'); } catch (e) {}
+
+    setPendingSelectId(charId);
+    setIsExiting(true);
+
+    // Wait for animation to complete before actually selecting (500ms to match CSS duration)
+    setTimeout(() => {
+      onSelectCharacter(charId);
+    }, 500);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-skyrim-dark bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]">
-      <div className="w-full max-w-4xl p-4 sm:p-8 bg-skyrim-paper border border-skyrim-gold shadow-2xl rounded-lg flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+    <div className={`relative min-h-screen flex items-center justify-center bg-skyrim-dark bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')] ${isExiting ? 'pointer-events-none' : ''}`}>
+      {/* Exit overlay (fades in during transition) */}
+      <div aria-hidden className={`absolute inset-0 bg-black/30 transition-opacity duration-500 ${isExiting ? 'opacity-100' : 'opacity-0'}`} />
+
+      <div className={`w-full max-w-4xl p-4 sm:p-8 bg-skyrim-paper border border-skyrim-gold shadow-2xl rounded-lg flex flex-col max-h-[92vh] sm:max-h-[90vh] transition-all duration-500 ease-in-out ${isExiting ? 'opacity-0 -translate-y-6 scale-95' : 'opacity-100 translate-y-0 scale-100'}`}>
 
         {/* Reusable confirm modal for destructive character actions */}
         {confirmDeleteCharacter && (
@@ -434,7 +463,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                                           ) : (
                                             /* Living character - playable */
                                             <button 
-                                              onClick={() => onSelectCharacter(c.id)} 
+                                              onClick={() => handleSelectWithTransition(c.id)} 
                                               className="flex items-center gap-4 flex-1 text-left"
                                             >
                                               <div className="w-12 h-12 bg-skyrim-gold/20 rounded-full flex items-center justify-center text-skyrim-gold group-hover:text-white group-hover:bg-skyrim-gold transition-colors">

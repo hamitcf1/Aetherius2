@@ -700,9 +700,9 @@ export const generatePlayerAbilities = (
     });
   }
 
-  // Power Attack (if stamina > 25 and weapon skill > 20)
+  // Power Attack (if stamina > 25 and weapon skill > 20) - requires a main weapon equipped
   const weaponSkill = Math.max(getSkillLevel('One-Handed'), getSkillLevel('Two-Handed'));
-  if (weaponSkill >= 20) {
+  if (weapon && weaponSkill >= 20) {
     abilities.push({
       id: 'power_attack',
       name: 'Power Attack',
@@ -721,7 +721,7 @@ export const generatePlayerAbilities = (
   const oneHandedSkillVal = getSkillLevel('One-Handed');
   // Allow Whirlwind Attack if skill thresholds met OR if the character has a unlock perk
   const hasWhirlwindPerk = hasPerk(character, 'whirlwind_mastery');
-  if (twoHandedSkill >= 35 || oneHandedSkillVal >= 40 || hasWhirlwindPerk) {
+  if (weapon && (twoHandedSkill >= 35 || oneHandedSkillVal >= 40 || hasWhirlwindPerk)) {
     const baseDamage = Math.floor((weapon?.damage || 10) * 1.2);
     abilities.push({
       id: 'whirlwind_attack',
@@ -738,7 +738,7 @@ export const generatePlayerAbilities = (
   // Cleaving Strike - AoE physical for Two-Handed specialists
   // Cleaving Strike: available via Two-Handed skill OR perk unlock
   const hasCleavingPerk = hasPerk(character, 'cleaving_mastery');
-  if (twoHandedSkill >= 50 || hasCleavingPerk) {
+  if (weapon && (twoHandedSkill >= 50 || hasCleavingPerk)) {
     const cleaveDamage = Math.floor((weapon?.damage || 10) * 1.4);
     abilities.push({
       id: 'cleaving_strike',
@@ -1316,7 +1316,7 @@ export const generatePlayerAbilities = (
   const oneHandedSkill = getSkillLevel('One-Handed');
   const hasOneHandedPerk = hasPerkInSkill('One-Handed');
   
-  if (oneHandedSkill >= 25 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 25 && hasOneHandedPerk) {
     abilities.push({
       id: 'riposte',
       name: 'Riposte',
@@ -1329,7 +1329,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 40 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 40 && hasOneHandedPerk) {
     abilities.push({
       id: 'slash',
       name: 'Slash',
@@ -1342,7 +1342,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 60 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 60 && hasOneHandedPerk) {
     abilities.push({
       id: 'mortal_strike',
       name: 'Mortal Strike',
