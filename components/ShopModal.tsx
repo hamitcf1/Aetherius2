@@ -7,6 +7,8 @@ import { playSoundEffect } from '../services/audioService';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { SortSelector } from './GameFeatures';
 import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
+import { getShopSpecials } from '../services/shopService';
+import { ParticleEffect } from './SpellEffects';
 
 
 export interface ShopItem {
@@ -22,7 +24,7 @@ export interface ShopItem {
 }
 
 // Comprehensive Skyrim-themed shop inventory
-const SHOP_INVENTORY: ShopItem[] = [
+export const SHOP_INVENTORY: ShopItem[] = [
   // === FOOD ===
   { id: 'bread', name: 'Bread', type: 'food', description: 'A fresh loaf of bread. Restores hunger.', price: 2, category: 'Food' },
   { id: 'apple', name: 'Apple', type: 'food', description: 'A crisp red apple from the orchards.', price: 1, category: 'Food' },
@@ -190,6 +192,14 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'staff_flames', name: 'Staff of Flames', type: 'weapon', description: 'A staff that shoots fire. Limited charges.', price: 250, category: 'Weapons', requiredLevel: 8 },
   { id: 'staff_frost', name: 'Staff of Frost', type: 'weapon', description: 'Freezing staff. Slows enemies.', price: 280, category: 'Weapons', requiredLevel: 10 },
   { id: 'staff_lightning', name: 'Staff of Lightning', type: 'weapon', description: 'Electric staff. Chain lightning.', price: 320, category: 'Weapons', requiredLevel: 12 },
+
+  // Additional pre-enchanted items to increase enchanted inventory frequency
+  { id: 'elven_dagger_of_flame', name: 'Elven Dagger of Flames', type: 'weapon', description: 'Elven dagger imbued with fiery runes. Adds fire damage.', price: 420, category: 'Weapons', requiredLevel: 8, rarity: 'uncommon' },
+  { id: 'steel_sword_of_frost', name: 'Steel Sword of Frost', type: 'weapon', description: 'A steel sword etched with frost runes. Slows enemies on hit.', price: 480, category: 'Weapons', requiredLevel: 10, rarity: 'uncommon' },
+  { id: 'glass_bow_of_lightning', name: 'Glass Bow of Lightning', type: 'weapon', description: 'A glass bow that shocks targets on hit.', price: 850, category: 'Weapons', requiredLevel: 20, rarity: 'rare' },
+  { id: 'dwarven_dagger_of_shock', name: 'Dwarven Dagger of Shock', type: 'weapon', description: 'A dwarven dagger crackling with electricity.', price: 500, category: 'Weapons', requiredLevel: 12, rarity: 'rare' },
+  { id: 'elven_gauntlets_of_power', name: 'Elven Gauntlets of Power', type: 'apparel', description: 'Gauntlets that increase one-handed damage.', price: 320, category: 'Armor', requiredLevel: 10, rarity: 'uncommon' },
+  { id: 'orcish_mace_of_bleeding', name: 'Orcish Mace of Bleeding', type: 'weapon', description: 'Orcish mace that causes bleeding damage over time.', price: 540, category: 'Weapons', requiredLevel: 14, rarity: 'rare' },
   { id: 'enchanted_bow', name: 'Enchanted Hunting Bow', type: 'weapon', description: 'Bow with minor fire enchantment.', price: 180, category: 'Weapons', requiredLevel: 10 },
   { id: 'silver_sword', name: 'Silver Sword', type: 'weapon', description: 'Effective against undead and werewolves.', price: 200, category: 'Weapons', requiredLevel: 12 },
   { id: 'silver_greatsword', name: 'Silver Greatsword', type: 'weapon', description: 'Large silver blade. Anti-undead.', price: 350, category: 'Weapons', requiredLevel: 15 },
@@ -398,7 +408,7 @@ interface ShopModalProps {
   onPurchase: (item: ShopItem, quantity: number) => void;
   inventory?: InventoryItem[];
   onSell?: (item: InventoryItem, quantity: number, totalGold: number) => void;
-  characterLevel?: number; // Character level to filter shop items
+  characterLevel?: number;
 }
 
 export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onSell, characterLevel = 1 }: ShopModalProps) {
@@ -408,9 +418,11 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [recentlyPurchased, setRecentlyPurchased] = useState<Set<string>>(new Set());
   const [recentlySold, setRecentlySold] = useState<Set<string>>(new Set());
+  const [insufficient, setInsufficient] = useState<Set<string>>(new Set());
   const [shopSort, setShopSort] = useState<string>('name:asc');
+  const [purchaseEffect, setPurchaseEffect] = useState<{ x: number; y: number; id: string } | null>(null);
   const [sellSort, setSellSort] = useState<string>('name:asc');
-  const { showQuantityControls } = useAppContext();
+  const { showQuantityControls, showToast } = useAppContext();
 
   // Map inventory item types to shop categories for the Sell tab
   const TYPE_TO_CATEGORY: Record<string, string> = {
@@ -452,8 +464,33 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     }
   }, [open]);
 
+  const specials = useMemo(() => {
+    try {
+      return getShopSpecials(characterLevel || 1).filter(s => !s.expiresAt || s.expiresAt > Date.now());
+    } catch (e) { return []; }
+  }, [characterLevel]);
+
   const filteredShopItems = useMemo(() => {
-    const base = SHOP_INVENTORY.filter(item => {
+    // Merge regular inventory with temporary specials so enchanted/limited items are listed inline
+    const mergedSource = [
+      ...SHOP_INVENTORY,
+      ...specials.map(s => ({
+        id: s.id,
+        name: s.name,
+        type: s.type as ShopItem['type'],
+        description: s.description,
+        price: s.price,
+        category: s.category || 'Misc',
+        requiredLevel: s.requiredLevel,
+        rarity: s.rarity,
+        // Preserve special metadata so UI can render badges
+        enchantment: (s as any).enchantment || undefined,
+        limited: (s as any).limited || false,
+        _isSpecial: true
+      }))
+    ];
+
+    const base = mergedSource.filter(item => {
       // Filter by character level - only show items the character can access
       if (item.requiredLevel && characterLevel < item.requiredLevel) {
         return false;
@@ -574,7 +611,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     setQuantities(prev => ({ ...prev, [id]: newQty }));
   };
 
-  const handleBuy = (item: ShopItem) => {
+  const handleBuy = (item: ShopItem, e?: React.MouseEvent<HTMLButtonElement>) => {
     const qty = getQuantity(item.id);
     const total = item.price * qty;
     if (gold >= total) {
@@ -583,8 +620,9 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
       
       // Play purchase sound effect
       playSoundEffect('purchase');
+      playSoundEffect('gold_spend');
       
-      // Show purchase feedback
+      // Show purchase feedback (button state)
       setRecentlyPurchased(prev => new Set(prev).add(item.id));
       setTimeout(() => {
         setRecentlyPurchased(prev => {
@@ -593,6 +631,29 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
           return newSet;
         });
       }, 1500);
+
+      // Spawn a small particle effect anchored to the clicked button
+      try {
+        const rect = e?.currentTarget?.getBoundingClientRect?.();
+        if (rect) {
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const id = `purchase_${item.id}_${Date.now()}`;
+          setPurchaseEffect({ x, y, id });
+          setTimeout(() => setPurchaseEffect(null), 700);
+        }
+      } catch (err) { /* best-effort UI, ignore */ }
+    } else {
+      // Not enough gold — give clear feedback
+      setInsufficient(prev => new Set(prev).add(item.id));
+      // play error sound and show toast
+      playSoundEffect('error');
+      showToast && showToast(`Need ${Math.max(1, total - gold)}g to buy ${item.name}`, 'error');
+      setTimeout(() => setInsufficient(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        return newSet;
+      }), 1600);
     }
   };
 
@@ -746,251 +807,188 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
 
         {/* Items List */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {mode === 'buy' ? (
-            // BUY MODE
-            filteredShopItems.length === 0 ? (
-              <div className="text-center text-gray-500 py-8 text-sm">No items found.</div>
-            ) : (
-              <div className="divide-y divide-skyrim-border/30">
-                {filteredShopItems.map(item => {
-                  const qty = showQuantityControls ? getQuantity(item.id) : 1;
-                  const total = item.price * qty;
-                  const canAfford = gold >= total;
+          {mode === 'buy' && (
+            <div className="p-3 space-y-3">
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={`px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors ${
-                        !canAfford ? 'opacity-50' : ''
-                      }`}
-                    >
+
+              {filteredShopItems.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">No items found.</div>
+              ) : (
+                <div className="divide-y divide-skyrim-border/30">
+                  {filteredShopItems.map(item => (
+                    <div key={item.id} className="px-3 py-2.5 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
-                          {(item as any).rarity && <span className="ml-2"><RarityBadge rarity={String((item as any).rarity)} /></span>}
-                          <span className="text-skyrim-text text-xs">({item.category})</span>
-                          {/* Show stats for weapons and armor */}
-                          {shouldHaveStats(item.type) && (() => {
-                            const stats = getItemStats(item.name, item.type);
-                            return (
+                          <div className="text-xl text-gray-300">{categoryIcons[item.category || 'All']}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate text-sm flex items-center gap-2">
+                              <span className="truncate">{item.name}</span>
+                              { (item as any).limited && <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-700 text-yellow-100">Limited</span> }
+                              { ( (item as any).enchantment || /\bof\b/i.test(item.name) ) && (
+                                <span className="ml-1 px-2 py-0.5 rounded bg-purple-700 text-purple-100 text-xs flex items-center gap-1">
+                                  <Gem className="w-3 h-3" />
+                                  Enchanted
+                                </span>
+                              )}
+                              {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1 truncate">{item.description}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`text-yellow-400 font-bold ${gold < (item.price * getQuantity(item.id)) ? 'text-red-400' : ''}`}>{item.price}g</div>
+                        <button onClick={(e) => handleBuy(item, e)} disabled={recentlyPurchased.has(item.id)} className={`px-2 py-1 rounded text-xs transition-all min-w-[72px] ${recentlyPurchased.has(item.id) ? 'bg-yellow-600 text-white scale-105' : insufficient.has(item.id) ? 'bg-red-600 text-white animate-pulse' : (gold < (item.price * getQuantity(item.id)) ? 'bg-red-600 text-white/90 hover:brightness-105' : 'bg-skyrim-gold text-skyrim-dark hover:scale-105')}`}>
+                          {recentlyPurchased.has(item.id) ? (
+                            <span className="flex items-center gap-1 text-xs">✅ Bought!</span>
+                          ) : insufficient.has(item.id) ? (
+                            <span className="flex items-center gap-1 text-xs">Need {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
+                          ) : (
+                            'Buy'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+            {mode === 'sell' && (
+              filteredInventoryItems.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">
+                  {search ? 'No matching items in your inventory.' : 'No items to sell.'}
+                </div>
+              ) : (
+                <div className="divide-y divide-skyrim-border/30">
+                  {filteredInventoryItems.map(item => {
+                    const maxQty = item.quantity || 1;
+                    const qty = Math.min(getQuantity(item.id), maxQty);
+                    const unitPrice = getSellPrice(item);
+                    const total = unitPrice * qty;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
+                            <span className="text-gray-500 text-xs">×{item.quantity}</span>
+                            {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
+                            {/* Show stats for weapons and armor */}
+                            {(item.damage || item.armor) && (
                               <span className="flex items-center gap-2 text-xs">
-                                {stats.damage && (
+                                {item.damage && (
                                   <span className="flex items-center gap-0.5 text-red-400">
-                                    <Sword size={10} /> {stats.damage}
+                                    <Sword size={10} /> {item.damage}
                                   </span>
                                 )}
-                                {stats.armor && (
+                                {item.armor && (
                                   <span className="flex items-center gap-0.5 text-blue-400">
-                                    <Shield size={10} /> {stats.armor}
+                                    <Shield size={10} /> {item.armor}
                                   </span>
                                 )}
                               </span>
-                            );
-                          })()}
-                          {/* Show nutrition/effects for food/drink/potions */}
-                          {item.type === 'food' && (
-                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
-                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'drink' && (
-                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
-                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'potion' && (
-                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
-                              <FlaskConical size={10} />
-                              {item.subtype === 'health' ? 'Restores Health' : 
-                               item.subtype === 'magicka' ? 'Restores Magicka' : 
-                               item.subtype === 'stamina' ? 'Restores Stamina' : 
-                               item.description.includes('Restores') ? 'Restorative' : 
-                               'Potion Effect'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
-                          <Coins size={12} />
-                          {item.price}
-                        </div>
-                        {showQuantityControls && (
-                          <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
-                            <button
-                              onClick={() => setQuantity(item.id, qty - 1)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              -
-                            </button>
-                            <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
-                            <button
-                              onClick={() => setQuantity(item.id, qty + 1)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => handleBuy(item)}
-                          disabled={!canAfford || recentlyPurchased.has(item.id)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlyPurchased.has(item.id)
-                              ? 'bg-green-600 text-white scale-105'
-                              : canAfford
-                                ? 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400'
-                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                          }`}
-                        >
-                          {recentlyPurchased.has(item.id) ? (
-                            <span className="flex items-center justify-center gap-1">
-                              <Check size={12} />
-                              Bought!
-                            </span>
-                          ) : (
-                            `Buy ${total}g`
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          ) : (
-            // SELL MODE
-            filteredInventoryItems.length === 0 ? (
-              <div className="text-center text-gray-500 py-8 text-sm">
-                {search ? 'No matching items in your inventory.' : 'No items to sell.'}
-              </div>
-            ) : (
-              <div className="divide-y divide-skyrim-border/30">
-                {filteredInventoryItems.map(item => {
-                  const maxQty = item.quantity || 1;
-                  const qty = Math.min(getQuantity(item.id), maxQty);
-                  const unitPrice = getSellPrice(item);
-                  const total = unitPrice * qty;
+                            )}
+                            {/* Show nutrition/effects for food/drink/potions */}
+                            {item.type === 'food' && (
+                              <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                                <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
+                              </span>
+                            )}
+                            {item.type === 'drink' && (
+                              <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                                <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
+                              </span>
+                            )}
+                            {item.type === 'potion' && (
+                              <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                                <FlaskConical size={10} />
+                                {item.subtype === 'health' ? 'Restores Health' : 
+                                 item.subtype === 'magicka' ? 'Restores Magicka' : 
+                                 item.subtype === 'stamina' ? 'Restores Stamina' : 
+                                 item.description.includes('Restores') ? 'Restorative' : 
+                                 'Potion Effect'}
+                              </span>
+                            )}
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
-                          <span className="text-gray-500 text-xs">×{item.quantity}</span>
-                          {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
-                          {/* Show stats for weapons and armor */}
-                          {(item.damage || item.armor) && (
-                            <span className="flex items-center gap-2 text-xs">
-                              {item.damage && (
-                                <span className="flex items-center gap-0.5 text-red-400">
-                                  <Sword size={10} /> {item.damage}
-                                </span>
-                              )}
-                              {item.armor && (
-                                <span className="flex items-center gap-0.5 text-blue-400">
-                                  <Shield size={10} /> {item.armor}
-                                </span>
-                              )}
-                            </span>
-                          )}
-                          {/* Show nutrition/effects for food/drink/potions */}
-                          {item.type === 'food' && (
-                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
-                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'drink' && (
-                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
-                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'potion' && (
-                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
-                              <FlaskConical size={10} />
-                              {item.subtype === 'health' ? 'Restores Health' : 
-                               item.subtype === 'magicka' ? 'Restores Magicka' : 
-                               item.subtype === 'stamina' ? 'Restores Stamina' : 
-                               item.description.includes('Restores') ? 'Restorative' : 
-                               'Potion Effect'}
-                            </span>
-                          )}
-                          {item.equipped && (
-                            <span className="text-xs bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">Equipped</span>
-                          )}
-                        </div>
-                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="flex items-center gap-1 text-green-400 text-xs font-bold">
-                          <Coins size={12} />
-                          {unitPrice}/ea
-                        </div>
-                        {showQuantityControls && maxQty > 1 && (
-                          <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
-                            <button
-                              onClick={() => setQuantity(item.id, qty - 1, maxQty)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              -
-                            </button>
-                            <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
-                            <button
-                              onClick={() => setQuantity(item.id, qty + 1, maxQty)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              +
-                            </button>
                           </div>
-                        )}
-                        <button
-                          onClick={() => handleSell(item)}
-                          disabled={recentlySold.has(item.id)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlySold.has(item.id)
-                              ? 'bg-yellow-600 text-white scale-105'
-                              : 'bg-green-700 text-white hover:bg-green-600'
-                          }`}
-                        >
-                          {recentlySold.has(item.id) ? (
-                            <span className="flex items-center justify-center gap-1">
-                              <Check size={12} />
-                              Sold!
-                            </span>
-                          ) : (
-                            `Sell +${total}g`
+                          <p className="text-gray-500 text-xs truncate">{item.description}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-1 text-green-400 text-xs font-bold">
+                            <Coins size={12} />
+                            {unitPrice}/ea
+                          </div>
+                          {showQuantityControls && maxQty > 1 && (
+                            <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
+                              <button
+                                onClick={() => setQuantity(item.id, qty - 1, maxQty)}
+                                className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
+                              >
+                                -
+                              </button>
+                              <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
+                              <button
+                                onClick={() => setQuantity(item.id, qty + 1, maxQty)}
+                                className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
+                              >
+                                +
+                              </button>
+                            </div>
                           )}
-                        </button>
-                        <button
-                          onClick={() => handleSellAll(item)}
-                          disabled={recentlySold.has(item.id) || (item.quantity || 0) <= 1}
-                          className={`ml-2 px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlySold.has(item.id)
-                              ? 'bg-yellow-600 text-white scale-105'
-                              : 'bg-gray-700 text-white hover:bg-gray-600'
-                          }`}
-                        >
-                          Sell All
-                        </button>
+
+                          <button
+                            onClick={() => handleSell(item)}
+                            disabled={recentlySold.has(item.id)}
+                            className={`px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] ${
+                              recentlySold.has(item.id)
+                                ? 'bg-yellow-600 text-white scale-105'
+                                : 'bg-green-700 text-white hover:bg-green-600'
+                            }`}
+                          >
+                            {recentlySold.has(item.id) ? (
+                              <span className="flex items-center justify-center gap-1">
+                                <Check size={12} />
+                                Sold!
+                              </span>
+                            ) : (
+                              `Sell +${total}g`
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleSellAll(item)}
+                            disabled={recentlySold.has(item.id) || (item.quantity || 0) <= 1}
+                            className={`ml-2 px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
+                              recentlySold.has(item.id)
+                                ? 'bg-yellow-600 text-white scale-105'
+                                : 'bg-gray-700 text-white hover:bg-gray-600'
+                            }`}
+                          >
+                            Sell All
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          )}
+                    );
+                  })}
+                </div>
+              )
+            )}
         </div>
 
         {/* Footer */}
+        {purchaseEffect && (
+          <div className="pointer-events-none fixed z-[80] left-0 top-0" style={{ left: 0, top: 0 }}>
+            <ParticleEffect x={purchaseEffect.x} y={purchaseEffect.y} effectType="conjuration" count={14} />
+          </div>
+        )}
         <div className="px-3 py-2 border-t border-skyrim-border/60 bg-skyrim-paper/20 flex-shrink-0">
           <p className="text-gray-500 text-xs text-center">
             {mode === 'buy' 
               ? `${filteredShopItems.length} items available` 
-              : `${filteredInventoryItems.length} items to sell (50% value)`
+              : (!onSell ? 'This vendor is not buying items right now.' : `${filteredInventoryItems.length} items to sell (50% value)`)
             }
           </p>
         </div>
@@ -998,5 +996,3 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     </div>
   );
 }
-
-export { SHOP_INVENTORY };

@@ -78,21 +78,15 @@ export default function EnchantingModal({
   // Get enchantable items from inventory
   const enchantableItems = useMemo(() => {
     return inventory.filter(item => 
-      (item.type === 'weapon' || item.type === 'armor' || item.type === 'jewelry') &&
+      (item.type === 'weapon' || item.type === 'armor' || item.type === 'jewelry' || item.type === 'apparel') &&
       (!item.enchantments || item.enchantments.length === 0)
     );
   }, [inventory]);
 
-  // Get disenchantable items (items with enchantments)
+  // Get disenchantable items (any items with enchantments)
   const disenchantableItems = useMemo(() => {
-    return inventory.filter(item =>
-      item.enchantments && item.enchantments.length > 0 &&
-      // Check if any enchantment is not yet learned
-      item.enchantments.some(e => 
-        !enchantingState.learnedEnchantments.find(l => l.enchantmentId === e.id)
-      )
-    );
-  }, [inventory, enchantingState.learnedEnchantments]);
+    return inventory.filter(item => item.enchantments && item.enchantments.length > 0);
+  }, [inventory]);
 
   // Get learned enchantments
   const learnedEnchantments = useMemo(() => 
@@ -109,7 +103,8 @@ export default function EnchantingModal({
   // Get applicable enchantments for selected item
   const applicableEnchantments = useMemo(() => {
     if (!selectedItem) return [];
-    const applicable = getEnchantmentsForItemType(selectedItem.type, selectedItem.slot);
+    const lookupType = selectedItem.type === 'apparel' ? 'armor' : selectedItem.type;
+    const applicable = getEnchantmentsForItemType(lookupType, selectedItem.slot);
     return applicable.filter(e => 
       learnedEnchantments.some(l => l.enchantment.id === e.id)
     );

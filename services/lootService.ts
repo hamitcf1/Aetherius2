@@ -8,6 +8,7 @@ export const computeEnemyXP = (enemy: CombatEnemy) => {
 
 import LOOT_TABLES, { LootTableEntry, getLootTableForEnemy } from '../data/lootTables';
 import { getItemStats, shouldHaveStats } from './itemStats';
+import { generateLootEnchantment } from './enchantingService';
 
 // Helper: pick one item from weighted table
 const pickWeighted = (table: LootTableEntry[], rng = Math.random): LootTableEntry | null => {
@@ -38,6 +39,15 @@ export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; typ
     enemy.loot.forEach(lootItem => {
       const chance = lootItem.dropChance ?? 50;
       if (Math.random() * 100 < chance) {
+        // Small chance to apply an enchantment (bosses more likely)
+        const enchantChance = enemy.isBoss ? 0.12 : 0.03;
+        if ((lootItem.type === 'weapon' || lootItem.type === 'apparel') && Math.random() < enchantChance) {
+          const ench = generateLootEnchantment(lootItem.name, lootItem.type, enemy.level || 1);
+          if (ench) {
+            items.push({ name: `${lootItem.name} of ${ench.enchantmentName.replace(/^Fortify /i, '')}`, type: lootItem.type, description: (lootItem.description || '') + ` (Enchanted with ${ench.enchantmentName})`, quantity: lootItem.quantity || 1, rarity: (lootItem as any).rarity, enchantment: ench });
+            return;
+          }
+        }
         items.push({ name: lootItem.name, type: lootItem.type, description: lootItem.description || '', quantity: lootItem.quantity || 1, rarity: (lootItem as any).rarity });
       }
     });
@@ -62,6 +72,15 @@ export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; typ
         const qtyRangeMax = (pick.maxQty || (pick.minQty || 1));
         const qtyRangeMin = (pick.minQty || 1);
         const qty = qtyRangeMin + Math.floor(Math.random() * (qtyRangeMax - qtyRangeMin + 1));
+        // Possibly enchant this drop for a small chance (bosses more likely)
+        const enchantChance = enemy.isBoss ? 0.12 : 0.03;
+        if ((pick.type === 'weapon' || pick.type === 'apparel') && Math.random() < enchantChance) {
+          const ench = generateLootEnchantment(pick.name, pick.type, enemy.level || 1);
+          if (ench) {
+            items.push({ name: `${pick.name} of ${ench.enchantmentName.replace(/^Fortify /i, '')}`, type: pick.type, description: (pick.description || '') + ` (Enchanted with ${ench.enchantmentName})`, quantity: qty, rarity: (pick as any).rarity, enchantment: ench });
+            continue;
+          }
+        }
         items.push({ name: pick.name, type: pick.type, description: pick.description || '', quantity: qty, rarity: (pick as any).rarity });
       }
     }
@@ -210,6 +229,16 @@ export const finalizeLoot = (
           value: value,
           rarity: itemRarity
         } as InventoryItem;
+
+        // If this loot carries an enchantment, attach it to the InventoryItem
+        if (meta && (meta as any).enchantment) {
+          const ench = (meta as any).enchantment;
+          // Conform to InventoryItem enchantment structure expected by EnchantingModal
+          newItem.enchantments = [{ id: ench.enchantmentId, name: ench.enchantmentName, magnitude: ench.magnitude, effect: ench.effect }];
+          newItem.effects = [...(newItem.effects || []), `${ench.enchantmentName}: ${ench.magnitude}`];
+          // Increase value significantly for enchanted items
+          newItem.value = Math.max(newItem.value || 0, value) + Math.max(1, Math.floor(ench.magnitude * 25));
+        }
 
         // If item should have equipment stats, copy them
         if (shouldHaveStats(itemType)) {

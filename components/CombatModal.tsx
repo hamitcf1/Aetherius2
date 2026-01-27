@@ -40,8 +40,7 @@ import { audioService } from '../services/audioService';
 import ArrowPicker from './ArrowPicker';
 import { getItemBaseAndBonus } from '../services/upgradeService';
 import { getItemRestorationValues } from '../services/nutritionData';
-import { getSpellEffectType, SpellEffectState, ScreenFlash, ParticleEffect, EnergyRing, LightningBolt, HolyLight, PortalRift, ArcEffect } from './SpellEffects';
-import '../styles/combat-badges.css';
+import { getSpellEffectType, SpellEffectState, ScreenFlash, ParticleEffect, EnergyRing, LightningBolt, HolyLight, PortalRift, ArcEffect, BloodSplatter, WeaponTrail, MagicGlow, ScreenShake, CriticalHitEffect, DodgeEffect, ImpactWave } from './SpellEffects';
 // resolvePotionEffect is intentionally not used here; potion resolution occurs in services
 
 // Play combat sound based on action type and actor info (enemy/ally/player)
@@ -770,6 +769,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   const [floatingHits, setFloatingHits] = useState<Array<{ id: string; actor: string; damage: number; hitLocation?: string; isCrit?: boolean; x?: number; y?: number }>>([]);
   const [spellEffects, setSpellEffects] = useState<Array<SpellEffectState>>([]);
   const [screenFlash, setScreenFlash] = useState<SpellEffectState['type'] | null>(null);
+  const [screenShake, setScreenShake] = useState<{ intensity: 'light' | 'medium' | 'heavy'; duration: number } | null>(null);
+  const [criticalHitEffect, setCriticalHitEffect] = useState<{ x: number; y: number } | null>(null);
+  const [dodgeEffect, setDodgeEffect] = useState<{ x: number; y: number } | null>(null);
+  const [bloodSplatter, setBloodSplatter] = useState<{ x: number; y: number; intensity: 'light' | 'medium' | 'heavy' } | null>(null);
+  const [weaponTrail, setWeaponTrail] = useState<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null);
+  const [magicGlow, setMagicGlow] = useState<{ x: number; y: number; effectType: SpellEffectState['type'] } | null>(null);
+  const [impactWave, setImpactWave] = useState<{ x: number; y: number; effectType: 'physical' | 'magical' } | null>(null);
+  const [holyLight, setHolyLight] = useState<{ x: number; y: number } | null>(null);
 
   // Transient per-enemy hit/pulse effects (e.g., burning impact briefly on the enemy card)
   const [recentEnemyHitEffects, setRecentEnemyHitEffects] = useState<Record<string, string | null>>({});
@@ -946,6 +953,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       return next;
     });
   };
+
+  // Track when user manually interacts to temporarily disable auto-combat
+  const [userInteractionTimeout, setUserInteractionTimeout] = useState<number | null>(null);
 
   // Toggle whether we show the loot modal automatically when combat ends (default: true)
   const [showLootOnEnd, setShowLootOnEnd] = useState<boolean>(() => {
@@ -1177,7 +1187,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         await waitMs(ms(600));
       } else {
         // animate wheel-style roll with ease-out for smooth stop
-        await animateRoll(finalEnemyRoll, Math.floor(3000));
+        await animateRoll(finalEnemyRoll, Math.floor(ms(3000)));
         await waitMs(ms(220));
         setShowRoll(false);
         setRollActor(null);
@@ -1214,11 +1224,55 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               const r = enemyRefs.current[targetEnemy.id]!.getBoundingClientRect();
               x = r.left + r.width / 2;
               y = r.top + r.height / 2;
+
+              // Enhanced VFX based on combat results
+              if (effectsEnabled) {
+                // Critical hit effects
+                if (last.isCrit) {
+                  setCriticalHitEffect({ x: x!, y: y! });
+                  setTimeout(() => setCriticalHitEffect(null), 800);
+                  setScreenShake({ intensity: 'medium', duration: 300 });
+                  setTimeout(() => setScreenShake(null), 300);
+                }
+
+                // Blood splatter for physical damage
+                if (last.damageType !== 'magic' && last.damageType !== 'healing') {
+                  const intensity = last.isCrit ? 'heavy' : last.damage > 20 ? 'medium' : 'light';
+                  setBloodSplatter({ x: x!, y: y!, intensity });
+                  setTimeout(() => setBloodSplatter(null), 1000);
+                }
+
+                // Impact wave for significant damage
+                if (last.damage > 15) {
+                  setImpactWave({ x: x!, y: y!, effectType: last.damageType === 'magic' ? 'magical' : 'physical' });
+                  setTimeout(() => setImpactWave(null), 400);
+                }
+
+                // Weapon trail for melee attacks
+                if (last.damageType === 'melee' || !last.damageType) {
+                  const playerRect = playerRef.current?.getBoundingClientRect();
+                  if (playerRect) {
+                    setWeaponTrail({
+                      fromX: playerRect.left + playerRect.width / 2,
+                      fromY: playerRect.top + playerRect.height / 2,
+                      toX: x!,
+                      toY: y!
+                    });
+                    setTimeout(() => setWeaponTrail(null), 200);
+                  }
+                }
+              }
             }
             setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
             setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           }
         } catch (e) { /* best-effort UI */ }
+
+        // Handle dodge effects for missed attacks (no damage dealt)
+        if (last && (!last.damage || last.damage <= 0) && last.rollTier === 'miss' && x !== undefined && y !== undefined) {
+          setDodgeEffect({ x, y });
+          setTimeout(() => setDodgeEffect(null), 600);
+        }
 
         // Update UI and play companion animation
         setCombatState(currentState);
@@ -1301,6 +1355,42 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
         setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
 
+        // Trigger VFX for enemy attacks against player
+        if (x !== undefined && y !== undefined) {
+          // Critical hit effects
+          if (last.isCrit) {
+            setCriticalHitEffect({ x, y });
+            setTimeout(() => setCriticalHitEffect(null), 800);
+            setScreenShake({ intensity: 'medium', duration: 300 });
+            setTimeout(() => setScreenShake(null), 300);
+          }
+
+          // Blood splatter for physical damage
+          if (last.damageType !== 'magic' && last.damage > 0) {
+            const intensity = last.damage >= 50 ? 'heavy' : last.damage >= 25 ? 'medium' : 'light';
+            setBloodSplatter({ x, y, intensity });
+            setTimeout(() => setBloodSplatter(null), 1000);
+          }
+
+          // Impact wave for significant damage
+          if (last.damage >= 30) {
+            setImpactWave({ x, y, effectType: last.damageType === 'magic' ? 'magical' : 'physical' });
+            setTimeout(() => setImpactWave(null), 400);
+          }
+
+          // Screen shake for heavy hits
+          if (last.damage >= 40 && !last.isCrit) {
+            setScreenShake({ intensity: 'light', duration: 200 });
+            setTimeout(() => setScreenShake(null), 200);
+          }
+        }
+
+        // Handle dodge effects for missed enemy attacks
+        if (last && (!last.damage || last.damage <= 0) && last.rollTier === 'miss' && x !== undefined && y !== undefined) {
+          setDodgeEffect({ x, y });
+          setTimeout(() => setDodgeEffect(null), 600);
+        }
+
         try {
           // Play centralized 'hit received' sound matched to attacker (if available)
           const attacker = (combatState.enemies || []).find(e => e.id === last.actor) || (combatState.allies || []).find(a => a.id === last.actor) || null;
@@ -1348,6 +1438,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
   // Handle player action
   const handlePlayerAction = async (action: CombatActionType, abilityId?: string, itemId?: string) => {
+    // When user manually interacts, temporarily disable auto-combat for 2 seconds to prevent conflicts
+    setUserInteractionTimeout(Date.now() + 2000);
+
     // debug
     // eslint-disable-next-line no-console
     console.debug && console.debug('[combat] handlePlayerAction invoked', { action, abilityId, currentTurnActor: combatState.currentTurnActor, selectedTarget, pendingTargeting, lastUserTargetChangeAt: lastUserTargetChangeAt.current });
@@ -1359,9 +1452,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     // Pre-check: determine whether this requested action consumes a main or bonus action.
     let intendedActionKind = (() => {
-      // Skip and End Turn are non-consuming actions (allow them regardless of main/bonus usage)
+      // Skip is a non-consuming action (allow it regardless of main/bonus usage)
       if (action === 'skip') return 'none' as const;
-      if (action === 'end_turn') return 'none' as const;
       if (action === 'item') return 'bonus' as const;
       if (action === 'defend') return 'bonus' as const;
       if (action === 'magic' && abilityId) {
@@ -1386,20 +1478,6 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
     if (intendedActionKind === 'bonus' && combatState.playerBonusActionUsed) {
       showThrottledToast('Bonus action already used this turn.', 'warning');
-      setIsAnimating(false);
-      return;
-    }
-
-    // Special handling: End turn immediately without roll animation
-    if (action === 'end_turn') {
-      // Advance turn and apply regen if appropriate
-      let finalState = advanceTurn(combatState);
-      if (finalState.currentTurnActor === 'player') {
-        const regenRes = applyTurnRegen(finalState, playerStats);
-        finalState = regenRes.newState;
-        setPlayerStats(regenRes.newPlayerStats);
-      }
-      setCombatState(finalState);
       setIsAnimating(false);
       return;
     }
@@ -1535,7 +1613,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     }
 
     // animate wheel-style roll with ease-out for smooth stop
-    await animateRoll(finalRoll, Math.floor(3000));
+    await animateRoll(finalRoll, Math.floor(ms(3000)));
     await waitMs(ms(220));
     setShowRoll(false);
     setRollActor(null);
@@ -1648,6 +1726,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             setFloatingHits(f => [{ id, actor: hd.name || (isPlayer ? 'You' : 'ally'), damage: hd.amount, hitLocation: undefined, isCrit: false, x: rect.x + (rect.width||0)/2, y: rect.y + (rect.height||0)/2, isHeal: true } as any, ...f]);
             setRecentlyHighlighted(hd.id);
             setTimeout(() => setRecentlyHighlighted(null), ms(900));
+
+            // Trigger HolyLight healing effect
+            if (rect.x !== undefined && rect.y !== undefined) {
+              setHolyLight({ x: rect.x + (rect.width||0)/2, y: rect.y + (rect.height||0)/2 });
+              setTimeout(() => setHolyLight(null), 800);
+            }
+
             setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
           });
         } catch (e) {
@@ -1867,6 +1952,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     if (!isPlayerTurn) return;
     if (isAnimating) return;
     if (pendingTargeting) return;
+    if (userInteractionTimeout && Date.now() < userInteractionTimeout) return;
 
     let cancelled = false;
     (async () => {
@@ -1877,6 +1963,13 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       try {
         // Compute player's current health percentage
         const healthPct = Math.max(0, Math.min(100, Math.round((playerStats.currentHealth || 0) / Math.max(1, playerStats.maxHealth || 1) * 100)));
+
+        // Check current summon count and limit
+        const aliveSummons = ((combatState.allies || []).concat(combatState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
+        const pending = (combatState.pendingSummons || []).length;
+        const activeSummonCount = aliveSummons + pending;
+        const allowedSummons = 1 + (getPerkRank(character, 'twin_souls') || 0);
+        const canSummon = activeSummonCount < allowedSummons;
 
         const abilities = (playerStats.abilities || []);
 
@@ -1895,9 +1988,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         }
 
         // Otherwise prefer a damaging magical ability if affordable, otherwise perform a basic attack
+        // But exclude summon spells if we've reached the summon limit
         for (const ab of abilities) {
           const affordable = (ab.cost === 0) || ((playerStats.currentMagicka || 0) >= (ab.cost || 0));
-          if (ab.type === 'magic' && affordable && (ab.damage || (ab.effects && ab.effects.length > 0))) {
+          const isSummon = ab.effects && ab.effects.some((ef: any) => ef.type === 'summon');
+          if (ab.type === 'magic' && affordable && (ab.damage || (ab.effects && ab.effects.length > 0)) && (!isSummon || canSummon)) {
             chosen = ab; break;
           }
         }
@@ -1928,7 +2023,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     })();
 
     return () => { cancelled = true; };
-  }, [autoCombat, isPlayerTurn, isAnimating, pendingTargeting, playerStats, speedMultiplier]);
+  }, [autoCombat, isPlayerTurn, isAnimating, pendingTargeting, userInteractionTimeout]);
 
   // Arrow picker modal state
   const [arrowPickerOpen, setArrowPickerOpen] = useState(false);
@@ -2223,32 +2318,64 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               return null;
             })()}
 
-            {/* ACTIONS (moved from right column) */}
             <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700 max-h-[360px] overflow-y-auto">
               <h4 className="text-sm font-semibold text-stone-300 mb-2">ACTIONS</h4>
 
+              {(() => {
+                const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                return !!playerStun;
+              })() ? (
+                <div className="mb-3 p-2 bg-red-900/20 border border-red-700/50 rounded text-red-300 text-xs">
+                  ⚡ You are stunned! You can only Skip Turn this round.
+                </div>
+              ) : null}
+
               {/* Main / Bonus action indicators (enhanced visuals) */}
-              <div className="flex gap-2 mb-3 items-center flex-wrap overflow-hidden">
-                <div data-tooltip="Primary action — Attack, Spell, or Power. Use once per turn." className={`combat-badge main-badge relative px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${!combatState.playerMainActionUsed ? 'bg-amber-500 text-white' : 'bg-amber-700 text-white opacity-80'}`}>
-                  <span className="inline-block mr-1">⚔️</span>
-                  <span>Main</span>
-                  <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerMainActionUsed ? 'Used' : 'Available'}</span>
+              <div className="space-y-2 mb-3">
+                <div
+                  className="relative w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200"
+                  title="Primary action — Attack, Spell, or Power. Use once per turn."
+                >
+                  ⚔️ Main Action{combatState.playerMainActionUsed ? ' (Used)' : ' (Available)'}
                 </div>
 
-                <div data-tooltip="Bonus action — Potions, Defend, or Summons. Use once per turn." className={`combat-badge bonus-badge relative px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${!combatState.playerBonusActionUsed ? 'bg-purple-700 text-white' : 'bg-amber-700 text-white opacity-80'}`}>
-                  <span className="inline-block mr-1">✨</span>
-                  <span>Bonus</span>
-                  <span className="ml-2 text-[10px] px-1 py-0.5 rounded bg-black/20">{combatState.playerBonusActionUsed ? 'Used' : 'Available'}</span>
+                <div
+                  className="relative w-full p-2 rounded bg-purple-900/40 border border-purple-700/50 text-purple-200"
+                  title="Bonus action — Potions, Defend, or Summons. Use once per turn."
+                >
+                  ✨ Bonus Action{combatState.playerBonusActionUsed ? ' (Used)' : ' (Available)'}
                 </div>
 
-                <button onClick={() => handlePlayerAction('end_turn')} disabled={!isPlayerTurn || isAnimating} className="ml-auto px-2 py-1 rounded text-xs bg-stone-700 text-white hover:bg-stone-600 disabled:opacity-50">🔚 End Turn</button>
+                <button onClick={() => handlePlayerAction('skip')} disabled={!isPlayerTurn || isAnimating} className={`w-full p-2 rounded bg-stone-900/40 border border-stone-700/50 text-stone-200 hover:bg-stone-900/60 disabled:opacity-50 disabled:cursor-not-allowed ${(() => {
+                  const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                  return !!playerStun ? 'bg-amber-900/40 border-amber-700/50 text-amber-200 hover:bg-amber-900/60' : '';
+                })()}`}>⏭️ Skip Turn{(() => {
+                  const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                  return !!playerStun ? ' (Recommended)' : '';
+                })()}</button>
               </div>
+
+              {/* Show stun warning if stunned */}
+              {(() => {
+                const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                return !!playerStun;
+              })() && (
+                <div className="mb-3 p-2 bg-red-900/20 border border-red-700/50 rounded text-red-300 text-xs">
+                  ⚡ You are stunned! You can only Skip Turn this round.
+                </div>
+              )}
 
               <div className="space-y-2">
                 <button
                   onClick={() => handlePlayerAction('defend')}
-                  disabled={!isPlayerTurn || isAnimating || !!(combatState as any).playerGuardUsed}
-                  title={(combatState as any).playerGuardUsed ? 'Guard used this combat' : `Tactical Guard — 40% DR for ${Math.min(3, 1 + (getCombatPerkBonus(character, 'defendDuration') || 0))} round(s) (once per combat)`}
+                  disabled={!isPlayerTurn || isAnimating || !!(combatState as any).playerGuardUsed || (() => {
+                    const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                    return !!playerStun;
+                  })()}
+                  title={(() => {
+                    const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                    return !!playerStun ? 'Cannot defend while stunned' : ((combatState as any).playerGuardUsed ? 'Guard used this combat' : `Tactical Guard — 40% DR for ${Math.min(3, 1 + (getCombatPerkBonus(character, 'defendDuration') || 0))} round(s) (once per combat)`);
+                  })()}
                   className="relative w-full p-2 rounded bg-blue-900/40 border border-blue-700/50 text-blue-200 hover:bg-blue-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(() => {
@@ -2262,7 +2389,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 {combatState.fleeAllowed && (
                   <button
                     onClick={() => handlePlayerAction('flee')}
-                    disabled={!isPlayerTurn || isAnimating}
+                    disabled={!isPlayerTurn || isAnimating || (() => {
+                      const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                      return !!playerStun;
+                    })()}
                     className="w-full p-2 rounded bg-yellow-900/40 border border-yellow-700/50 text-yellow-200 hover:bg-yellow-900/60 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     🏃 Flee
@@ -2272,24 +2402,18 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                 {combatState.surrenderAllowed && (
                   <button
                     onClick={() => handlePlayerAction('surrender')}
-                    disabled={!isPlayerTurn || isAnimating}
+                    disabled={!isPlayerTurn || isAnimating || (() => {
+                      const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
+                      return !!playerStun;
+                    })()}
                     className="w-full p-2 rounded bg-stone-700/40 border border-stone-600 text-stone-300 hover:bg-stone-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     🏳️ Surrender
                   </button>
                 )}
 
-                <button
-                  onClick={() => handlePlayerAction('skip')}
-                  disabled={!isPlayerTurn || isAnimating}
-                  className="w-full p-2 rounded bg-stone-700/40 border border-stone-600 text-stone-300 hover:bg-stone-700/60 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  ⏭️ Skip Turn
-                </button>
               </div>
             </div>
-            
-            {/* Turn List */}
             <div className="flex-1 overflow-y-auto max-h-full">
               <TurnList
                 turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
@@ -2554,7 +2678,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                                   const companionRoll = Math.floor(Math.random() * 20) + 1;
                                   if (!compStunned) {
-                                    await animateRoll(companionRoll, Math.floor(3000));
+                                    await animateRoll(companionRoll, Math.floor(ms(3000)));
                                     await waitMs(ms(220));
                                     setShowRoll(false);
                                     setRollActor(null);
@@ -2759,7 +2883,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           const compStunned = comp?.activeEffects?.some((e: any) => e.effect && e.effect.type === 'stun' && e.turnsRemaining > 0);
                           const companionRoll = Math.floor(Math.random() * 20) + 1;
                           if (!compStunned) {
-                            await animateRoll(companionRoll, Math.floor(3000));
+                            await animateRoll(companionRoll, Math.floor(ms(3000)));
                             await waitMs(ms(220));
                             setShowRoll(false);
                             setRollActor(null);
@@ -2821,9 +2945,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                   disabled={!isPlayerTurn || isAnimating || playerStunned}
                                   cooldown={combatState.abilityCooldowns[ability.id] || 0}
                                   canAfford={
-                                    ability.type === 'magic' 
+                                    (ability.type === 'magic' || ability.type === 'shout' || ability.type === 'aeo') 
                                       ? playerStats.currentMagicka >= ability.cost
-                                      : true
+                                      : playerStats.currentStamina >= ability.cost
                                   }
                                   accentColor={getAccentColor(activeAbilityTab as 'Physical' | 'Magical', subCat)}
                                   onClick={() => handleAbilityClick(ability)}
@@ -3057,7 +3181,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                                 setAwaitingCompanionAction(false);
                                 setRollActor('ally');
                                 const companionRoll = Math.floor(Math.random() * 20) + 1;
-                                await animateRoll(companionRoll, Math.floor(3000));
+                                await animateRoll(companionRoll, Math.floor(ms(3000)));
                                 await waitMs(ms(220));
                                 setShowRoll(false);
                                 setRollActor(null);
@@ -3092,7 +3216,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     abilities.map(ability => {
                       const accent = getAccentColor(activeAbilityTab as 'Physical' | 'Magical', subCat);
                       const conjureLocked = (ability.effects || []).some((ef: any) => ef.type === 'summon') && combatHasActiveSummon(combatState);
-                      const isDisabledBtn = !isPlayerTurn || isAnimating || conjureLocked || (combatState.abilityCooldowns[ability.id] || 0) > 0 || (ability.type === 'magic' && playerStats.currentMagicka < ability.cost);
+                      const isDisabledBtn = !isPlayerTurn || isAnimating || conjureLocked || (combatState.abilityCooldowns[ability.id] || 0) > 0 || 
+                        (((ability.type === 'magic' || ability.type === 'shout' || ability.type === 'aeo') ? playerStats.currentMagicka < ability.cost : playerStats.currentStamina < ability.cost));
                       return (
                         <button
                           key={ability.id}
@@ -3347,6 +3472,16 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         );
       })}
 
+      {/* Combat VFX Effects */}
+      {screenShake && <ScreenShake intensity={screenShake.intensity} duration={screenShake.duration} />}
+      {criticalHitEffect && <CriticalHitEffect x={criticalHitEffect.x} y={criticalHitEffect.y} />}
+      {dodgeEffect && <DodgeEffect x={dodgeEffect.x} y={dodgeEffect.y} />}
+      {bloodSplatter && <BloodSplatter x={bloodSplatter.x} y={bloodSplatter.y} intensity={bloodSplatter.intensity} />}
+      {weaponTrail && <WeaponTrail fromX={weaponTrail.fromX} fromY={weaponTrail.fromY} toX={weaponTrail.toX} toY={weaponTrail.toY} />}
+      {magicGlow && <MagicGlow x={magicGlow.x} y={magicGlow.y} effectType={magicGlow.effectType} />}
+      {impactWave && <ImpactWave x={impactWave.x} y={impactWave.y} effectType={impactWave.effectType} />}
+      {holyLight && <HolyLight x={holyLight.x} y={holyLight.y} duration={800} />}
+
       {/* Defeat overlay */}
       {showDefeat && (
         <div className="absolute inset-0 bg-skyrim-dark/90 flex items-center justify-center z-60">
@@ -3369,7 +3504,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       <ModalWrapper open={equipModalOpen} onClose={() => { setEquipModalOpen(false); setEquipSelectedSlot(null); }} preventOutsideClose={false}>
         <div className="w-[760px] max-w-full bg-stone-900/95 rounded-lg p-4 border border-stone-700 max-h-[85vh] overflow-y-auto">
           <h3 className="text-lg font-bold text-amber-100 mb-3">Equipment</h3>
-          <EquipmentHUD items={localInventory} onUnequip={(it) => unequipItem(it)} onEquipFromSlot={(slot) => setEquipSelectedSlot(slot)} />
+          <EquipmentHUD items={localInventory} onEquipFromSlot={(slot) => setEquipSelectedSlot(slot)} />
           
           {/* Loadout Manager in Combat Equipment */}
           <div className="mt-4">

@@ -98,7 +98,7 @@ const InventoryItemCard: React.FC<{
           isEquipped 
             ? 'border-skyrim-gold shadow-[0_0_10px_rgba(192,160,98,0.2)] bg-skyrim-gold/10' 
             : 'border-skyrim-border hover:border-skyrim-gold/50'
-        }`}>
+        } ${item.enchantments && item.enchantments.length > 0 ? 'ring-1 ring-purple-600/20 bg-gradient-to-r from-purple-900/2 to-transparent' : ''}`}>
             <div className={`p-3 rounded-full border ${
               isEquipped 
                 ? 'bg-skyrim-gold/30 text-skyrim-gold border-skyrim-gold' 
@@ -131,8 +131,13 @@ const InventoryItemCard: React.FC<{
                 ) : (
                     <>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-skyrim-gold font-serif truncate">
+                          <h3 className="text-skyrim-gold font-serif truncate flex items-center gap-2">
                               {item.name}
+                              {item.enchantments && item.enchantments.length > 0 && (
+                                <span className="flex items-center gap-1 text-purple-300 text-xs">
+                                  <Sparkles size={12} /> <span className="sr-only">Enchanted</span>
+                                </span>
+                              )}
                           </h3>
                           {item.rarity && (
                             <span className="ml-2">

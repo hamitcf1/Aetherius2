@@ -7,7 +7,7 @@ import { getItemBaseAndBonus } from '../services/upgradeService';
 
 interface EquipmentHUDProps {
   items: InventoryItem[];
-  onUnequip: (item: InventoryItem) => void;
+  onUnequip?: (item: InventoryItem) => void;
   onEquipFromSlot: (slot: EquipmentSlot) => void;
 }
 
@@ -155,7 +155,7 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
               <div
                 onClick={() => {
                   if (disabled) return;
-                  return equipped ? onUnequip(equipped) : onEquipFromSlot(config.slot);
+                  return equipped ? (onUnequip ? onUnequip(equipped) : undefined) : onEquipFromSlot(config.slot);
                 }}
                 className={`
                   w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer
@@ -167,7 +167,7 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                       : 'bg-skyrim-paper/50 border-skyrim-border/50 hover:border-skyrim-gold/50 hover:bg-skyrim-paper/70'
                   }
                 `}
-                title={equipped ? `${equipped.name} (Click to unequip)` : (
+                title={equipped ? `${equipped.name}${onUnequip ? ' (Click to unequip)' : ''}` : (
                   disabled ? 'Disabled due to two-handed main weapon' : (
                     config.slot === 'offhand'
                       ? 'Equip Off-hand (shields or small weapons only)'
@@ -195,9 +195,11 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                       </div>
                     )}
                     {/* Unequip indicator on hover */}
-                    <div className="absolute inset-0 bg-red-900/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <X size={20} className="text-red-300" />
-                    </div>
+                    {onUnequip && (
+                      <div className="absolute inset-0 bg-red-900/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <X size={20} className="text-red-300" />
+                      </div>
+                    )}
                     {/* Stats tooltip */}
                     <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-skyrim-paper/95 border border-skyrim-gold/50 rounded px-2 py-1 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
                       <div className="text-skyrim-gold font-bold">{equipped.name}</div>

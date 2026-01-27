@@ -542,7 +542,7 @@ export interface CombatAbility {
   id: string;
   name: string;
   // 'utility' included for non-damaging or special abilities (summons, buffs, etc.)
-  type: 'melee' | 'ranged' | 'magic' | 'shout' | 'utility';
+  type: 'melee' | 'ranged' | 'magic' | 'shout' | 'utility' | 'aeo';
   damage: number;
   cost: number; // stamina for melee, magicka for magic
   cooldown?: number; // turns until can use again
@@ -556,7 +556,7 @@ export interface CombatAbility {
 
 export interface CombatEffect {
   type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility' | 'aoe_damage' | 'aoe_heal';
-  stat?: 'health' | 'magicka' | 'stamina' | 'armor' | 'damage';
+  stat?: 'health' | 'magicka' | 'stamina' | 'armor' | 'damage' | 'sneak' | 'dodge' | 'accuracy';
   value: number;
   duration?: number; // turns
   chance?: number; // 0-100
@@ -725,8 +725,6 @@ export interface PlayerCombatStats {
 // ============================================================================
 // GAME FEATURES - Weather, Difficulty, Status Effects, Companions
 // ============================================================================
-
-export type WeatherType = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog' | 'storm';
 
 export interface WeatherState {
   type: WeatherType;

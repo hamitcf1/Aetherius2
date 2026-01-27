@@ -22,6 +22,7 @@ import { getLearnedSpellIds, createAbilityFromSpell, getSpellById } from './spel
 import { PERK_DEFINITIONS } from '../data/perkDefinitions';
 import { audioService } from './audioService';
 import { applyArrowEffects } from './arrowEffects';
+import { getRegenBonus } from './standingStonesService';
 
 // ============================================================================
 // COMBAT PERK SYSTEM - Perk effects in combat
@@ -609,9 +610,9 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
   const staminaRegenPerk = perks.find(p => p.id === 'stamina_regen' || p.id === 'recovery' || p.name === 'Stamina Regeneration' || p.name === 'Recovery');
   
   // Base regen rates (per second, applied per turn which is ~4s)
-  const BASE_HEALTH_REGEN = 0.5;   // ~2 health per turn
-  const BASE_MAGICKA_REGEN = 0.75; // ~3 magicka per turn
-  const BASE_STAMINA_REGEN = 0.5;  // ~2 stamina per turn
+  const BASE_HEALTH_REGEN = 1.5;   // ~6 health per turn (was 2)
+  const BASE_MAGICKA_REGEN = 2.0;  // ~8 magicka per turn (was 3)
+  const BASE_STAMINA_REGEN = 1.5;  // ~6 stamina per turn (was 2)
   
   // Under level 10: free passive regen
   if (level < 10) {
@@ -623,20 +624,86 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
   }
   
   // Level 10+: regen only from perks, with scaling per rank
-  const perkMultiplier = 1.25; // Each perk rank increases regen by 25%
+  const perkMultiplier = 1.5; // Each perk rank increases regen by 50% (was 25%)
+  
+  let regenHealthPerSec = hasHealthRegen ? BASE_HEALTH_REGEN * (1 + ((healthRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  let regenMagickaPerSec = hasMagickaRegen ? BASE_MAGICKA_REGEN * (1 + ((magickaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  let regenStaminaPerSec = hasStaminaRegen ? BASE_STAMINA_REGEN * (1 + ((staminaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  
+  // Apply percentage bonuses from combat perks
+  const magickaRegenBonus = getCombatPerkBonus(character, 'magickaRegenBonus');
+  if (magickaRegenBonus > 0) {
+    regenMagickaPerSec *= (1 + magickaRegenBonus / 100);
+  }
+  
+  // Apply standing stone regen bonuses
+  const standingStoneState = character.standingStoneState as any; // Type assertion since it's unknown in types
+  if (standingStoneState) {
+    const healthStoneBonus = getRegenBonus(standingStoneState, 'health');
+    const magickaStoneBonus = getRegenBonus(standingStoneState, 'magicka');
+    const staminaStoneBonus = getRegenBonus(standingStoneState, 'stamina');
+    
+    if (healthStoneBonus > 0) {
+      regenHealthPerSec *= (1 + healthStoneBonus / 100);
+    }
+    if (magickaStoneBonus > 0) {
+      regenMagickaPerSec *= (1 + magickaStoneBonus / 100);
+    }
+    if (staminaStoneBonus > 0) {
+      regenStaminaPerSec *= (1 + staminaStoneBonus / 100);
+    }
+  }
   
   return {
-    regenHealthPerSec: hasHealthRegen ? BASE_HEALTH_REGEN * (1 + ((healthRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
-    regenMagickaPerSec: hasMagickaRegen ? BASE_MAGICKA_REGEN * (1 + ((magickaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
-    regenStaminaPerSec: hasStaminaRegen ? BASE_STAMINA_REGEN * (1 + ((staminaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0
+    regenHealthPerSec,
+    regenMagickaPerSec,
+    regenStaminaPerSec
   };
 };
 
 // ============================================================================
-// PLAYER ABILITIES GENERATION
+// EFFECT APPLICATION SYSTEM
 // ============================================================================
 
-import { isFeatureEnabled } from '../featureFlags';
+/**
+ * Apply active effects to modify combat stats
+ */
+const applyActiveEffectsToStats = (
+  baseStats: { armor?: number; damage?: number; dodgeChance?: number; accuracy?: number },
+  activeEffects: Array<{ effect: CombatEffect; turnsRemaining: number }>
+): { armor: number; damage: number; dodgeChance: number; accuracy: number } => {
+  let armor = baseStats.armor || 0;
+  let damage = baseStats.damage || 0;
+  let dodgeChance = baseStats.dodgeChance || 0;
+  let accuracy = baseStats.accuracy || 0;
+
+  for (const ae of activeEffects) {
+    if (ae.turnsRemaining <= 0) continue;
+
+    const effect = ae.effect;
+    if (effect.type === 'buff' || effect.type === 'debuff') {
+      const multiplier = effect.type === 'debuff' ? -1 : 1;
+      const value = effect.value * multiplier;
+
+      switch (effect.stat) {
+        case 'armor':
+          armor += value;
+          break;
+        case 'damage':
+          damage += value;
+          break;
+        case 'dodge':
+          dodgeChance += value;
+          break;
+        case 'accuracy':
+          accuracy += value;
+          break;
+      }
+    }
+  }
+
+  return { armor: Math.max(0, armor), damage: Math.max(0, damage), dodgeChance: Math.max(0, dodgeChance), accuracy: Math.max(0, accuracy) };
+};
 
 const UNARMED_SKILL_MODIFIER = 0.5; // tuning constant for unarmed damage scaling
 
@@ -2251,7 +2318,13 @@ export const executePlayerAction = (
       // Resolve attack (d20 + bonuses vs armor/dodge) then roll damage dice
       const attackBonus = Math.floor((playerStats.weaponDamage || 0) / 10);
       const attackerLvl = character?.level || playerStats.maxHealth ? Math.max(1, Math.floor((character?.level || 10))) : 10;
-      let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
+      
+      // Apply active effects to target stats
+      const targetBaseStats = { armor: target.armor, dodgeChance: (target as any).dodgeChance || 0 };
+      const targetEffects = target.activeEffects || [];
+      const targetModifiedStats = applyActiveEffectsToStats(targetBaseStats, targetEffects);
+      
+      let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: targetModifiedStats.armor, targetDodge: targetModifiedStats.dodgeChance, critChance: playerStats.critChance, natRoll });
 
       // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure or miss)
       if (!attackResolved.hit && (attackResolved.rollTier === 'fail' || attackResolved.rollTier === 'miss')) {
@@ -2260,7 +2333,7 @@ export const executePlayerAction = (
         const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : (wasDodged ? 'dodged' : 'miss');
         if (hasRerollPerk && !wasDodged) {
           // Reroll once automatically (but not if dodged, since dodge is an ability check)
-          const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
+          const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: targetModifiedStats.armor, targetDodge: targetModifiedStats.dodgeChance, critChance: playerStats.critChance });
           // Log both rolls (first failed/missed, second result)
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
           attackResolved = second;
@@ -3185,7 +3258,13 @@ export const executeEnemyTurn = (
 
   // Resolve enemy/actor attack via d20 + attack bonus
   const attackBonus = Math.max(0, Math.floor(actor.damage / 8));
-  const resolved = resolveAttack({ attackerLevel: actor.level, attackBonus, targetArmor: playerStats.armor, targetDodge: playerStats.dodgeChance, critChance: 10, natRoll });
+  
+  // Apply active effects to player stats for defense
+  const playerBaseStats = { armor: playerStats.armor, dodgeChance: playerStats.dodgeChance };
+  const playerEffects = newState.playerActiveEffects || [];
+  const playerModifiedStats = applyActiveEffectsToStats(playerBaseStats, playerEffects);
+  
+  const resolved = resolveAttack({ attackerLevel: actor.level, attackBonus, targetArmor: playerModifiedStats.armor, targetDodge: playerModifiedStats.dodgeChance, critChance: 10, natRoll });
 
   // If stamina is low, scale melee damage instead of preventing the attack
   let appliedDamage = 0;
@@ -3561,7 +3640,13 @@ export const executeCompanionAction = (
 
   // Resolve attack
   const attackBonus = Math.max(0, Math.floor((ally.damage || 4) / 8));
-  const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: target.armor, critChance: 5, natRoll });
+  
+  // Apply active effects to target stats
+  const targetBaseStats = { armor: target.armor, dodgeChance: (target as any).dodgeChance || 0 };
+  const targetEffects = target.activeEffects || [];
+  const targetModifiedStats = applyActiveEffectsToStats(targetBaseStats, targetEffects);
+  
+  const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: targetModifiedStats.armor, critChance: 5, natRoll });
   if (!resolved.hit) {
     const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
@@ -3620,6 +3705,41 @@ export const advanceTurn = (state: CombatState): CombatState => {
   if (newState.currentTurnActor === 'player') {
     newState.playerMainActionUsed = false;
     newState.playerBonusActionUsed = false;
+    
+    // Apply decay damage to summoned allies that are decaying
+    const decayingAllies = (newState.allies || []).filter(ally => 
+      (ally as any).companionMeta?.decayActive && ally.currentHealth > 0
+    );
+    
+    for (const ally of decayingAllies) {
+      const decayDamage = Math.floor(ally.currentHealth * 0.5); // 50% of current health
+      const newHealth = Math.max(0, ally.currentHealth - decayDamage);
+      ally.currentHealth = newHealth;
+      
+      // Log the decay damage
+      pushCombatLogUnique(newState, { 
+        turn: newState.turn, 
+        actor: ally.name, 
+        action: 'decay', 
+        target: 'self', 
+        damage: decayDamage, 
+        narrative: `${ally.name} decays, losing ${decayDamage} health.`, 
+        timestamp: Date.now() 
+      });
+      
+      // If the ally died from decay, mark them as dead
+      if (newHealth <= 0) {
+        pushCombatLogUnique(newState, { 
+          turn: newState.turn, 
+          actor: ally.name, 
+          action: 'decay_death', 
+          target: 'self', 
+          damage: 0, 
+          narrative: `${ally.name} decays completely and vanishes.`, 
+          timestamp: Date.now() 
+        });
+      }
+    }
   }
   
   // If we've cycled back to start, increment turn

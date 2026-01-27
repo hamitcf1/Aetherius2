@@ -2123,28 +2123,49 @@ const App: React.FC = () => {
   // Auto-evaluate achievements when the character or achievement stats change (e.g., on load or level-up)
   useEffect(() => {
     if (!activeCharacter || !achievementsLoaded) return;
-    setAchievementState(prev => {
-      const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter, activeCharacter?.id);
-      if (newlyUnlocked && newlyUnlocked.length > 0) {
-        achievementNotificationQueueRef.current.push(...newlyUnlocked);
-        // Mark these achievements as notified (namespace with character id), but support legacy global keys
-        const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
-        // Also add legacy ids for backwards compat when older saves used un-namespaced keys
-        const legacyNotified = newlyUnlocked.map(a => a.id);
-        const markedState = markAchievementsNotified(updatedState, [...notifiedIds, ...legacyNotified]);
-        // Trigger immediate notification display if none showing
-        if (achievementNotification === null) {
-          const next = achievementNotificationQueueRef.current.shift();
-          if (next) {
-            setAchievementNotification(next);
-            audioService.playSoundEffect('quest_complete');
-          }
-        }
-        return markedState;
-      }
-      return updatedState;
+
+    // Compute per-character stats for evaluation
+    const perCharStats = auditStatsFromGameData(getDefaultAchievementStats(), activeCharacter, {
+      quests: getCharacterQuests(),
+      inventory: getCharacterItems(),
+      companions: companions.filter(c => c.characterId === activeCharacter.id),
+      // transactions/playTime can be added when available
     });
-  }, [activeCharacter, achievementState.stats, achievementsLoaded]);
+
+    // Run the check using the current achievement state but with the freshly computed stats
+    const { newlyUnlocked, updatedState } = checkAchievements({ ...achievementState, stats: perCharStats }, activeCharacter, activeCharacter?.id);
+
+    // If there are newly unlocked achievements, update state and queue notifications
+    if (newlyUnlocked && newlyUnlocked.length > 0) {
+      achievementNotificationQueueRef.current.push(...newlyUnlocked);
+      const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
+      const legacyNotified = newlyUnlocked.map(a => a.id);
+      const markedState = markAchievementsNotified(updatedState, [...notifiedIds, ...legacyNotified]);
+
+      // Only set state if it would actually change to avoid triggering re-render loops
+      setAchievementState(prev => {
+        // Quick identity check: if prev and markedState are referentially equal, skip
+        if (prev === markedState) return prev;
+        return markedState;
+      });
+
+      // Trigger immediate notification display if none showing
+      if (achievementNotification === null) {
+        const next = achievementNotificationQueueRef.current.shift();
+        if (next) {
+          setAchievementNotification(next);
+          audioService.playSoundEffect('quest_complete');
+        }
+      }
+
+      return;
+    }
+
+    // If nothing unlocked, only update the stats object if it actually changed
+    if (JSON.stringify(perCharStats) !== JSON.stringify(achievementState.stats)) {
+      setAchievementState(prev => ({ ...prev, stats: perCharStats }));
+    }
+  }, [activeCharacter, achievementState.stats, achievementsLoaded, achievementNotification]);
 
   const updateCharacter = useCallback((field: keyof Character, value: any) => {
       // If someone directly sets `level`, treat it as a level-up when increasing the level
@@ -6436,6 +6457,15 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 rarity: item.rarity || 'common',
                 equipped: false
               };
+
+              // Support special enchanted shop items (attach enchantment metadata if present)
+              if ((item as any).enchantment) {
+                const ench = (item as any).enchantment;
+                newItem.enchantments = [{ id: ench.enchantmentId, name: ench.enchantmentName, magnitude: ench.magnitude, effect: ench.effect }];
+                newItem.effects = [...(newItem.effects || []), `${ench.enchantmentName}: ${ench.magnitude}`];
+                newItem.value = Math.max(newItem.value || 0, item.price) + Math.max(1, Math.floor(ench.magnitude * 25));
+              }
+
               handleGameUpdate({
                 goldChange: -cost,
                 newItems: [newItem]
@@ -6856,7 +6886,16 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               if (result.success) {
                 setTrainingState(result.newState);
                 // Deduct gold and increase skill (update characters array)
-                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldCost, skills: { ...(ch.skills || {}), [skillName]: currentSkillLevel + 1 } } : ch));
+                setCharacters(prev => prev.map(ch => {
+                  if (ch.id !== (activeCharacter?.id || '')) return ch;
+                  const updated = { ...ch, gold: (ch.gold || 0) - result.goldCost, skills: { ...(ch.skills || {}), [skillName]: currentSkillLevel + 1 } } as any;
+                  // If training Enchanting, sync enchantingState.enchantingLevel as well so enchant magnitudes increase
+                  if (skillName === 'Enchanting') {
+                    const enchantState = (updated.enchantingState || {});
+                    updated.enchantingState = { ...(enchantState || {}), enchantingLevel: result.newSkillLevel || (currentSkillLevel + 1) };
+                  }
+                  return updated;
+                }));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');

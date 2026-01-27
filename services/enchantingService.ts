@@ -714,7 +714,17 @@ export function disenchantItem(
   // Check if already learned
   const alreadyLearned = state.learnedEnchantments.find(e => e.enchantmentId === enchantmentId);
   if (alreadyLearned) {
-    return { state, success: false, message: `You already know ${enchantment.name}.`, xpGained: 0 };
+    // Allow disenchanting even if already known: destroy item, give reduced XP but do not re-learn
+    const xpGained = 10; // small consolation XP
+    return {
+      state: {
+        ...state,
+        totalItemsDisenchanted: state.totalItemsDisenchanted + 1,
+      },
+      success: true,
+      message: `You already know ${enchantment.name}. The ${item.name} was destroyed.`,
+      xpGained,
+    };
   }
 
   // Learn the enchantment
@@ -948,5 +958,57 @@ export function soulGemToInventoryItem(gem: SoulGem): InventoryItem {
     weight: gem.size === 'azura_star' ? 0 : 0.5,
     effects: gem.filled ? [`Soul Level: ${gem.soulLevel}`] : [],
     quantity: 1,
+  };
+}
+
+/**
+ * Generate an enchanted loot entry for a base item (used by loot/shop special generation).
+ * Returns a partial loot entry with an `enchantment` field containing id/name/magnitude/effect.
+ */
+export function generateLootEnchantment(baseName: string, itemType: string, enemyLevel: number = 1): { enchantmentId: string; enchantmentName: string; magnitude: number; effect: string } | null {
+  // Only weapons, armor, and jewelry may be enchanted
+  if (!['weapon', 'armor', 'jewelry', 'apparel'].includes(itemType)) return null;
+
+  // Exclude non-combat or crafting-focused enchantments
+  const EXCLUDED = new Set(['soul_trap', 'waterbreathing', 'muffle', 'fortify_carry_weight']);
+
+  // Find applicable enchantments for this item type (combat-only)
+  const candidates = Object.values(ENCHANTMENTS).filter(e => {
+    if (EXCLUDED.has(e.id)) return false;
+    if (itemType === 'weapon') return e.type === 'weapon';
+    // Apparel/jewelry map to armor-type enchantments
+    return e.type === 'armor' || e.type === 'jewelry' || (e.type === 'armor' && itemType === 'apparel');
+  });
+
+  if (candidates.length === 0) return null;
+
+  // Choose a random enchantment weighted by rarity (rarer enchantments less likely)
+  const rarityWeight: Record<string, number> = {
+    common: 10,
+    uncommon: 6,
+    rare: 3,
+    epic: 1.5,
+    legendary: 0.8
+  };
+
+  // Weighted pick
+  const total = candidates.reduce((s, c) => s + (rarityWeight[c.rarity] || 1), 0);
+  let r = Math.random() * total;
+  let picked = candidates[0];
+  for (const c of candidates) {
+    r -= (rarityWeight[c.rarity] || 1);
+    if (r <= 0) { picked = c; break; }
+  }
+
+  // Magnitude scales with enemyLevel and a small random factor
+  const levelMultiplier = 1 + Math.min(5, Math.max(0, (enemyLevel - 1) / 10));
+  const randomFactor = 0.85 + Math.random() * 0.35; // 0.85 - 1.2
+  const magnitude = Math.max(1, Math.floor(picked.baseMagnitude * picked.scalingFactor * levelMultiplier * randomFactor));
+
+  return {
+    enchantmentId: picked.id,
+    enchantmentName: picked.name,
+    magnitude,
+    effect: picked.effect
   };
 }
