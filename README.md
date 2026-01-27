@@ -1,8 +1,9 @@
 # Skyrim Aetherius
 
-**Version 1.0.6** | [Changelog](components/Changelog.tsx)
+**Version 1.0.7** | [Changelog](components/Changelog.tsx)
 
 **Recent:**
+- **v1.0.7 (2026-01-27):** Combat UX updates — hide unlearned spells/abilities and gate advanced skill abilities behind perk investment; clarified status effect naming.
 - **v1.0.6 (2026-01-26):** Restored healing & conjuration visual effects and screen flashes; increased VFX z-index and standardized timing (ms helper) for reliable rendering. Added unit tests for spell visuals.
 - **v1.0.5 (2026-01-26):** Hotfixes: Modals, Combat & Map Stability (modal wrapper consistency, map crash fix, small reliability fixes).
 
@@ -347,5 +348,5 @@ Project developed for Skyrim roleplay community.
 
 ---
 
-**Version**: 1.0.6  
+**Version**: 1.0.7  
 **Last Updated**: January 27, 2026

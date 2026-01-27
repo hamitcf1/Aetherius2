@@ -18,6 +18,16 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.7',
+    date: '2026-01-27',
+    title: 'Combat UX: Learned Abilities Only',
+    changes: [
+      { type: 'fix', text: 'Combat: hide unlearned spells from ability lists — learned spell IDs now control which magical abilities appear' },
+      { type: 'improvement', text: 'Combat: advanced One-Handed and Sneak abilities now require perk investment before appearing' },
+      { type: 'improvement', text: 'UX: clarified buff/debuff naming to avoid placeholder labels in status effects' },
+    ]
+  },
+  {
     version: '1.0.6',
     date: '2026-01-26',
     title: 'Combat: VFX & Tests',

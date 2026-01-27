@@ -18,7 +18,7 @@ import { getFoodNutrition } from './nutritionData';
 import { isSmallWeapon } from './equipment';
 import { modifyPlayerCombatStat } from './vitals';
 import { resolvePotionEffect } from './potionResolver';
-import { getLearnedSpellIds, createAbilityFromSpell } from './spells';
+import { getLearnedSpellIds, createAbilityFromSpell, getSpellById } from './spells';
 import { PERK_DEFINITIONS } from '../data/perkDefinitions';
 import { audioService } from './audioService';
 import { applyArrowEffects } from './arrowEffects';
@@ -647,6 +647,12 @@ export const generatePlayerAbilities = (
   const abilities: CombatAbility[] = [];
   const getSkillLevel = (name: string) => 
     (character.skills || []).find(s => s.name === name)?.level || 0;
+  const hasPerkInSkill = (skillName: string) =>
+    (character.perks || []).some(p => p.skill === skillName && (p.rank || 0) > 0);
+  const learnedSpellIds = new Set<string>([
+    ...((character.learnedSpells || []) as string[]),
+    ...(character.id ? getLearnedSpellIds(character.id) : [])
+  ]);
 
   // Always available: Basic Attack (no cooldown - can be spammed)
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
@@ -1308,8 +1314,9 @@ export const generatePlayerAbilities = (
 
   // === ONE-HANDED WEAPON ABILITIES ===
   const oneHandedSkill = getSkillLevel('One-Handed');
+  const hasOneHandedPerk = hasPerkInSkill('One-Handed');
   
-  if (oneHandedSkill >= 25) {
+  if (oneHandedSkill >= 25 && hasOneHandedPerk) {
     abilities.push({
       id: 'riposte',
       name: 'Riposte',
@@ -1322,7 +1329,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 40) {
+  if (oneHandedSkill >= 40 && hasOneHandedPerk) {
     abilities.push({
       id: 'slash',
       name: 'Slash',
@@ -1335,7 +1342,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 60) {
+  if (oneHandedSkill >= 60 && hasOneHandedPerk) {
     abilities.push({
       id: 'mortal_strike',
       name: 'Mortal Strike',
@@ -1412,8 +1419,9 @@ export const generatePlayerAbilities = (
 
   // === SNEAK ABILITIES (NON-CONJURATION) ===
   const sneakSkill = getSkillLevel('Sneak');
+  const hasSneakPerk = hasPerkInSkill('Sneak');
   
-  if (sneakSkill >= 20) {
+  if (sneakSkill >= 20 && hasSneakPerk) {
     abilities.push({
       id: 'evasion',
       name: 'Evasion',
@@ -1426,7 +1434,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (sneakSkill >= 40) {
+  if (sneakSkill >= 40 && hasSneakPerk) {
     abilities.push({
       id: 'shadow_clone',
       name: 'Shadow Clone',
@@ -1441,21 +1449,28 @@ export const generatePlayerAbilities = (
 
   // Learned spells (from spells registry) -> turn into abilities
   try {
-    // Only load learned spells when we have a canonical character id
-    const learned = character && character.id ? getLearnedSpellIds(character.id) : [];
-    learned.forEach(spellId => {
+    // Only load learned spells when we have a canonical character id or server-provided list
+    for (const spellId of learnedSpellIds) {
       // Ensure empowered/variant spells are actually unlocked by character level/perks
       try {
-        if (!isSpellVariantUnlocked(character, spellId)) return;
+        if (!isSpellVariantUnlocked(character, spellId)) continue;
       } catch (e) {}
       const ab = createAbilityFromSpell(spellId);
       if (ab) abilities.push(ab as any);
-    });
+    }
   } catch (e) {
     // If anything goes wrong reading spells, ignore — spells are optional
   }
 
-  return abilities;
+  const deduped = new Map<string, CombatAbility>();
+  for (const ability of abilities) {
+    const isSpell = !!getSpellById(ability.id);
+    if (isSpell && !learnedSpellIds.has(ability.id)) continue;
+    if (deduped.has(ability.id)) deduped.delete(ability.id);
+    deduped.set(ability.id, ability);
+  }
+
+  return Array.from(deduped.values());
 };
 
 // Grant a new ability to the player's combat stats (idempotent)
