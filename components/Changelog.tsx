@@ -18,6 +18,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.8',
+    date: '2026-01-28',
+    title: 'Shop & Blacksmith UX Quality-of-life',
+    changes: [
+      { type: 'improvement', text: 'Blacksmith: added quick-buy for missing upgrade materials showing required quantity and total cost' },
+      { type: 'improvement', text: 'Blacksmith: Confirm button now disables and clearly indicates when gold is insufficient' },
+      { type: 'improvement', text: 'Shop: Buy list shows compact owned badge (icon + count) when player owns the item' },
+      { type: 'improvement', text: 'Shop: Sell list now groups identical stacks and provides both "Sell 1" and "Sell All" actions' },
+      { type: 'improvement', text: 'Shop: restored damage/armor/nutrition/potion indicators in Buy and Sell views and added category icon to Sell rows' },
+      { type: 'fix', text: 'Shop: removed duplicate footer item count and fixed Sell-all category summary' }
+    ]
+  },
+  {
     version: '1.0.7',
     date: '2026-01-27',
     title: 'Combat UX: Learned Abilities Only',

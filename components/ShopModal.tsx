@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { X, ShoppingBag, Coins, Search, Package, Sword, Shield, FlaskConical, Tent, Apple, Droplets, ArrowDownToLine, ArrowUpFromLine, Check, Gem } from 'lucide-react';
+import { X, ShoppingBag, Coins, Search, Package, Sword, Shield, FlaskConical, Tent, Apple, Droplets, ArrowDownToLine, ArrowUpFromLine, Check, Gem, Star } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import type { InventoryItem } from '../types';
@@ -605,6 +605,115 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     return sorted;
   }, [inventory, search, category, sellSort]);
 
+  // Group identical inventory entries by normalized name so the sell list shows stacked rows
+  const groupedInventoryItems = useMemo(() => {
+    const m = new Map<string, {
+      key: string;
+      name: string;
+      description?: string;
+      rarity?: string;
+      type?: string;
+      items: InventoryItem[];
+      totalQty: number;
+      anyFavorite: boolean;
+      anyEquipped: boolean;
+    }>();
+
+    filteredInventoryItems.forEach(it => {
+      const key = (it.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const existing = m.get(key);
+      if (!existing) {
+        m.set(key, {
+          key,
+          name: it.name || key,
+          description: it.description,
+          rarity: (it.rarity || '') as string,
+          type: it.type,
+          items: [it],
+          totalQty: it.quantity || 1,
+          anyFavorite: !!it.isFavorite,
+          anyEquipped: !!it.equipped,
+        });
+      } else {
+        existing.items.push(it);
+        existing.totalQty += (it.quantity || 1);
+        existing.anyFavorite = existing.anyFavorite || !!it.isFavorite;
+        existing.anyEquipped = existing.anyEquipped || !!it.equipped;
+      }
+    });
+
+    return Array.from(m.values());
+  }, [filteredInventoryItems]);
+
+  // Sell all items in a grouped entry (iterate underlying stacks)
+  const handleSellGroupAll = (group: { items: InventoryItem[] }) => {
+    if (!onSell) return;
+    let grandTotal = 0;
+    group.items.forEach(it => {
+      const qty = it.quantity || 1;
+      const unit = getSellPrice(it);
+      const total = unit * qty;
+      grandTotal += total;
+      onSell(it, qty, total);
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+      setRecentlySold(prev => new Set(prev).add(it.id));
+    });
+
+    playSoundEffect('sell');
+    showToast && showToast(`Sold ${group.items.length} item${group.items.length !== 1 ? 's' : ''} for ${grandTotal}g`, 'success');
+    setTimeout(() => {
+      setRecentlySold(prev => {
+        const newSet = new Set(prev);
+        group.items.forEach(it => newSet.delete(it.id));
+        return newSet;
+      });
+    }, 1600);
+  };
+
+  // Sell a single unit from the grouped entry (find first stack with qty > 0)
+  const handleSellGroupOne = (group: { items: InventoryItem[] }) => {
+    if (!onSell) return;
+    for (const it of group.items) {
+      const qtyAvailable = it.quantity || 1;
+      if (qtyAvailable <= 0) continue;
+      const unit = getSellPrice(it);
+      onSell(it, 1, unit);
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+      setRecentlySold(prev => new Set(prev).add(it.id));
+      playSoundEffect('sell');
+      showToast && showToast(`Sold 1x ${it.name} for ${unit}g`, 'success');
+      setTimeout(() => {
+        setRecentlySold(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(it.id);
+          return newSet;
+        });
+      }, 1600);
+      break;
+    }
+  };
+
+  // Items in the currently selected category (ignores search)
+  const itemsInSelectedCategory = useMemo(() => {
+    const base = inventory.filter(item => {
+      if (item.type === 'key') return false;
+      if ((item.quantity || 0) <= 0) return false;
+      if (item.equipped) return false;
+      return true;
+    });
+
+    const categoryFiltered = category === 'All' ? base : base.filter(item => {
+      if (category === 'Jewelry') {
+        const n = item.name.toLowerCase();
+        return n.includes('ring') || n.includes('necklace') || n.includes('circlet');
+      }
+      const mapped = TYPE_TO_CATEGORY[item.type] || 'Misc';
+      return mapped === category;
+    });
+
+    return categoryFiltered;
+  }, [inventory, category]);
+
   const getQuantity = (id: string) => quantities[id] || 1;
   const setQuantity = (id: string, qty: number, max?: number) => {
     const newQty = Math.max(1, max ? Math.min(qty, max) : qty);
@@ -695,6 +804,39 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         return newSet;
       });
     }, 1500);
+  };
+
+  // Sell all items in the currently selected category
+  const handleSellCategory = () => {
+    if (!onSell) return;
+    const toSell = itemsInSelectedCategory.filter(it => (it.quantity || 0) > 0);
+    if (toSell.length === 0) {
+      showToast && showToast('No items in this category to sell', 'info');
+      return;
+    }
+
+    // Execute sell for each item (preserves existing onSell behavior)
+    let grandTotal = 0;
+    toSell.forEach(it => {
+      const qty = it.quantity || 1;
+      const unit = getSellPrice(it);
+      const total = unit * qty;
+      grandTotal += total;
+      onSell(it, qty, total);
+      setRecentlySold(prev => new Set(prev).add(it.id));
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+    });
+
+    playSoundEffect('sell');
+    showToast && showToast(`Sold ${toSell.length} items for ${grandTotal}g`, 'success');
+    // clear recentlySold flags after a short time so UI feedback works
+    setTimeout(() => {
+      setRecentlySold(prev => {
+        const newSet = new Set(prev);
+        toSell.forEach(it => newSet.delete(it.id));
+        return newSet;
+      });
+    }, 1600);
   };
 
   if (!open) return null;
@@ -815,41 +957,70 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                 <div className="text-center text-gray-500 py-8 text-sm">No items found.</div>
               ) : (
                 <div className="divide-y divide-skyrim-border/30">
-                  {filteredShopItems.map(item => (
-                    <div key={item.id} className="px-3 py-2.5 flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="text-xl text-gray-300">{categoryIcons[item.category || 'All']}</div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate text-sm flex items-center gap-2">
-                              <span className="truncate">{item.name}</span>
-                              { (item as any).limited && <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-700 text-yellow-100">Limited</span> }
-                              { ( (item as any).enchantment || /\bof\b/i.test(item.name) ) && (
-                                <span className="ml-1 px-2 py-0.5 rounded bg-purple-700 text-purple-100 text-xs flex items-center gap-1">
-                                  <Gem className="w-3 h-3" />
-                                  Enchanted
-                                </span>
-                              )}
-                              {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
+                  {filteredShopItems.map(item => {
+                    // Match against player's inventory to show ownership/favorite/equipped indicators
+                    const matches = inventory.filter(inv => inv.name.toLowerCase() === item.name.toLowerCase());
+                    const ownedQty = matches.reduce((s, it) => s + (it.quantity || 1), 0);
+                    const anyFavorite = matches.some(it => !!it.isFavorite);
+                    const anyEquipped = matches.some(it => !!it.equipped);
+
+                    return (
+                      <div key={item.id} className="px-3 py-2.5 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="text-xl text-gray-300">{categoryIcons[item.category || 'All']}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate text-sm flex items-center gap-2">
+                                <span className="truncate">{item.name}</span>
+                                {ownedQty > 0 && (
+                                  <span className="ml-1 px-2 py-0.5 rounded bg-skyrim-paper/30 text-gray-300 text-xs flex items-center gap-1" title={`${ownedQty} owned`}>
+                                    <Package size={12} />
+                                    <span className="text-xs">x{ownedQty}</span>
+                                  </span>
+                                )}
+                                { (item as any).limited && <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-700 text-yellow-100">Limited</span> }
+                                { ( (item as any).enchantment || /\bof\b/i.test(item.name) ) && (
+                                  <span className="ml-1 px-2 py-0.5 rounded bg-purple-700 text-purple-100 text-xs flex items-center gap-1">
+                                    <Gem className="w-3 h-3" />
+                                    Enchanted
+                                  </span>
+                                )}
+                                {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
+
+                                {/* Favorite / Equipped indicators (match to player's inventory) */}
+                                {anyFavorite && (
+                                  <span className="ml-1 px-2 py-0.5 rounded text-[10px] bg-yellow-500 text-black flex items-center gap-1" title="Favorited">
+                                    <Star size={12} /> Fav
+                                  </span>
+                                )}
+                                {anyEquipped && (
+                                  <span className="ml-1 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
+                                    <Shield size={12} /> Equipped
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1 truncate">{item.description}</div>
                             </div>
-                            <div className="text-xs text-gray-400 mt-1 truncate">{item.description}</div>
                           </div>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 text-yellow-400 font-bold">
+                            <Coins size={12} />
+                            <span className={`${gold < (item.price * getQuantity(item.id)) ? 'text-red-400' : ''}`}>{item.price}g</span>
+                          </div>
+                          <button onClick={(e) => handleBuy(item, e)} disabled={recentlyPurchased.has(item.id)} className={`px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] ${recentlyPurchased.has(item.id) ? 'bg-yellow-600 text-white scale-105' : insufficient.has(item.id) ? 'bg-red-600 text-white animate-pulse' : (gold < (item.price * getQuantity(item.id)) ? 'bg-red-600 text-white/90 hover:brightness-105' : 'bg-skyrim-gold text-skyrim-dark hover:scale-105')}`}>
+                            {recentlyPurchased.has(item.id) ? (
+                              <span className="flex items-center gap-1 text-xs">✅ Bought!</span>
+                            ) : insufficient.has(item.id) ? (
+                              <span className="flex items-center gap-1 text-xs">Need {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
+                            ) : (
+                              'Buy'
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`text-yellow-400 font-bold ${gold < (item.price * getQuantity(item.id)) ? 'text-red-400' : ''}`}>{item.price}g</div>
-                        <button onClick={(e) => handleBuy(item, e)} disabled={recentlyPurchased.has(item.id)} className={`px-2 py-1 rounded text-xs transition-all min-w-[72px] ${recentlyPurchased.has(item.id) ? 'bg-yellow-600 text-white scale-105' : insufficient.has(item.id) ? 'bg-red-600 text-white animate-pulse' : (gold < (item.price * getQuantity(item.id)) ? 'bg-red-600 text-white/90 hover:brightness-105' : 'bg-skyrim-gold text-skyrim-dark hover:scale-105')}`}>
-                          {recentlyPurchased.has(item.id) ? (
-                            <span className="flex items-center gap-1 text-xs">✅ Bought!</span>
-                          ) : insufficient.has(item.id) ? (
-                            <span className="flex items-center gap-1 text-xs">Need {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
-                          ) : (
-                            'Buy'
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -861,114 +1032,93 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                 </div>
               ) : (
                 <div className="divide-y divide-skyrim-border/30">
-                  {filteredInventoryItems.map(item => {
-                    const maxQty = item.quantity || 1;
-                    const qty = Math.min(getQuantity(item.id), maxQty);
-                    const unitPrice = getSellPrice(item);
-                    const total = unitPrice * qty;
+                  {groupedInventoryItems.map(group => {
+                    const unitPrice = group.items.length ? getSellPrice(group.items[0]) : 0;
+                    const totalGold = group.items.reduce((s, it) => s + getSellPrice(it) * (it.quantity || 1), 0);
 
                     return (
-                      <div
-                        key={item.id}
-                        className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors"
-                      >
+                      <div key={group.key} className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
-                            <span className="text-gray-500 text-xs">×{item.quantity}</span>
-                            {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
-                            {/* Show stats for weapons and armor */}
-                            {(item.damage || item.armor) && (
-                              <span className="flex items-center gap-2 text-xs">
-                                {item.damage && (
-                                  <span className="flex items-center gap-0.5 text-red-400">
-                                    <Sword size={10} /> {item.damage}
+                            <div className="text-xl text-gray-300">{categoryIcons[TYPE_TO_CATEGORY[group.type || 'misc'] || 'Misc']}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate text-sm flex items-center gap-2">
+                                <span className="truncate">{group.name}</span>
+                                <span className="text-gray-500 text-xs">×{group.totalQty}</span>
+                                {group.rarity && <span className="ml-2"><RarityBadge rarity={String(group.rarity)} /></span>}
+                                {group.anyFavorite && (
+                                  <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-yellow-500 text-black flex items-center gap-1" title="Favorited">
+                                    <Star size={12} /> Fav
                                   </span>
                                 )}
-                                {item.armor && (
-                                  <span className="flex items-center gap-0.5 text-blue-400">
-                                    <Shield size={10} /> {item.armor}
+                                {group.anyEquipped && (
+                                  <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
+                                    <Shield size={12} /> Equipped
                                   </span>
                                 )}
-                              </span>
-                            )}
-                            {/* Show nutrition/effects for food/drink/potions */}
-                            {item.type === 'food' && (
-                              <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
-                                <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
-                              </span>
-                            )}
-                            {item.type === 'drink' && (
-                              <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
-                                <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
-                              </span>
-                            )}
-                            {item.type === 'potion' && (
-                              <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
-                                <FlaskConical size={10} />
-                                {item.subtype === 'health' ? 'Restores Health' : 
-                                 item.subtype === 'magicka' ? 'Restores Magicka' : 
-                                 item.subtype === 'stamina' ? 'Restores Stamina' : 
-                                 item.description.includes('Restores') ? 'Restorative' : 
-                                 'Potion Effect'}
-                              </span>
-                            )}
 
+                                {/* Show stats for weapons and armor using first stack as sample */}
+                                {group.items[0] && ( (group.items[0].damage || group.items[0].armor) ) && (
+                                  <span className="flex items-center gap-2 text-xs">
+                                    {group.items[0].damage && (
+                                      <span className="flex items-center gap-0.5 text-red-400">
+                                        <Sword size={10} /> {group.items[0].damage}
+                                      </span>
+                                    )}
+                                    {group.items[0].armor && (
+                                      <span className="flex items-center gap-0.5 text-blue-400">
+                                        <Shield size={10} /> {group.items[0].armor}
+                                      </span>
+                                    )}
+                                  </span>
+                                )}
+
+                                {/* nutrition / potion hints */}
+                                {group.items[0] && group.items[0].type === 'food' && (
+                                  <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                                    <Apple size={10} /> {getFoodNutritionDisplay(group.items[0].name)}
+                                  </span>
+                                )}
+                                {group.items[0] && group.items[0].type === 'drink' && (
+                                  <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                                    <Droplets size={10} /> {getDrinkNutritionDisplay(group.items[0].name)}
+                                  </span>
+                                )}
+                                {group.items[0] && group.items[0].type === 'potion' && (
+                                  <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                                    <FlaskConical size={10} />
+                                    {group.items[0].subtype === 'health' ? 'Restores Health' : 
+                                     group.items[0].subtype === 'magicka' ? 'Restores Magicka' : 
+                                     group.items[0].subtype === 'stamina' ? 'Restores Stamina' : 
+                                     group.items[0].description?.includes('Restores') ? 'Restorative' : 
+                                     'Potion Effect'}
+                                  </span>
+                                )}
+
+                              </div>
+                              <p className="text-gray-500 text-xs truncate">{group.description}</p>
+                            </div>
                           </div>
-                          <p className="text-gray-500 text-xs truncate">{item.description}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <div className="flex items-center gap-1 text-green-400 text-xs font-bold">
                             <Coins size={12} />
                             {unitPrice}/ea
                           </div>
-                          {showQuantityControls && maxQty > 1 && (
-                            <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
-                              <button
-                                onClick={() => setQuantity(item.id, qty - 1, maxQty)}
-                                className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                              >
-                                -
-                              </button>
-                              <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
-                              <button
-                                onClick={() => setQuantity(item.id, qty + 1, maxQty)}
-                                className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                              >
-                                +
-                              </button>
-                            </div>
-                          )}
-
-                          <button
-                            onClick={() => handleSell(item)}
-                            disabled={recentlySold.has(item.id)}
-                            className={`px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] ${
-                              recentlySold.has(item.id)
-                                ? 'bg-yellow-600 text-white scale-105'
-                                : 'bg-green-700 text-white hover:bg-green-600'
-                            }`}
-                          >
-                            {recentlySold.has(item.id) ? (
-                              <span className="flex items-center justify-center gap-1">
-                                <Check size={12} />
-                                Sold!
-                              </span>
-                            ) : (
-                              `Sell +${total}g`
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleSellAll(item)}
-                            disabled={recentlySold.has(item.id) || (item.quantity || 0) <= 1}
-                            className={`ml-2 px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                              recentlySold.has(item.id)
-                                ? 'bg-yellow-600 text-white scale-105'
-                                : 'bg-gray-700 text-white hover:bg-gray-600'
-                            }`}
-                          >
-                            Sell All
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSellGroupOne(group)}
+                              className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[80px] bg-skyrim-paper/30 text-skyrim-text hover:bg-skyrim-paper/40"
+                            >
+                              {`Sell 1 +${unitPrice}g`}
+                            </button>
+                            <button
+                              onClick={() => handleSellGroupAll(group)}
+                              className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] bg-green-700 text-white hover:bg-green-600"
+                            >
+                              {`Sell All +${totalGold}g`}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -985,12 +1135,41 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
           </div>
         )}
         <div className="px-3 py-2 border-t border-skyrim-border/60 bg-skyrim-paper/20 flex-shrink-0">
-          <p className="text-gray-500 text-xs text-center">
-            {mode === 'buy' 
-              ? `${filteredShopItems.length} items available` 
-              : (!onSell ? 'This vendor is not buying items right now.' : `${filteredInventoryItems.length} items to sell (50% value)`)
-            }
-          </p>
+          {mode === 'buy' ? (
+            <p className="text-gray-500 text-xs text-center">{`${filteredShopItems.length} items available`}</p>
+          ) : (
+            !onSell ? (
+              <p className="text-gray-500 text-xs text-center">This vendor is not buying items right now.</p>
+            ) : (
+                <div className="flex flex-col gap-2">
+
+                {/* Category sell summary & action */}
+                {itemsInSelectedCategory.length > 0 && (
+                  (() => {
+                    const totalQty = itemsInSelectedCategory.reduce((s, it) => s + (it.quantity || 0), 0);
+                    const totalGold = itemsInSelectedCategory.reduce((s, it) => s + getSellPrice(it) * (it.quantity || 0), 0);
+                    const breakdown = itemsInSelectedCategory.map(it => `${it.quantity}x ${it.name}`).join(', ');
+                    return (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-gray-400 truncate">{`${category}: ${totalQty} item${totalQty !== 1 ? 's' : ''} — ${breakdown}`}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs text-green-400 font-bold">{totalGold}g</div>
+                          <button
+                            onClick={handleSellCategory}
+                            disabled={!onSell}
+                            className={`px-3 py-1 rounded text-xs font-bold transition-all ${!onSell ? 'bg-gray-700/60 text-gray-400 cursor-not-allowed' : 'bg-green-700 text-white hover:bg-green-600'}`}
+                          >
+                            Sell all
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+              </div>
+            )
+          )}
         </div>
       </div>
     </div>

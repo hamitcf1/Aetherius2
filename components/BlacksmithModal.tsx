@@ -251,7 +251,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   const selected = useMemo(() => eligible.find(i => i.id === selectedId) ?? null, [eligible, selectedId]);
 
   // Convenience: toggle favorite flag on an item (will mark it dirty for debounced persistence)
-  const { characterLevel, showToast, markEntityDirty } = useAppContext();
+  const { characterLevel, showToast, markEntityDirty, handleShopPurchase } = useAppContext();
 
   const toggleFavorite = (id: string) => {
     setItems(prev => prev.map(it => it.id === id ? { ...it, isFavorite: !(it.isFavorite) } : it));
@@ -272,7 +272,10 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   // upgrades here (keeps behavior backwards-compatible) but the UI will still
   // surface explicit requirements when present on the item.
   const nextUpgradeRequirements = selected ? getRequirementsForNextUpgrade(selected) : undefined;
-  const inventoryRequirementsMet = !nextUpgradeRequirements || nextUpgradeRequirements.every(r => countMaterialInInventory(items, r.itemId) >= (r.quantity || 1));
+  const materialRequirementsMet = !nextUpgradeRequirements || nextUpgradeRequirements.every(r => countMaterialInInventory(items, r.itemId) >= (r.quantity || 1));
+  const upgradeCost = selected ? getUpgradeCost(selected) : 0;
+  const goldRequirementsMet = (gold || 0) >= upgradeCost;
+  const inventoryRequirementsMet = materialRequirementsMet && goldRequirementsMet;
 
   const startSpark = () => {
     // Clear any existing timeout so repeated starts reset the timer cleanly
@@ -683,9 +686,9 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                       <div className="flex items-center gap-4">
                          <div className="px-5 py-3 bg-black/30 rounded border border-skyrim-border/30 bg-gradient-to-r from-black/20 to-transparent">
                             <div className="text-[10px] uppercase tracking-widest text-gray-400">Upgrade Cost</div>
-                            <div className="text-yellow-400 font-serif text-2xl flex items-baseline gap-1 mt-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                               {getUpgradeCost(selected)} <span className="text-sm font-sans text-yellow-500/80">gold</span>
-                            </div>
+                             <div className="text-yellow-400 font-serif text-2xl flex items-baseline gap-1 mt-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                               {upgradeCost} <span className="text-sm font-sans text-yellow-500/80">gold</span>
+                             </div>
                          </div>
                          
                          {/* Level Requirement Check */}
@@ -712,12 +715,18 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                               {nextUpgradeRequirements.map(r => {
                                 const ownedQty = countMaterialInInventory(items, r.itemId);
                                 const requiredQty = r.quantity || 1;
+                                const missingQty = Math.max(0, requiredQty - ownedQty);
                                 const met = ownedQty >= requiredQty;
                                 // Try to find name in inventory first, then shop, then fallback formatting
                                 const invMatch = items.find(i => i.id === r.itemId) || items.find(i => (i.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_') === r.itemId);
                                 const shopMatch = (shopItems || []).find(s => s.id === r.itemId);
                                 const pretty = invMatch ? invMatch.name : (shopMatch ? shopMatch.name : ((r.itemId || '').replace(/_/g, ' ')).replace(/\b\w/g, ch => ch.toUpperCase()));
-                                
+                                const canQuickBuy = !!shopMatch && missingQty > 0;
+                                const requiredLevel = shopMatch?.requiredLevel || 0;
+                                const meetsLevel = requiredLevel <= (characterLevel || 0);
+                                const totalCost = shopMatch ? shopMatch.price * missingQty : 0;
+                                const canAfford = gold >= totalCost;
+
                                 return (
                                   <div key={r.itemId} className={`flex items-center justify-between p-2 rounded relative overflow-hidden transition-colors ${met ? 'bg-green-900/10 border border-green-900/20' : 'bg-red-900/10 border border-red-900/20'}`}>
                                     {met && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-green-500/50"></div>}
@@ -726,18 +735,49 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                                     <div className={`flex items-center gap-2 pl-2 ${met ? 'text-gray-200' : 'text-red-300'}`}>
                                       <span className="text-sm font-medium">{pretty}</span>
                                     </div>
-                                    <span className={`font-mono text-sm tracking-tighter ${met ? 'text-green-400' : 'text-red-400'}`}>
-                                      {ownedQty} <span className="text-gray-500 text-xs">/</span> {requiredQty}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-mono text-sm tracking-tighter ${met ? 'text-green-400' : 'text-red-400'}`}>
+                                        {ownedQty} <span className="text-gray-500 text-xs">/</span> {requiredQty}
+                                      </span>
+                                      {canQuickBuy && (
+                                        <button
+                                          type="button"
+                                          aria-label={`Buy ${missingQty} ${shopMatch?.name} for ${totalCost}g`}
+                                          onClick={() => {
+                                            if (!shopMatch) return;
+                                            if (!meetsLevel) {
+                                              showToast?.(`Requires level ${requiredLevel} to buy ${shopMatch.name}`, 'warning');
+                                              return;
+                                            }
+                                            if (!canAfford) {
+                                              showToast?.(`Need ${Math.max(1, totalCost - gold)} gold to buy ${shopMatch.name}`, 'warning');
+                                              return;
+                                            }
+                                            handleShopPurchase(shopMatch, missingQty);
+                                            showToast?.(`Bought ${missingQty} ${shopMatch.name}`, 'success');
+                                          }}
+                                          disabled={!meetsLevel || !canAfford}
+                                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition-colors ${(!meetsLevel || !canAfford) ? 'bg-gray-700/60 text-gray-400 cursor-not-allowed' : 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-500'}`}
+                                        >
+                                          Buy {missingQty} for {totalCost}g
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
                             </div>
                           </div>
-                          {!inventoryRequirementsMet && (
+                          {!materialRequirementsMet && (
                             <div className="text-xs mt-3 text-red-300/80 italic text-center flex items-center justify-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
                                 Missing required materials
+                            </div>
+                          )}
+                          {!goldRequirementsMet && (
+                            <div className="text-xs mt-2 text-red-300/80 italic text-center flex items-center justify-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
+                                Insufficient gold
                             </div>
                           )}
                         </div>
