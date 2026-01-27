@@ -112,6 +112,8 @@ describe('Combat — potion consumption', () => {
       expect(first.id).toBe('p1');
       // quantity should reflect post-use quantity (0 => will be deleted by App)
       expect(Number(first.quantity)).toBe(0);
+      // character id should be present for deterministic merging
+      expect(first.characterId).toBe(charLowMag.id);
     } else {
       // fallback shape: removedItems by name
       expect(first.name).toMatch(/Minor Magicka Potion/i);

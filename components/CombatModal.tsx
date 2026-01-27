@@ -1265,14 +1265,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             }
             setFloatingHits(h => [{ id, actor: last.actor, damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
             setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
+
+            // Handle dodge effects for missed companion attacks (no damage dealt)
+            if ((!last.damage || last.damage <= 0) && last.rollTier === 'miss' && x !== undefined && y !== undefined) {
+              setDodgeEffect({ x, y });
+              setTimeout(() => setDodgeEffect(null), 600);
+            }
           }
         } catch (e) { /* best-effort UI */ }
-
-        // Handle dodge effects for missed attacks (no damage dealt)
-        if (last && (!last.damage || last.damage <= 0) && last.rollTier === 'miss' && x !== undefined && y !== undefined) {
-          setDodgeEffect({ x, y });
-          setTimeout(() => setDodgeEffect(null), 600);
-        }
 
         // Update UI and play companion animation
         setCombatState(currentState);
@@ -1599,6 +1599,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       if (match && onInventoryUpdate) {
         pendingInventoryUpdateIds.current.add(itemId);
         const precise: InventoryItem = { ...match, quantity: Math.max(0, (match.quantity || 0) - 1) } as InventoryItem;
+        // Include character id so parent can merge id-based updates deterministically
+        if (character && character.id) precise.characterId = character.id;
         onInventoryUpdate([precise]);
       }
     }
@@ -1793,6 +1795,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             const precise: InventoryItem = { ...(usedItem as any) } as InventoryItem;
             // ensure quantity in the payload reflects the post-use quantity
             precise.quantity = Number(usedItem.quantity || 0);
+            // Include character id so parent can merge id-based updates deterministically
+            if (character && character.id) precise.characterId = character.id;
             onInventoryUpdate([precise]);
           } else {
             onInventoryUpdate([{ name: usedItem.name, quantity: 1 }]);
@@ -1852,7 +1856,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       let x: number | undefined;
       let y: number | undefined;
       try {
-        const targetEnemy = combatState.enemies.find(e => e.id === selectedTarget);
+        const targetEnemy = finalState.enemies.find(e => e.id === selectedTarget);
         if (targetEnemy) {
           const el = enemyRefs.current[targetEnemy.id];
           if (el) {
@@ -1866,10 +1870,97 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       setFloatingHits(h => [{ id, actor: 'player', damage: last.damage, hitLocation: undefined, isCrit: !!last.isCrit, x, y }, ...h]);
       setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
 
+      // Enhanced VFX for player attacks (match companion/enemy visual treatment)
+      try {
+        if (effectsEnabled && x !== undefined && y !== undefined) {
+          // Critical hit feedback
+          if (last.isCrit) {
+            setCriticalHitEffect({ x: x!, y: y! });
+            setTimeout(() => setCriticalHitEffect(null), 800);
+            setScreenShake({ intensity: 'medium', duration: 300 });
+            setTimeout(() => setScreenShake(null), 300);
+          }
+
+          // Blood splatter for physical damage
+          if (last.damageType !== 'magic' && last.damageType !== 'healing' && last.damage > 0) {
+            const intensity = last.isCrit ? 'heavy' : last.damage > 20 ? 'medium' : 'light';
+            setBloodSplatter({ x: x!, y: y!, intensity });
+            setTimeout(() => setBloodSplatter(null), 1000);
+          }
+
+          // Impact wave for significant damage
+          if (last.damage > 15) {
+            setImpactWave({ x: x!, y: y!, effectType: last.damageType === 'magic' ? 'magical' : 'physical' });
+            setTimeout(() => setImpactWave(null), 400);
+          }
+
+          // Weapon trail for melee attacks
+          if (last.damageType === 'melee' || !last.damageType) {
+            const playerRect = playerRef.current?.getBoundingClientRect();
+            if (playerRect) {
+              setWeaponTrail({
+                fromX: playerRect.left + playerRect.width / 2,
+                fromY: playerRect.top + playerRect.height / 2,
+                toX: x!,
+                toY: y!
+              });
+              setTimeout(() => setWeaponTrail(null), 200);
+            }
+          }
+        }
+
+        // Healing VFX: If a player ability healed (negative damage or explicit type), show holy light anchored to healed target
+        if (effectsEnabled && ((typeof last.damage === 'number' && last.damage < 0) || last.damageType === 'healing')) {
+          try {
+            let rect: DOMRect | undefined;
+            if (last.target === 'player' || selectedTarget === 'player') {
+              rect = playerRef.current?.getBoundingClientRect();
+            } else if (last.target) {
+              const t = combatState.enemies.find((e: any) => e.name === last.target || e.id === last.target);
+              rect = t && enemyRefs.current[t.id] ? (enemyRefs.current[t.id] as HTMLElement).getBoundingClientRect() : undefined;
+            }
+
+            if (rect) {
+              // Use left/top for DOMRect compatibility
+              const anchorX = (rect.left !== undefined ? rect.left : rect.x) + (rect.width || 0) / 2;
+              const anchorY = (rect.top !== undefined ? rect.top : rect.y) + (rect.height || 0) / 2;
+
+              setHolyLight({ x: anchorX, y: anchorY });
+              setTimeout(() => setHolyLight(null), 800);
+            }
+          } catch(e) { /* best-effort UI */ }
+        }
+      } catch (e) { /* best-effort UI */ }
+
+      // Handle single-target healing VFX if the player healed (negative damage entry)
+      if (last && last.actor === 'player' && typeof last.damage === 'number' && last.damage < 0) {
+        try {
+          const id = `heal_p_${Date.now()}`;
+          let rect: DOMRect | undefined;
+
+          if (last.target === 'player' || selectedTarget === 'player') {
+            rect = playerRef.current?.getBoundingClientRect?.();
+          } else if (last.target) {
+            const t = finalState.enemies.find((e: any) => e.name === last.target || e.id === last.target);
+            rect = t && enemyRefs.current[t.id] ? (enemyRefs.current[t.id] as HTMLElement).getBoundingClientRect() : undefined;
+          }
+
+          if (rect) {
+            const x = (rect.left !== undefined ? rect.left : rect.x) + (rect.width||0)/2;
+            const y = (rect.top !== undefined ? rect.top : rect.y) + (rect.height||0)/2;
+            setFloatingHits(h => [{ id, actor: 'player', damage: -last.damage, hitLocation: undefined, isCrit: false, x, y, isHeal: true } as any, ...h]);
+            setTimeout(() => setFloatingHits(h => h.filter(x => x.id !== id)), ms(1600));
+
+            setHolyLight({ x, y });
+            setTimeout(() => setHolyLight(null), 800);
+          }
+        } catch (e) { /* best-effort UI */ }
+      }
+
       // Play hit or crit sound only for non-player actors (avoid duplicating player's ability sound)
       // Player attacks already play an ability-specific SFX at the time of action; playing
       // another impact sound here causes duplicates for elemental spells.
-      if (last.actor !== 'player') {
+      if (last && last.actor !== 'player') {
         try {
           // Use centralized audio service for impact/crit feedback for enemy actions
           const targetEnemy = combatState.enemies.find(e => e.id === selectedTarget);

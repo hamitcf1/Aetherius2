@@ -23,6 +23,7 @@ import { PERK_DEFINITIONS } from '../data/perkDefinitions';
 import { audioService } from './audioService';
 import { applyArrowEffects } from './arrowEffects';
 import { getRegenBonus } from './standingStonesService';
+import { isFeatureEnabled } from '../featureFlags';
 
 // ============================================================================
 // COMBAT PERK SYSTEM - Perk effects in combat
@@ -1381,9 +1382,12 @@ export const generatePlayerAbilities = (
 
   // === ONE-HANDED WEAPON ABILITIES ===
   const oneHandedSkill = getSkillLevel('One-Handed');
-  const hasOneHandedPerk = hasPerkInSkill('One-Handed');
+  // Require explicit unlock perks for these impactful one-handed abilities so they appear in the Perk tree
+  const hasRipostePerk = hasPerk(character, 'riposte_mastery');
+  const hasSlashPerk = hasPerk(character, 'slash_mastery');
+  const hasMortalStrikePerk = hasPerk(character, 'mortal_strike_mastery');
   
-  if (weapon && oneHandedSkill >= 25 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 25 && hasRipostePerk) {
     abilities.push({
       id: 'riposte',
       name: 'Riposte',
@@ -1396,7 +1400,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (weapon && oneHandedSkill >= 40 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 40 && hasSlashPerk) {
     abilities.push({
       id: 'slash',
       name: 'Slash',
@@ -1409,7 +1413,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (weapon && oneHandedSkill >= 60 && hasOneHandedPerk) {
+  if (weapon && oneHandedSkill >= 60 && hasMortalStrikePerk) {
     abilities.push({
       id: 'mortal_strike',
       name: 'Mortal Strike',

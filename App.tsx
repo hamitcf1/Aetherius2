@@ -5735,9 +5735,9 @@ const App: React.FC = () => {
                 {/* Persistent Level Badge (HUD) */}
                 {activeCharacter && (
                   <div className="ml-2 hidden sm:block relative">
-                    <LevelBadge level={activeCharacter.level} size={40} compact />
+                    <LevelBadge level={activeCharacter.level} size={48} />
                     {availableLevelUps[activeCharacter.id] && (
-                      <div title="Level up available" className="absolute -top-1 -right-1 bg-skyrim-gold text-skyrim-dark rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-skyrim-border">
+                      <div title="Level up available" className="absolute -top-2 -right-2 bg-skyrim-gold text-skyrim-dark rounded-full w-5 h-5 flex items-center justify-center text-[11px] font-bold border border-skyrim-border shadow-cheap" aria-hidden>
                         !
                       </div>
                     )}
