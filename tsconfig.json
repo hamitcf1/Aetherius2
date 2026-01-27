@@ -4,29 +4,21 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
-    "types": [
-      "node",
-      "vitest/globals",
-      "vitest",
-      "jsdom"
-    ],
+    "types": ["node", "vitest/globals", "vitest", "jsdom"],
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
+    "paths": { "@/*": ["./*"] },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "tmp_combat.js",
+    "out.js",
+    "tmp_*.js"
+  ]
 }
