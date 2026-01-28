@@ -153,7 +153,10 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                         const staged = stagedFor(def.id);
                         const isSelected = selected === def.id;
                         const mastery = (character.perks || []).find(p => p.id === def.id)?.mastery || 0;
-                        
+                        // If this perk modifies a stat, compute per-rank and current contribution for a compact inline display
+                        const perRank = def.effect?.type === 'stat' ? (def.effect?.amount || 0) : null;
+                        const currentContribution = perRank ? (perRank * curr) : null;
+
                         return (
                           <button key={def.id} onClick={() => setSelected(def.id)}
                             className={`w-full flex items-center justify-between p-1.5 rounded text-left text-sm ${isSelected ? 'bg-skyrim-gold/20 ring-1 ring-skyrim-gold' : 'hover:bg-skyrim-paper/50'}`}>
@@ -161,7 +164,12 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                               <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] ${st === 'unlocked' ? 'bg-green-600/40 text-green-400' : st === 'available' ? 'bg-amber-600/40 text-amber-400' : 'bg-gray-600/40 text-gray-500'}`}>
                                 {st === 'unlocked' ? <Check size={10} /> : st === 'locked' ? <Lock size={10} /> : <Star size={10} />}
                               </span>
-                              <span className={`truncate ${st === 'locked' ? 'text-skyrim-text/50' : ''}`}>{def.name}</span>
+                              <div className="truncate">
+                                <div className={`${st === 'locked' ? 'text-skyrim-text/50' : ''}`}>{def.name}</div>
+                                {perRank !== null && (
+                                  <div className="text-[10px] text-skyrim-text/60 mt-0.5">+{perRank} {def.effect?.key} / rank • Current: +{currentContribution}</div>
+                                )}
+                              </div>
                               {staged > 0 && <span className="text-xs px-1 bg-skyrim-gold/30 text-skyrim-gold rounded">+{staged}</span>}
                               {mastery > 0 && <span className="text-xs px-1 bg-purple-600/30 text-purple-300 rounded">M{mastery}</span>}
                             </div>
@@ -264,14 +272,23 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
             {stagedCount > 0 && <span><span className="text-skyrim-gold font-bold">{stagedCount}</span> staged <span className="text-amber-400">({stagedPoints}pts)</span></span>}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { setStagedMap({}); setStagedMaster({}); setSelected(null); onClose(); }}
-              className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">Cancel</button>
+            <button onClick={() => {
+                // If the user has staged changes, treat this as a Cancel that discards staged changes.
+                if (stagedPoints > 0 || Object.keys(stagedMaster).length > 0) {
+                  setStagedMap({}); setStagedMaster({}); setSelected(null); onClose();
+                } else {
+                  // No changes staged — act as a simple Leave action (do not mutate state)
+                  onClose();
+                }
+              }}
+              className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">{(stagedPoints > 0 || Object.keys(stagedMaster).length > 0) ? 'Cancel' : 'Leave'}</button>
             <button disabled={stagedPoints === 0 || stagedPoints > availablePoints}
               onClick={() => {
                 const expanded: string[] = [];
                 Object.keys(stagedMap).forEach(k => { for (let i = 0; i < (stagedMap[k] || 0); i++) expanded.push(k); });
                 Object.keys(stagedMaster).forEach(k => { if (stagedMaster[k]) expanded.push(`${k}::MASTER`); });
                 onConfirm(expanded);
+                // Apply and clear the staged items, but keep modal open so player can continue allocating
                 setStagedMap({});
                 setStagedMaster({});
                 setSelected(null);

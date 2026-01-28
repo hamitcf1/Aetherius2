@@ -5531,9 +5531,9 @@ const App: React.FC = () => {
         open={perkModalOpen}
         onClose={() => setPerkModalOpen(false)}
         character={activeCharacter as any}
-        onConfirm={(perkIds: string[]) => { applyPerks(perkIds); setPerkModalOpen(false); }}
-        onForceUnlock={(id: string) => { forceUnlockPerk(id); setPerkModalOpen(false); }}
-        onRefundAll={() => { refundAllPerks(); setPerkModalOpen(false); }}
+        onConfirm={(perkIds: string[]) => { applyPerks(perkIds); /* keep modal open after applying perks */ }}
+        onForceUnlock={(id: string) => { forceUnlockPerk(id); /* keep modal open */ }}
+        onRefundAll={() => { refundAllPerks(); /* keep modal open to let player continue */ }}
       />
 
       {/* Achievements Modal */}
