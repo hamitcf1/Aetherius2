@@ -555,7 +555,7 @@ export interface CombatAbility {
 }
 
 export interface CombatEffect {
-  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility' | 'aoe_damage' | 'aoe_heal';
+  type: 'damage' | 'heal' | 'restore' | 'buff' | 'debuff' | 'dot' | 'stun' | 'drain' | 'summon' | 'utility' | 'aoe_damage' | 'aoe_heal' | 'aoe_restore';
   stat?: 'health' | 'magicka' | 'stamina' | 'armor' | 'damage' | 'sneak' | 'dodge' | 'accuracy';
   value: number;
   duration?: number; // turns

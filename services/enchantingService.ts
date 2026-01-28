@@ -704,15 +704,21 @@ export function removeSoulGem(state: EnchantingState, gemId: string): Enchanting
 export function disenchantItem(
   state: EnchantingState,
   item: InventoryItem,
-  enchantmentId: string
+  enchantmentId?: string
 ): { state: EnchantingState; success: boolean; message: string; xpGained: number } {
-  const enchantment = ENCHANTMENTS[enchantmentId];
+  // If caller didn't provide an enchantment id, try to use the item's first enchantment (robust fallback)
+  const effectiveEnchantmentId = enchantmentId || (item.enchantments && item.enchantments.length ? item.enchantments[0].id : undefined);
+  if (!effectiveEnchantmentId) {
+    return { state, success: false, message: 'No enchantment specified for disenchanting.', xpGained: 0 };
+  }
+
+  const enchantment = ENCHANTMENTS[effectiveEnchantmentId];
   if (!enchantment) {
     return { state, success: false, message: 'Unknown enchantment.', xpGained: 0 };
   }
 
   // Check if already learned
-  const alreadyLearned = state.learnedEnchantments.find(e => e.enchantmentId === enchantmentId);
+  const alreadyLearned = state.learnedEnchantments.find(e => e.enchantmentId === effectiveEnchantmentId);
   if (alreadyLearned) {
     // Allow disenchanting even if already known: destroy item, give reduced XP but do not re-learn
     const xpGained = 10; // small consolation XP

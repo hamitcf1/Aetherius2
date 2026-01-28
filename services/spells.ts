@@ -365,6 +365,8 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 0,
     perkCost: 1,
     type: 'heal',
+    // Restores magicka to the caster (bonus action). Use explicit `restore` effect so the engine applies magicka.
+    effects: [{ type: 'restore', stat: 'magicka', value: 60 }],
     prerequisites: { level: 45 }
   },
   grand_healing: {
@@ -395,7 +397,11 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 65,
     perkCost: 2,
     type: 'heal',
-    heal: 40,
+    // Heals allies and grants a temporary armor buff
+    effects: [
+      { type: 'aoe_heal', value: 40, aoeTarget: 'all_allies' },
+      { type: 'buff', stat: 'armor', value: 20, duration: 4, aoeTarget: 'all_allies' }
+    ],
     prerequisites: { level: 70 }
   },
   mass_restoration: {
@@ -405,7 +411,11 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 75,
     perkCost: 3,
     type: 'heal',
-    heal: 50,
+    // AoE heal + magicka restore
+    effects: [
+      { type: 'aoe_heal', value: 50, aoeTarget: 'all_allies' },
+      { type: 'aoe_restore', stat: 'magicka', value: 40, aoeTarget: 'all_allies' }
+    ],
     prerequisites: { level: 80 }
   },
 
@@ -426,8 +436,22 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     description: 'Conjure a spectral weapon to strike your foe.',
     cost: 30,
     perkCost: 1,
-    type: 'damage',
+    type: 'utility',
     damage: 30,
+    // Conjures a temporary weapon the player can use for physical attacks.
+    // Handled specially in the combat engine via `summon` effect with `summonType: 'weapon'`.
+    effects: [
+      {
+        type: 'summon',
+        name: 'Bound Weapon',
+        summonType: 'weapon',
+        // Duration in player turns
+        duration: 3,
+        playerTurns: 3,
+        // Template for the conjured weapon; combat will scale this by caster level/skill
+        weapon: { name: 'Bound Weapon', damage: 18 }
+      }
+    ],
     prerequisites: { level: 30 }
   },
   conjure_daedra: {
@@ -593,8 +617,9 @@ export const isSpellVariantUnlocked = (character: { level: number; perks?: any[]
   // Unlock if character has explicit perk 'empower_spells'
   const hasPerk = Array.isArray(character.perks) && character.perks.some((p: any) => p && (p.id === 'empower_spells' || p.id === 'empower_magic'));
   if (hasPerk) return true;
-  // Otherwise require a sufficiently higher level (base prereq + 5)
-  const req = (base.prerequisites?.level || 1) + 5;
+  // Otherwise require the base prerequisite level (empowered variant
+  // should be available once the player meets the spell's required level).
+  const req = base.prerequisites?.level ?? 0;
   return (character.level || 0) >= req;
 };
 

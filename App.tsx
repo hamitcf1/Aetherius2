@@ -6714,7 +6714,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 showToast('Item not found', 'error');
                 return;
               }
-              const result = disenchantItem(enchantingState, item, activeCharacter.skills?.Enchanting || 15);
+              // Use the item's enchantment id (first enchantment) when calling disenchant
+              const enchantmentId = (item.enchantments && item.enchantments.length > 0) ? item.enchantments[0].id : '';
+              if (!enchantmentId) {
+                showToast('This item has no enchantments to disenchant.', 'error');
+                return;
+              }
+              const result = disenchantItem(enchantingState, item, enchantmentId);
               if (result.success) {
                 setEnchantingState(result.state);
                 // Remove item from inventory (destroyed in disenchanting)
