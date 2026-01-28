@@ -277,6 +277,8 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
   const goldRequirementsMet = (gold || 0) >= upgradeCost;
   const inventoryRequirementsMet = materialRequirementsMet && goldRequirementsMet;
 
+  const disabledReason = !inventoryRequirementsMet ? (!goldRequirementsMet ? 'Insufficient gold' : (!materialRequirementsMet ? 'Missing materials' : 'Requirements not met')) : '';
+
   const startSpark = () => {
     // Clear any existing timeout so repeated starts reset the timer cleanly
     if (sparkTimeoutRef.current) {
@@ -685,7 +687,15 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                       {/* Cost */}
                       <div className="flex items-center gap-4">
                          <div className="px-5 py-3 bg-black/30 rounded border border-skyrim-border/30 bg-gradient-to-r from-black/20 to-transparent">
-                            <div className="text-[10px] uppercase tracking-widest text-gray-400">Upgrade Cost</div>
+                            <div className="text-[10px] uppercase tracking-widest text-gray-400 flex items-center justify-between">
+                              <span>Upgrade Cost</span>
+                              {/* Gold status badge: displayed always when an item is selected */}
+                              {selected && (
+                                (goldRequirementsMet)
+                                  ? <div className="text-xs px-3 py-1 rounded border flex items-center gap-2 shadow-sm bg-green-900/10 border-green-800 text-green-400"> <Check size={12} /> Sufficient Gold</div>
+                                  : <div className="text-xs px-3 py-1 rounded border flex items-center gap-2 shadow-sm bg-red-900/10 border-red-800 text-red-300"> <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span> Insufficient Gold</div>
+                              )}
+                            </div>
                              <div className="text-yellow-400 font-serif text-2xl flex items-baseline gap-1 mt-0.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                                {upgradeCost} <span className="text-sm font-sans text-yellow-500/80">gold</span>
                              </div>
@@ -774,12 +784,6 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                                 Missing required materials
                             </div>
                           )}
-                          {!goldRequirementsMet && (
-                            <div className="text-xs mt-2 text-red-300/80 italic text-center flex items-center justify-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
-                                Insufficient gold
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -793,6 +797,7 @@ export function BlacksmithModal({ open, onClose, items, setItems, gold, setGold,
                     onClick={handleConfirm}
                     data-sfx="button_click"
                     disabled={isUpgrading || !inventoryRequirementsMet}
+                    title={disabledReason || undefined}
                     className={`px-8 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold hover:bg-yellow-500 transition-all active:scale-95 font-serif text-lg shadow-lg uppercase tracking-wide flex items-center gap-2 ${(isUpgrading || !inventoryRequirementsMet) ? 'opacity-60 cursor-not-allowed' : ''} disabled:opacity-60`}
                   >
                     <span>Confirm Upgrade</span>

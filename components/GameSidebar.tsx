@@ -47,6 +47,16 @@ const GameSidebar: React.FC = () => {
     'ai-tools': false,
     progress: false,
   }));
+
+  // Bug reports count badge
+  const [bugCount, setBugCount] = useState<number>(0);
+  useEffect(() => {
+    try {
+      const br = require('../services/bugReportService');
+      const all = br.getBugReports();
+      setBugCount(all.filter((r: any) => r.status === 'open' || r.status === 'tracking').length);
+    } catch (e) {}
+  }, [isOpen]);
   
   const {
     openCompanions,
@@ -63,6 +73,7 @@ const GameSidebar: React.FC = () => {
     openTransformation,
     openHousing,
     openAIScribe,
+    openBugReport,
   } = useAppContext();
 
   // Check for mobile on mount and resize
@@ -142,6 +153,7 @@ const GameSidebar: React.FC = () => {
       icon: <Sparkles size={16} className="text-cyan-400" />,
       items: [
         { id: 'ai-scribe', label: 'Consult Game Master', icon: '🧙', onClick: () => openAIScribe?.(), color: 'cyan' },
+        { id: 'bug_reports', label: 'Bug Reports', icon: '🐞', onClick: () => openBugReport?.(), color: 'red' },
       ],
     },
     {
@@ -225,7 +237,7 @@ const GameSidebar: React.FC = () => {
               >
                 <ChevronDown size={14} className="text-skyrim-gold/80" />
               </span>
-              {section.icon}
+              {typeof section.icon === 'function' ? (section.icon as any)() : section.icon}
               <span className="text-xs font-bold text-skyrim-gold uppercase tracking-wider">
                 {section.title}
               </span>
@@ -244,8 +256,11 @@ const GameSidebar: React.FC = () => {
                     onClick={() => handleItemClick(item.onClick)}
                     className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${getColorClasses(item.color)}`}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <span className="text-base">{typeof item.icon === 'function' ? (item.icon as any)() : item.icon}</span>
                     <span>{item.label}</span>
+                    {item.id === 'bug_reports' && bugCount > 0 && (
+                      <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-700 text-white">{bugCount}</span>
+                    )}
                   </button>
                 ))}
               </div>

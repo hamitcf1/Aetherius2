@@ -4050,14 +4050,16 @@ export const advanceTurn = (state: CombatState): CombatState => {
     // Debug: print out allies companionMeta states to aid in diagnosing decay timing
     try { console.debug('[combat] allies companionMeta summary', (newState.allies || []).map(a => ({ id: a.id, meta: (a as any).companionMeta }))); } catch (e) {}
 
-    // Activate any companions that had their pending player-turn duration expire on the previous decrement. Do NOT apply decay on the same player-start — decay begins on the following player-start.
+    // Activate any companions that had their pending player-turn duration expire on the previous decrement.
     try {
       (newState.allies || []).forEach(ally => {
         const meta = (ally as any).companionMeta;
         if (meta && meta.decayPending && meta.isSummon) {
+          // Activate decay; do NOT apply decay on the same player-start — decay begins on the following player-start
           (ally as any).companionMeta = { ...(meta || {}), decayPending: false, decayActive: true, decayJustActivated: true };
           ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
           try { console.debug('[combat] activated pending decay for ally (will apply next player-start)', ally.id); } catch (e) {}
+          try { console.debug('[combat] post-activation companionMeta', ally.id, (ally as any).companionMeta); } catch (e) {}
         }
       });
     } catch (e) {}
@@ -4108,8 +4110,9 @@ export const advanceTurn = (state: CombatState): CombatState => {
         }
       });
     } catch (e) {}
+
   }
-  
+
   // If we've cycled back to start, increment turn
   if (nextIndex <= currentIndex || nextIndex === 0) {
     newState.turn++;
@@ -4137,48 +4140,17 @@ export const advanceTurn = (state: CombatState): CombatState => {
       for (const id of newlyExpired) {
         const ally = (newState.allies || []).find(a => a.id === id);
         if (ally && (ally as any).companionMeta?.isSummon) {
-          // Mark as decaying and apply an immediate decay tick so first HP loss is visible immediately
-          (ally as any).companionMeta = { ...(ally as any).companionMeta || {}, decayActive: true };
+          // Flag the summon as pending decay; activation and first tick will be handled at the next player-start
+          (ally as any).companionMeta = { ...(ally as any).companionMeta || {}, decayPending: true };
           ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
-          try { console.debug('[combat] marked companion as decaying (immediate tick)', id, { companion: ally, companionMeta: (ally as any).companionMeta }); } catch (e) {}
-
-          try {
-            const decayDamage = Math.floor(ally.currentHealth * 0.5);
-            const before = ally.currentHealth;
-            ally.currentHealth = Math.max(0, ally.currentHealth - decayDamage);
-            try { console.debug('[combat] immediate decay applied', { id: ally.id, before, after: ally.currentHealth, dmg: decayDamage, turn: newState.turn }); } catch (e) {}
-            pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'decay', target: 'self', damage: decayDamage, narrative: `${ally.name} decays, losing ${decayDamage} health.`, timestamp: Date.now() });
-            if (ally.currentHealth <= 0) {
-              pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'decay_death', target: 'self', damage: 0, narrative: `${ally.name} decays completely and vanishes.`, timestamp: Date.now() });
-            }
-          } catch (e) { /* best-effort */ }
+          try { console.debug('[combat] flagged companion as pending decay (will activate next player-start)', id, { companion: ally, companionMeta: (ally as any).companionMeta }); } catch (e) {}
         }
       }
       // Keep only pending summons that still have player turns remaining (preserve remaining player-turn counters)
       newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: (s as any).playerTurnsRemaining } as any));
       if (newlyExpired.length) {
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
-        // Schedule a decay application on the next advance call to ensure deterministic timing
-        (newState as any)._decayScheduled = true;
       }
-
-      // If a decay application was scheduled, apply it now (this runs after any activation of decay and preserves expected timing for tests)
-      try {
-        if ((newState as any)._decayScheduled) {
-          try { console.debug('[combat] applying scheduled decay to allies AFTER pending activation'); } catch (e) {}
-          (newState.allies || []).forEach(ally => {
-            if ((ally as any).companionMeta?.decayActive && ally.currentHealth > 0) {
-              const decayDamage = Math.floor(ally.currentHealth * 0.5);
-              const before = ally.currentHealth;
-              ally.currentHealth = Math.max(0, ally.currentHealth - decayDamage);
-              try { console.debug('[combat] scheduled decay applied', { id: ally.id, before, after: ally.currentHealth, dmg: decayDamage }); } catch (e) {}
-              pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'decay', target: 'self', damage: decayDamage, narrative: `${ally.name} decays, losing ${decayDamage} health.`, timestamp: Date.now() });
-              if (ally.currentHealth <= 0) pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: 'decay_death', target: 'self', damage: 0, narrative: `${ally.name} decays completely and vanishes.`, timestamp: Date.now() });
-            }
-          });
-          delete (newState as any)._decayScheduled;
-        }
-      } catch (e) {}
     }
   }
   

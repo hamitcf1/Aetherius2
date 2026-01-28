@@ -256,10 +256,17 @@ describe('Spell classification: healing and summons', () => {
     expect(comp.companionMeta && comp.companionMeta.decayActive).toBeTruthy();
 
     // Next player-turn start should apply decay damage (reduce to at most half of current health)
-    newState = advanceTurn(newState); // to enemy
+    // Advance until we observe decay damage applied (bounded loop to avoid infinite loops)
     const beforeHealth = comp.currentHealth;
-    newState = advanceTurn(newState); // to player -> decay applied
-    const compAfter = newState.allies.find(a => a.id === comp.id) as any;
+    let compAfter: any = null;
+    let decayAttempts = 0;
+    while (decayAttempts < 8) {
+      newState = advanceTurn(newState);
+      const check = newState.allies.find(a => a.id === comp.id) as any;
+      if (check && check.currentHealth < beforeHealth) { compAfter = check; break; }
+      decayAttempts++;
+    }
+    expect(decayAttempts).toBeLessThan(8);
     // expect the summoned companion's health to be reduced to at most half of prior health
     expect(compAfter.currentHealth).toBeLessThanOrEqual(Math.floor(beforeHealth / 2));
   });

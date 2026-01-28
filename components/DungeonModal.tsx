@@ -20,6 +20,8 @@ interface DungeonModalProps {
   onStartCombat?: (combatState: any) => void;
   showToast?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   onInventoryUpdate?: (items: InventoryItem[] | Array<{ name: string; quantity: number }>) => void;
+  // Hook to apply survival needs changes (hunger/thirst/fatigue) based on dungeon actions like combat
+  onNeedsChange?: (delta: Partial<{ hunger: number; thirst: number; fatigue: number }>) => void;
 }
 
 // Node type icons and colors - enhanced with emoji for fog-of-war display
@@ -443,9 +445,21 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   // Handle combat end - IMPORTANT: We accumulate rewards here but DO NOT apply them yet.
   // CombatModal has already added items to inventory via onInventoryUpdate, but gold/XP 
   // are only accumulated. The actual onApplyRewards call happens when player leaves dungeon.
-  const handleCombatEnd = (result: 'victory' | 'defeat' | 'fled' | 'surrendered', rewards?: any, finalVitals?: any) => {
+  const handleCombatEnd = (result: 'victory' | 'defeat' | 'fled' | 'surrendered', rewards?: any, finalVitals?: any, timeAdvanceMinutes?: number) => {
     if (!state || !dungeon) return;
-    
+
+    // Compute a small needs delta for any dungeon combat end. Scale slightly with time if provided.
+    try {
+      const baseDelta = { hunger: 3, thirst: 5, fatigue: 6 } as { hunger: number; thirst: number; fatigue: number };
+      const timeFactor = timeAdvanceMinutes ? Math.max(1, Math.round((timeAdvanceMinutes || 0) / 5)) : 1;
+      const delta = { hunger: baseDelta.hunger * timeFactor, thirst: baseDelta.thirst * timeFactor, fatigue: baseDelta.fatigue * timeFactor };
+      // Call out to parent/app to apply needs changes (if provided)
+      onNeedsChange && onNeedsChange(delta);
+    } catch (e) {
+      // best-effort - don't block combat end on failure
+      console.warn('Failed to apply dungeon combat needs delta', e);
+    }
+
     if (result === 'victory') {
       // Update player vitals from combat (CRITICAL for health persistence)
       if (finalVitals) {

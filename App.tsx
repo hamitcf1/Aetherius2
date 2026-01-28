@@ -19,6 +19,7 @@ import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
+import BugReportModal from './components/BugReportModal';
 import { LockpickingMinigame, LockDifficulty } from './components/LockpickingMinigame';
 import { BlessingModal, Blessing } from './components/BlessingModal';
 import MapPage, { MapEvent, MapMission } from './components/MapPage';
@@ -650,6 +651,8 @@ const App: React.FC = () => {
 
   // AI Scribe Modal
   const [aiScribeModalOpen, setAiScribeModalOpen] = useState<boolean>(false);
+  // Bug Report modal
+  const [bugReportOpen, setBugReportOpen] = useState<boolean>(false);
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -916,6 +919,47 @@ const App: React.FC = () => {
 
   // If a player cancels a level-up, we keep it available so they can apply it later from the hero page
   const [availableLevelUps, setAvailableLevelUps] = useState<Record<string, { charId: string; charName: string; newLevel: number; remainingXP: number; archetype?: string; previousXP: number }>>({});
+
+  // Persist available level-ups across refreshes so players don't lose postponed level ups
+  const LEVELUP_STORAGE_KEY = 'aetherius_available_levelups_v1';
+
+  // Load persisted available level-ups on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LEVELUP_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          setAvailableLevelUps(prev => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load available level-ups from localStorage', e);
+    }
+  }, []);
+
+  // Save available level-ups whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEVELUP_STORAGE_KEY, JSON.stringify(availableLevelUps));
+    } catch (e) {
+      console.warn('Failed to persist available level-ups', e);
+    }
+  }, [availableLevelUps]);
+
+  // Prune any persisted available level-ups that no longer match loaded characters
+  useEffect(() => {
+    if (!characters || characters.length === 0) return;
+    const ids = new Set((characters || []).map(c => c.id));
+    setAvailableLevelUps(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(k => {
+        if (!ids.has(k)) { delete next[k]; changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [characters]);
 
   // Companions modal state
   const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
@@ -5473,6 +5517,7 @@ const App: React.FC = () => {
       openTransformation: () => setTransformationModalOpen(true),
       openHousing: () => setHousingModalOpen(true),
       openAIScribe: () => setAiScribeModalOpen(true),
+      openBugReport: () => setBugReportOpen(true),
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
@@ -5985,14 +6030,15 @@ const App: React.FC = () => {
                 setDirtyEntities(d => new Set([...d, c.id]));
                 return { ...c, clearedDungeons: newCleared };
               }));
+
+              // Show a quest-completed notification for this cleared dungeon
               showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: 'You have conquered this dungeon!', type: 'quest-completed' });
-              
-              // Check if any active dynamic event is associated with this dungeon location
+
+              // Check if any active dynamic event is associated with this dungeon location and complete it
               if (dynamicEventState) {
                 const dungeonDef = getDungeonById(dungeonId);
                 const dungeonName = dungeonDef?.name?.toLowerCase() || dungeonId.toLowerCase();
-                
-                // Find matching active events (by location name or dungeon ID)
+
                 const matchingEvents = dynamicEventState.activeEvents.filter(e => {
                   if (e.status !== 'active') return false;
                   const eventLocName = e.location?.name?.toLowerCase() || '';
@@ -6000,16 +6046,37 @@ const App: React.FC = () => {
                   return eventLocName.includes(dungeonName) || 
                          dungeonName.includes(eventLocName) ||
                          eventDungeonId === dungeonId.toLowerCase() ||
-                         // Combat-type events at dungeon locations should complete
                          (e.type === 'combat' || e.type === 'bandit' || e.type === 'dragon');
                 });
-                
+
                 matchingEvents.forEach(event => {
                   handleCompleteDynamicEvent(event.id);
                 });
               }
+
+              // Clear the active dungeon id
+              setDungeonId(null);
             }
-            setDungeonId(null);
+          }}
+
+          onNeedsChange={(delta) => {
+            if (!delta || !currentCharacterId) return;
+            setCharacters(prev => prev.map(c => {
+              if (c.id !== currentCharacterId) return c;
+              const needs = c.needs || { hunger: 0, thirst: 0, fatigue: 0 };
+              const updated = {
+                ...c,
+                needs: {
+                  hunger: Math.max(0, Math.min(100, (needs.hunger || 0) + (delta.hunger || 0))),
+                  thirst: Math.max(0, Math.min(100, (needs.thirst || 0) + (delta.thirst || 0))),
+                  fatigue: Math.max(0, Math.min(100, (needs.fatigue || 0) + (delta.fatigue || 0))),
+                }
+              } as any;
+              setDirtyEntities(d => new Set([...d, c.id]));
+              // Also show a subtle toast
+              showToast?.(`You feel ${delta.fatigue && delta.fatigue > 0 ? 'tired' : ''} ${delta.hunger && delta.hunger > 0 ? 'and hungry' : ''} ${delta.thirst && delta.thirst > 0 ? 'and thirsty' : ''}`.trim(), 'info');
+              return updated;
+            }));
           }}
           onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
@@ -6743,6 +6810,34 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
+
+        {/* Bug Reports modal (persistent tracker) */}
+        {bugReportOpen && (
+          <BugReportModal isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+        )}
+            onEnchantItem={(itemId: string, enchantmentId: string, soulGemId: string, customName?: string) => {
+              const item = (activeCharacter.inventory || []).find(i => i.id === itemId);
+              if (!item) {
+                showToast('Item not found', 'error');
+                return;
+              }
+              const result = enchantItem(
+                enchantingState,
+                item,
+                enchantmentId,
+                soulGemId,
+                customName
+              );
+              if (result.success && result.enchantedItem) {
+                setEnchantingState(result.state);
+                // Replace item in inventory (update global characters array)
+                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, inventory: (ch.inventory || []).map(i => i.id === itemId ? result.enchantedItem! : i) } : ch));
+                showToast(result.message, 'success');
+              } else {
+                showToast(result.message, 'error');
+              }
+            }}
+
 
         {/* Standing Stones Modal */}
         {standingStonesModalOpen && activeCharacter && (
