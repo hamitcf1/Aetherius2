@@ -8,6 +8,7 @@
 
 - Blacksmith: Quick-buy for missing upgrade materials, clearer "Insufficient Gold" indicator and disabled Confirm tooltip.
 - Shop: Improved Buy/Sell lists (owned badge, sell grouping, compact indicators for damage/armor/nutrition/potion types).
+- Perk Tree: Per-rank stat contributions shown inline for all categories; added Expand All / Collapse All buttons and default to all categories expanded.
 - Bug fixes: Shop footers and sell-all summaries corrected; modal consistency maintained across updates.
 
 **Suggested tag:** `v1.0.8`

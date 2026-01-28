@@ -53,7 +53,23 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
   const [selected, setSelected] = useState<string | null>(null);
   const [stagedMap, setStagedMap] = useState<Record<string, number>>({});
   const [stagedMaster, setStagedMaster] = useState<Record<string, boolean>>({});
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ attributes: true, combat: true });
+  // Default: expand all categories so per-category updates are visible by default
+  // Persist expand/collapse preference to localStorage so the modal remembers user choice
+  const STORAGE_KEY = 'aetherius:perkTree:expanded';
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw) as Record<string, boolean>;
+    } catch (e) { /* ignore */ }
+    const init: Record<string, boolean> = {};
+    Object.keys(SKILL_CATEGORIES).forEach(k => init[k] = true);
+    return init;
+  });
+
+  // Persist changes
+  React.useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCategories)); } catch (e) { /* ignore */ }
+  }, [expandedCategories]);
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
 
   const defs = useMemo(() => PERK_DEFINITIONS, []);
@@ -115,6 +131,12 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
               Points: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
               {stagedPoints > 0 && <span className="ml-2 text-amber-400">(-{stagedPoints})</span>}
               {totalSpentOnPerks > 0 && <span className="ml-2 text-blue-300">({totalSpentOnPerks} spent)</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setExpandedCategories(Object.keys(SKILL_CATEGORIES).reduce((acc: any, k) => (acc[k] = true, acc), {} as Record<string, boolean>))}
+                className="px-2 py-1 text-xs bg-skyrim-paper/20 text-skyrim-text rounded hover:bg-skyrim-paper/30">Expand All</button>
+              <button onClick={() => setExpandedCategories(Object.keys(SKILL_CATEGORIES).reduce((acc: any, k) => (acc[k] = false, acc), {} as Record<string, boolean>))}
+                className="px-2 py-1 text-xs bg-skyrim-paper/20 text-skyrim-text rounded hover:bg-skyrim-paper/30">Collapse All</button>
             </div>
             {totalSpentOnPerks > 0 && onRefundAll && (
               <button onClick={() => setShowRefundConfirm(true)} className="px-2 py-1 text-xs bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1">

@@ -614,13 +614,14 @@ export const isSpellVariantUnlocked = (character: { level: number; perks?: any[]
   const baseId = parts[0];
   const base = SPELL_REGISTRY[baseId];
   if (!base) return false;
-  // Unlock if character has explicit perk 'empower_spells'
+  // Unlock early if character has explicit perk 'empower_spells' or 'empower_magic'
   const hasPerk = Array.isArray(character.perks) && character.perks.some((p: any) => p && (p.id === 'empower_spells' || p.id === 'empower_magic'));
   if (hasPerk) return true;
-  // Otherwise require the base prerequisite level (empowered variant
-  // should be available once the player meets the spell's required level).
-  const req = base.prerequisites?.level ?? 0;
-  return (character.level || 0) >= req;
+  // Otherwise require the base prerequisite level + 5 (empowered variants are meant to unlock later)
+  // For spells without an explicit prerequisite, treat base requirement as level 1.
+  const baseReq = base.prerequisites?.level ?? 1;
+  const minReq = baseReq + 5;
+  return (character.level || 0) >= minReq;
 };
 
 export const getLearnedSpellIds = (characterId: string): string[] => {

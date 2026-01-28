@@ -27,6 +27,7 @@ const CHANGELOG: ChangelogEntry[] = [
       { type: 'improvement', text: 'Shop: Buy list shows compact owned badge (icon + count) when player owns the item' },
       { type: 'improvement', text: 'Shop: Sell list now groups identical stacks and provides both "Sell 1" and "Sell All" actions' },
       { type: 'improvement', text: 'Shop: restored damage/armor/nutrition/potion indicators in Buy and Sell views and added category icon to Sell rows' },
+      { type: 'improvement', text: 'Perk Tree: per-rank contribution displayed inline for perks across all categories; Expand/Collapse All controls added to Perk Tree modal' },
       { type: 'fix', text: 'Shop: removed duplicate footer item count and fixed Sell-all category summary' }
     ]
   },
