@@ -998,6 +998,47 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                                     <Shield size={12} /> Equipped
                                   </span>
                                 )}
+
+                                {/* Show stats for weapons and armor */}
+                                {(() => {
+                                  const stats = getItemStats(item.name, item.type as any);
+                                  return (stats && (stats.damage || stats.armor)) ? (
+                                    <span className="flex items-center gap-2 text-xs">
+                                      {stats.damage && (
+                                        <span className="flex items-center gap-0.5 text-red-400">
+                                          <Sword size={10} /> {stats.damage}
+                                        </span>
+                                      )}
+                                      {stats.armor && (
+                                        <span className="flex items-center gap-0.5 text-blue-400">
+                                          <Shield size={10} /> {stats.armor}
+                                        </span>
+                                      )}
+                                    </span>
+                                  ) : null;
+                                })()}
+
+                                {/* nutrition / potion hints */}
+                                {item.type === 'food' && (
+                                  <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                                    <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
+                                  </span>
+                                )}
+                                {item.type === 'drink' && (
+                                  <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                                    <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
+                                  </span>
+                                )}
+                                {item.type === 'potion' && (
+                                  <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                                    <FlaskConical size={10} />
+                                    {item.subtype === 'health' ? 'Restores Health' : 
+                                     item.subtype === 'magicka' ? 'Restores Magicka' : 
+                                     item.subtype === 'stamina' ? 'Restores Stamina' : 
+                                     item.description.includes('Restores') ? 'Restorative' : 
+                                     'Potion Effect'}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-gray-400 mt-1 truncate">{item.description}</div>
                             </div>

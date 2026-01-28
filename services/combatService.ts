@@ -2580,6 +2580,156 @@ export const executePlayerAction = (
         narrative += ` You drain ${lifestealAmount} health.`;
       }
 
+      // === WEAPON ENCHANTMENTS ===
+      // If the equipped weapon has enchantments, translate them into combat effects
+      try {
+        const equippedWeapon = (inventory || []).find((i: any) => i.equipped && i.slot === 'weapon' && i.type === 'weapon');
+        if (equippedWeapon && Array.isArray(equippedWeapon.enchantments) && equippedWeapon.enchantments.length) {
+          const tierMultipliers: Record<string, number> = { low: 0.6, mid: 1.0, high: 1.25, crit: 1.75 };
+          const tierMult = (tierMultipliers && tierMultipliers[attackResolved.rollTier]) ? tierMultipliers[attackResolved.rollTier] : 1;
+
+          for (const ench of equippedWeapon.enchantments) {
+            const effId = ench.effect || ench.id || '';
+            const magnitude = Number(ench.magnitude || 0) || 0;
+            const chance = Number(ench.chance || ench.procChance || 100);
+            if (Math.random() * 100 > (chance || 100)) continue;
+
+            // Helpers to apply to the resolved target (enemy or ally)
+            const applyToEnemy = (effectObj: any) => {
+              if (enemyIndex >= 0) {
+                newState.enemies = [...newState.enemies];
+                newState.enemies[enemyIndex] = {
+                  ...newState.enemies[enemyIndex],
+                  activeEffects: [...((newState.enemies[enemyIndex]?.activeEffects) || []), { effect: effectObj, turnsRemaining: effectObj.duration || 1 }]
+                } as any;
+              }
+            };
+            const applyToAlly = (effectObj: any) => {
+              if (allyIndex >= 0) {
+                newState.allies = [...(newState.allies || [])];
+                newState.allies[allyIndex] = {
+                  ...newState.allies[allyIndex],
+                  activeEffects: [...((newState.allies[allyIndex]?.activeEffects) || []), { effect: effectObj, turnsRemaining: effectObj.duration || 1 }]
+                } as any;
+              }
+            };
+
+            switch (effId) {
+              case 'fire_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.2 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                const dotValue = Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                const burnEffect = { type: 'dot', stat: 'health', name: 'Burning', duration, value: dotValue, description: 'Burns the target for damage over time' } as any;
+                if (targetIsAlly) applyToAlly(burnEffect); else applyToEnemy(burnEffect);
+                narrative += ` ${ench.name || 'Flaming enchantment'} scorches ${target.name}!`;
+                break;
+              }
+              case 'frost_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.15 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 3 : 2;
+                const debuffValue = -Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                const chillEffect = { type: 'debuff', stat: 'damage', name: 'Chilled', duration, value: debuffValue, description: 'Reduces target damage output' } as any;
+                if (targetIsAlly) applyToAlly(chillEffect); else applyToEnemy(chillEffect);
+                narrative += ` ${ench.name || 'Frost enchantment'} chills ${target.name}.`;
+                break;
+              }
+              case 'shock_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.18 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                const dotValue = Math.max(1, Math.floor(appliedDamage * 0.10 * tierMult * factor));
+                const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocution', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
+                if (targetIsAlly) applyToAlly(electroEffect); else applyToEnemy(electroEffect);
+                const stunChance = attackResolved.isCrit ? 50 : attackResolved.rollTier === 'high' ? 35 : attackResolved.rollTier === 'mid' ? 20 : 10;
+                if (Math.random() * 100 < stunChance) {
+                  const stun = { type: 'stun', name: 'Shocked Stun', duration: 1 } as any;
+                  if (targetIsAlly) applyToAlly(stun); else applyToEnemy(stun);
+                  narrative += ` ${target.name} is stunned by the shock!`;
+                }
+                narrative += ` ${ench.name || 'Shock enchantment'} jolts ${target.name}.`;
+                break;
+              }
+              case 'absorb_health': {
+                // Heal the player based on magnitude or portion of applied damage
+                const healAmt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + healAmt);
+                narrative += ` ${ench.name || 'Vampiric enchantment'} restores ${healAmt} health to you.`;
+                break;
+              }
+              case 'absorb_magicka': {
+                const amt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentMagicka = Math.min(newPlayerStats.maxMagicka || 0, (newPlayerStats.currentMagicka || 0) + amt);
+                narrative += ` ${ench.name || 'Magicka drain'} absorbs ${amt} magicka.`;
+                break;
+              }
+              case 'absorb_stamina': {
+                const amt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentStamina = Math.min(newPlayerStats.maxStamina || 0, (newPlayerStats.currentStamina || 0) + amt);
+                narrative += ` ${ench.name || 'Stamina drain'} absorbs ${amt} stamina.`;
+                break;
+              }
+              case 'paralyze': {
+                const proc = attackResolved.isCrit ? 85 : attackResolved.rollTier === 'high' ? 60 : attackResolved.rollTier === 'mid' ? 40 : 20;
+                if (Math.random() * 100 < proc) {
+                  const paralyzeEffect = { type: 'stun', name: 'Paralyzed', duration: 2 } as any;
+                  if (targetIsAlly) applyToAlly(paralyzeEffect); else applyToEnemy(paralyzeEffect);
+                  narrative += ` ${target.name} is paralyzed by the enchantment!`;
+                }
+                break;
+              }
+              case 'chaos_damage': {
+                // Randomly pick fire/frost/shock
+                const opts = ['fire_damage', 'frost_damage', 'shock_damage'];
+                const pick = opts[Math.floor(Math.random() * opts.length)];
+                // Re-use the above by simple branching
+                if (pick === 'fire_damage') {
+                  const factor = Math.max(0.1, magnitude / 15 || 1);
+                  const extra = Math.max(1, Math.floor(appliedDamage * 0.18 * tierMult * factor));
+                  if (!targetIsAlly && enemyIndex >= 0) {
+                    newState.enemies = [...newState.enemies];
+                    newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                  }
+                  const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                  const dotValue = Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                  const burnEffect = { type: 'dot', stat: 'health', name: 'Burning', duration, value: dotValue, description: 'Burns the target for damage over time' } as any;
+                  if (targetIsAlly) applyToAlly(burnEffect); else applyToEnemy(burnEffect);
+                  narrative += ` Chaos enchantment triggers ${burnEffect.name} on ${target.name}.`;
+                }
+                break;
+              }
+              case 'soul_trap': {
+                // Attach a temporary soul_trap marker so other systems can detect and handle filling soul gems
+                const soulEffect = { type: 'utility', name: 'Soul Trap', duration: 5, value: magnitude, description: 'Target is soul trapped for a short time' } as any;
+                if (targetIsAlly) applyToAlly(soulEffect); else applyToEnemy(soulEffect);
+                narrative += ` ${target.name} is soul-trapped!`;
+                break;
+              }
+              default: {
+                // Unknown enchantment effects are ignored here; they may be handled elsewhere
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // swallow enchantment application errors to avoid breaking combat
+        console.warn && console.warn('[combat] enchantment application error', e);
+      }
+
       // Record the applied damage in combat log (after modifiers & lifesteal applied)
       try {
         pushCombatLogUnique(newState, {
