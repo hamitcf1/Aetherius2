@@ -54,22 +54,33 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
   const [stagedMap, setStagedMap] = useState<Record<string, number>>({});
   const [stagedMaster, setStagedMaster] = useState<Record<string, boolean>>({});
   // Default: expand all categories so per-category updates are visible by default
-  // Persist expand/collapse preference to localStorage so the modal remembers user choice
-  const STORAGE_KEY = 'aetherius:perkTree:expanded';
+  // Persist expand/collapse preference to localStorage per-character so each character can have its own view
+  const STORAGE_KEY_PREFIX = 'aetherius:perkTree:expanded:';
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw) as Record<string, boolean>;
-    } catch (e) { /* ignore */ }
+    // Default to all expanded
     const init: Record<string, boolean> = {};
     Object.keys(SKILL_CATEGORIES).forEach(k => init[k] = true);
     return init;
   });
 
-  // Persist changes
+  // Load per-character persisted state when character changes
   React.useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCategories)); } catch (e) { /* ignore */ }
-  }, [expandedCategories]);
+    try {
+      const charId = character?.id;
+      if (!charId) return;
+      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${charId}`);
+      if (raw) setExpandedCategories(JSON.parse(raw) as Record<string, boolean>);
+    } catch (e) { /* ignore */ }
+  }, [character?.id]);
+
+  // Persist changes per-character
+  React.useEffect(() => {
+    try {
+      const charId = character?.id;
+      if (!charId) return;
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${charId}`, JSON.stringify(expandedCategories));
+    } catch (e) { /* ignore */ }
+  }, [expandedCategories, character?.id]);
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
 
   const defs = useMemo(() => PERK_DEFINITIONS, []);

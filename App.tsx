@@ -915,6 +915,10 @@ const App: React.FC = () => {
     remainingXP: number;
     archetype?: string;
     previousXP: number;
+    // Reward fields
+    rewardChoice?: 'gold' | 'chest' | null;
+    rewardGoldAmount?: number | null;
+    chestItems?: any[] | null;
   }>(null);
 
   // If a player cancels a level-up, we keep it available so they can apply it later from the hero page
@@ -4944,22 +4948,41 @@ const App: React.FC = () => {
 
   // Level-up confirm/cancel handlers
 
-  const confirmLevelUp = (choice: 'health' | 'magicka' | 'stamina') => {
+  const confirmLevelUp = (payload: { attribute: 'health' | 'magicka' | 'stamina'; reward: { type: 'gold'; amount: number } | { type: 'chest'; items: any[] } }) => {
     if (!pendingLevelUp || !currentCharacterId) return;
     const p = pendingLevelUp;
+    const { attribute, reward } = payload;
 
     setCharacters(prev => prev.map(c => {
       if (c.id !== p.charId) return c;
-      const updated = applyLevelUpToCharacter(c, p.newLevel, p.remainingXP, choice);
+      const updated = applyLevelUpToCharacter(c, p.newLevel, p.remainingXP, attribute);
       setDirtyEntities(d => new Set([...d, c.id]));
 
-      // Add a journal entry announcing the level up
+      // Apply reward: gold or items
+      if (reward.type === 'gold') {
+        // Use handleGameUpdate pipeline to apply gold
+        handleGameUpdate({ goldChange: reward.amount });
+        // Immediate feedback
+        showToast(`+${reward.amount} Gold`, 'success', { stat: 'gold', amount: reward.amount });
+      } else if (reward.type === 'chest') {
+        const toAdd = (reward.items || []).map(it => ({ name: it.name, type: it.type || 'misc', quantity: it.quantity || 1, rarity: it.rarity }));
+        handleGameUpdate({ newItems: toAdd as any });
+        // Show concise feedback listing names
+        if (toAdd.length > 0) {
+          const names = toAdd.map(t => t.name).slice(0, 3).join(', ');
+          showToast(`Received ${toAdd.length} item(s): ${names}`, 'success');
+        } else {
+          showToast('Chest yielded no items.', 'info');
+        }
+      }
+
+      // Add a journal entry announcing the level up and reward
       const entry: JournalEntry = {
         id: uniqueId(),
         characterId: c.id,
         date: "4E 201",
         title: `Leveled up to ${p.newLevel}`,
-        content: `${c.name} reached level ${p.newLevel} and chose to increase ${choice} by +10. Received 1 perk point.`
+        content: `${c.name} reached level ${p.newLevel} and chose to increase ${attribute} by +10. Received 1 perk point and reward: ${reward.type === 'gold' ? (reward.amount + ' gold') : 'chest items'}.`
       };
       setJournalEntries(prev => [...prev, entry]);
       setDirtyEntities(d => new Set([...d, entry.id]));
@@ -5030,6 +5053,28 @@ const App: React.FC = () => {
     levelUpQueuedRef.current = false;
     setSaveMessage('Level up postponed.');
     setTimeout(() => setSaveMessage(null), 2000);
+  };
+
+  // Called when LevelUpModal is postponing and wants us to persist the selected reward (but not grant)
+  const preparePostponeLevelUp = (payload: { rewardChoice: 'gold' | 'chest' | null; rewardGoldAmount?: number | null; chestItems?: any[] | null }) => {
+    if (!pendingLevelUp) return;
+    setPendingLevelUp(prev => prev ? { ...prev, rewardChoice: payload.rewardChoice ?? null, rewardGoldAmount: payload.rewardGoldAmount ?? null, chestItems: payload.chestItems ?? null } : prev);
+  };
+
+  // Open chest helper for the pending level-up: delegates loot generation to service and persists chest result
+  const openPendingLevelUpChest = async (): Promise<any[]> => {
+    if (!pendingLevelUp) return [];
+    try {
+      const rewardsService = await import('./services/levelUpRewards');
+      // Use app-level item pool (prefers master item templates stored in `items` state)
+      const pool = items || [];
+      const picked = rewardsService.generateChestLoot(pendingLevelUp.newLevel, pool, { count: 1 });
+      // Persist chest result into pending state so postponing keeps the chest contents
+      setPendingLevelUp(prev => prev ? { ...prev, chestItems: picked, rewardChoice: 'chest' } : prev);
+      return picked;
+    } catch (e) {
+      return [];
+    }
   };
 
 
@@ -5523,6 +5568,8 @@ const App: React.FC = () => {
         open={Boolean(pendingLevelUp)}
         onClose={cancelLevelUp}
         onConfirm={confirmLevelUp}
+        onOpenChest={openPendingLevelUpChest}
+        onPreparePostpone={preparePostponeLevelUp}
         characterName={pendingLevelUp?.charName || ''}
         newLevel={pendingLevelUp?.newLevel || 1}
         archetype={pendingLevelUp?.archetype}
