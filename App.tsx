@@ -30,6 +30,7 @@ import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
 import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
+import { computeGoldReward } from './services/levelUpRewards';
 import { QuestNotificationOverlay, QuestNotification } from './components/QuestNotification';
 import { LevelUpNotificationOverlay, LevelUpNotificationData } from './components/LevelUpNotification';
 import LevelBadge from './components/LevelBadge';
@@ -1060,9 +1061,17 @@ const App: React.FC = () => {
     return out;
   };
 
-  // Toast notification helper
+  // Toast notification helper (with short-term dedupe to prevent duplicate messages)
+  const lastToastTimestamps = React.useRef<Record<string, number>>({});
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
-    // (no-change) helper kept here for context; Bonfire uses same toast flow
+    // Debounce identical messages within 800ms to avoid duplicate toasts caused by duplicate calls
+    try {
+      const key = `${type}:${message}`;
+      const now = Date.now();
+      const prev = lastToastTimestamps.current[key] || 0;
+      if (now - prev < 800) return; // skip duplicate
+      lastToastTimestamps.current[key] = now;
+    } catch (e) { /* best-effort dedupe */ }
 
     const id = uniqueId();
     setToastMessages(prev => {
@@ -4950,7 +4959,10 @@ const App: React.FC = () => {
 
   const confirmLevelUp = (payload: { attribute: 'health' | 'magicka' | 'stamina'; reward: { type: 'gold'; amount: number } | { type: 'chest'; items: any[] } }) => {
     if (!pendingLevelUp || !currentCharacterId) return;
+    // Prevent double-apply: snapshot pending then clear it immediately so a second call is ignored
     const p = pendingLevelUp;
+    setPendingLevelUp(null);
+    levelUpQueuedRef.current = false; // allow further level-ups to be queued later
     const { attribute, reward } = payload;
 
     setCharacters(prev => prev.map(c => {
@@ -5069,10 +5081,26 @@ const App: React.FC = () => {
       // Use app-level item pool (prefers master item templates stored in `items` state)
       const pool = items || [];
       const picked = rewardsService.generateChestLoot(pendingLevelUp.newLevel, pool, { count: 1 });
+
+      // If no items found, fallback to granting a small gold stipend so players are not left with empty chests
+      if (!picked || picked.length === 0) {
+        const fallback = Math.max(1, Math.floor(computeGoldReward(pendingLevelUp.newLevel) * 0.5));
+        // Persist as a gold reward so UI reflects a received reward
+        setPendingLevelUp(prev => prev ? { ...prev, chestItems: [], rewardChoice: 'gold', rewardGoldAmount: fallback } : prev);
+        handleGameUpdate({ goldChange: fallback });
+        showToast(`Chest yielded no items — granted ${fallback} gold instead.`, 'info');
+        return [];
+      }
+
       // Persist chest result into pending state so postponing keeps the chest contents
       setPendingLevelUp(prev => prev ? { ...prev, chestItems: picked, rewardChoice: 'chest' } : prev);
       return picked;
     } catch (e) {
+      // On error, grant a minimal fallback gold and record it
+      const fallback = Math.max(1, Math.floor(computeGoldReward(pendingLevelUp.newLevel) * 0.5));
+      setPendingLevelUp(prev => prev ? { ...prev, chestItems: [], rewardChoice: 'gold', rewardGoldAmount: fallback } : prev);
+      handleGameUpdate({ goldChange: fallback });
+      showToast(`Chest failed to open — granted ${fallback} gold.`, 'info');
       return [];
     }
   };

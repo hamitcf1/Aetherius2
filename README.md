@@ -1,8 +1,9 @@
 # Skyrim Aetherius
 
-**Version 1.0.8** | [Changelog](components/Changelog.tsx)
+**Version 1.0.9** | [Changelog](components/Changelog.tsx)
 
 **Recent:**
+- **v1.0.9 (2026-01-29):** Level-Up rewards: added Gold vs Chest choice, preview for chests, staged skippable chest reveal with sound and ARIA support, immediate gold display, toast dedupe, and confirm-side guards to avoid double-apply.
 - **v1.0.8 (2026-01-28):** Shop & Blacksmith UX quality-of-life — added quick-buy for missing upgrade materials, clearer "Insufficient Gold" indicators, improved shop buy/sell UI, and several fixes.
 - **v1.0.7 (2026-01-27):** Combat UX updates — hide unlearned spells/abilities and gate advanced skill abilities behind perk investment; clarified status effect naming.
 - **v1.0.6 (2026-01-26):** Restored healing & conjuration visual effects and screen flashes; increased VFX z-index and standardized timing (ms helper) for reliable rendering. Added unit tests for spell visuals.

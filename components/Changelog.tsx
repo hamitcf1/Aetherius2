@@ -18,6 +18,20 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.9',
+    date: '2026-01-29',
+    title: 'Level-Up Rewards: Chest & Gold UX + Accessibility',
+    changes: [
+      { type: 'feature', text: 'Level-Up rewards: choose Gold or Open Chest with chest preview and deterministic chest generation' },
+      { type: 'improvement', text: 'Open Chest: staged, skippable reveal animation with ARIA live announcements and sound effects' },
+      { type: 'improvement', text: 'Gold reward displayed immediately when selected so Confirm can be used without delay' },
+      { type: 'fix', text: 'Chest fallback: when no items are yielded, grant fractional gold and notify the player to avoid empty rewards' },
+      { type: 'improvement', text: 'Confirm guard: prevent double-confirm/double-apply by disabling Confirm and clearing pending state early' },
+      { type: 'improvement', text: 'UI tests: added deterministic tests for chest flow, animation skippability, gold display, and confirm-once behavior' },
+      { type: 'improvement', text: 'UX: short-window toast dedupe to reduce duplicate notifications for rapid events' }
+    ]
+  },
+  {
     version: '1.0.8',
     date: '2026-01-28',
     title: 'Shop & Blacksmith UX Quality-of-life',
