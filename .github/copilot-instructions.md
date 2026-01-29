@@ -1,7 +1,7 @@
 # **Copilot / AI Agent Instructions — Skyrim Aetherius (Revised)**
 
 > **Primary goal:** Solve real problems in production code.
-> **Anti-goal:** Spending time making tests pass without fixing the underlying issue.
+> **Anti-goal:** Spending time making tests pass without fixing the underlying issue..
 
 ---
 

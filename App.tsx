@@ -101,7 +101,7 @@ import {
   removeDuplicateItems,
   deleteJournalEntry,
   deleteStoryChapter,
-  // Companions & Loadouts
+  // Companions & Loadouts.
   loadUserCompanions,
   saveUserCompanions,
   deleteUserCompanions,
