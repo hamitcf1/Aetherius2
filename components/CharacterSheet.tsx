@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Character, Milestone, Perk, InventoryItem, CustomQuest, JournalEntry, StoryChapter } from '../types';
-import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp, FlaskConical } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp, FlaskConical, Coins } from 'lucide-react';
 import { generateCharacterProfileImage } from '../services/geminiService';
 import { RestModal, EatModal, DrinkModal, type RestOptions } from './SurvivalModals';
 import { formatSkyrimDateShort } from '../utils/skyrimCalendar';
@@ -217,6 +217,8 @@ const findPotionsForStat = (inventory: InventoryItem[], statType: PotionStat): I
 };
 
 // Quick potion button component for vitals
+import { SHOP_INVENTORY } from './ShopModal';
+
 const QuickPotionButton: React.FC<{
   statType: PotionStat;
   potions: InventoryItem[];
@@ -224,7 +226,10 @@ const QuickPotionButton: React.FC<{
   maxValue: number;
   onUsePotion: (item: InventoryItem) => void;
   colorClass: string;
-}> = ({ statType, potions, currentValue, maxValue, onUsePotion, colorClass }) => {
+  onBuy?: (shopItemId: string) => void;
+  gold?: number;
+  characterLevel?: number;
+}> = ({ statType, potions, currentValue, maxValue, onUsePotion, colorClass, onBuy, gold = 0, characterLevel = 1 }) => {
   // Don't show if at full health
   if (currentValue >= maxValue) return null;
   
@@ -240,32 +245,53 @@ const QuickPotionButton: React.FC<{
   };
   
   const colors = colorMap[statType];
+
+  // Find cheapest potion in shop inventory for this stat
+  const shopMatch = SHOP_INVENTORY.filter(s => s.type === 'potion' && (s.subtype || '') === statType && ((s.requiredLevel || 0) <= (characterLevel || 1))).sort((a, b) => a.price - b.price)[0];
+  const canAfford = !!shopMatch && (gold || 0) >= (shopMatch?.price || 0);
+  
+  const BuyButton = (
+    <button
+      onClick={() => shopMatch && onBuy && onBuy(shopMatch.id)}
+      disabled={!shopMatch || !canAfford}
+      title={shopMatch ? `Buy ${shopMatch.name} — ${shopMatch.price}g` : 'No potion available in shop'}
+      className={`flex items-center gap-1 px-2 py-1 rounded border border-skyrim-border bg-skyrim-dark/40 text-xs text-skyrim-text hover:bg-skyrim-dark/60 transition-colors ${!canAfford ? 'opacity-40 cursor-not-allowed' : ''}`}
+    >
+      <Coins size={12} /> <span className="text-[12px]">{shopMatch ? shopMatch.price : '—'}</span>
+    </button>
+  );
   
   if (!hasPotion) {
-    // Show silhouette placeholder when no potions available
+    // Show silhouette placeholder when no potions available, but include buy button
     return (
-      <div 
-        className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} bg-skyrim-dark/30 opacity-50 cursor-not-allowed`}
-        title={`No ${statType} potions available`}
-      >
-        <FlaskConical size={14} className={colors.silhouette} />
-        <span className={`text-xs ${colors.silhouette}`}>—</span>
+      <div className="flex items-center gap-2">
+        <div 
+          className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} bg-skyrim-dark/30 opacity-50 cursor-not-allowed`}
+          title={`No ${statType} potions available`}
+        >
+          <FlaskConical size={14} className={colors.silhouette} />
+          <span className={`text-xs ${colors.silhouette}`}>—</span>
+        </div>
+        {BuyButton}
       </div>
     );
   }
   
   return (
-    <button
-      onClick={() => bestPotion && onUsePotion(bestPotion)}
-      className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} ${colors.bg} ${colors.hover} transition-all active:scale-95`}
-      title={`Use ${bestPotion?.name} (+${potionEffect?.amount || '?'} ${statType})`}
-    >
-      <FlaskConical size={14} className={colors.text} />
-      <span className={`text-xs font-bold ${colors.text}`}>+{potionEffect?.amount || '?'}</span>
-      {potionCount > 1 && (
-        <span className="text-[10px] text-gray-400">({potionCount})</span>
-      )}
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => bestPotion && onUsePotion(bestPotion)}
+        className={`flex items-center gap-1 px-2 py-1 rounded border ${colors.border} ${colors.bg} ${colors.hover} transition-all active:scale-95`}
+        title={`Use ${bestPotion?.name} (+${potionEffect?.amount || '?'} ${statType})`}
+      >
+        <FlaskConical size={14} className={colors.text} />
+        <span className={`text-xs font-bold ${colors.text}`}>+{potionEffect?.amount || '?'}</span>
+        {potionCount > 1 && (
+          <span className="text-[10px] text-gray-400">({potionCount})</span>
+        )}
+      </button>
+      {BuyButton}
+    </div>
   );
 };
 
@@ -799,7 +825,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="space-y-2">
                 {/* Quick Potion Button for Health - Reserve space to prevent layout shift */}
                 <div className="flex justify-end min-h-[28px]">
-                  {(onDrink || onUseItem) && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
+                  {(onDrink || onUseItem || appCtx.handleShopPurchase) && (character.currentVitals?.currentHealth ?? character.stats.health) < character.stats.health && (
                     <QuickPotionButton
                       statType="health"
                       potions={healthPotions}
@@ -807,6 +833,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       maxValue={character.stats.health}
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="red"
+                      onBuy={(shopItemId) => appCtx.handleShopPurchase(SHOP_INVENTORY.find(s => s.id === shopItemId) as any, 1)}
+                      gold={appCtx.gold}
+                      characterLevel={character.level}
                     />
                   )}
                 </div>
@@ -831,7 +860,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="space-y-2">
                 {/* Quick Potion Button for Magicka - Reserve space to prevent layout shift */}
                 <div className="flex justify-end min-h-[28px]">
-                  {(onDrink || onUseItem) && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
+                  {(onDrink || onUseItem || appCtx.handleShopPurchase) && (character.currentVitals?.currentMagicka ?? character.stats.magicka) < character.stats.magicka && (
                     <QuickPotionButton
                       statType="magicka"
                       potions={magickaPotions}
@@ -839,6 +868,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       maxValue={character.stats.magicka}
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="blue"
+                      onBuy={(shopItemId) => appCtx.handleShopPurchase(SHOP_INVENTORY.find(s => s.id === shopItemId) as any, 1)}
+                      gold={appCtx.gold}
+                      characterLevel={character.level}
                     />
                   )}
                 </div>
@@ -863,7 +895,7 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
               <div className="space-y-2">
                 {/* Quick Potion Button for Stamina - Reserve space to prevent layout shift */}
                 <div className="flex justify-end min-h-[28px]">
-                  {(onDrink || onUseItem) && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
+                  {(onDrink || onUseItem || appCtx.handleShopPurchase) && (character.currentVitals?.currentStamina ?? character.stats.stamina) < character.stats.stamina && (
                     <QuickPotionButton
                       statType="stamina"
                       potions={staminaPotions}
@@ -871,6 +903,9 @@ export const CharacterSheet: React.FC<CharacterSheetProps> = ({
                       maxValue={character.stats.stamina}
                       onUsePotion={(i) => { if (onUseItem) onUseItem(i); else if (onDrink) onDrink(i); }}
                       colorClass="green"
+                      onBuy={(shopItemId) => appCtx.handleShopPurchase(SHOP_INVENTORY.find(s => s.id === shopItemId) as any, 1)}
+                      gold={appCtx.gold}
+                      characterLevel={character.level}
                     />
                   )}
                 </div>
