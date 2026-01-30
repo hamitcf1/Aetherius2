@@ -2244,8 +2244,21 @@ export const executePlayerAction = (
         const conjOutcome = getConjurationOutcome(conjureNat);
 
         const summonEffects = (ability.effects || []).filter((ef: any) => ef.type === 'summon');
+        let summoningBlocked = false;
         for (const ef of summonEffects) {
           const summonName = ef.name || 'Summoned Ally';
+
+          // Bound Weapon validation: only allow when player's main hand is empty
+          if (ef.summonType === 'weapon') {
+            const hasMainWeapon = !!(inventory || []).find(it => it && it.equipped && it.slot === 'weapon' && (it.equippedBy === 'player' || it.equippedBy === (character && character.id)));
+            if (hasMainWeapon) {
+              const msg = 'Your main hand is occupied — you must be unarmed to conjure a Bound Weapon.';
+              narrative += ` ${msg}`;
+              pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: msg, timestamp: Date.now() });
+              summoningBlocked = true;
+              break;
+            }
+          }
 
           if (conjOutcome.outcome === 'fail') {
             narrative += ` You attempt to conjure ${summonName} but roll ${conjureNat} — the conjuration fails.`;
@@ -2253,7 +2266,7 @@ export const executePlayerAction = (
             continue;
           }
 
-          // Conjured weapon: create a temporary playerActiveEffect granting weaponDamage
+          // Conjured weapon: materialize an ephemeral InventoryItem and track it with a playerActiveEffect
           if (ef.summonType === 'weapon') {
             const weaponTemplate = ef.weapon || {};
             const conjWeaponName = weaponTemplate.name || summonName;
@@ -2261,31 +2274,51 @@ export const executePlayerAction = (
             // Scale weapon by caster level and conjuration outcome multiplier
             const scaledDamage = Math.max(1, Math.floor(baseWeaponDamage * (conjOutcome.multiplier || 1)));
 
+            // Create a unique ephemeral inventory item representing the conjured weapon
+            const itemId = `bound_${conjWeaponName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).slice(2,8)}`;
+            const conjItem: any = {
+              id: itemId,
+              name: conjWeaponName,
+              characterId: character && character.id ? character.id : 'player',
+              type: 'weapon',
+              description: `Bound weapon conjured by ${ability.name}`,
+              quantity: 1,
+              equipped: true,
+              equippedBy: character && character.id ? character.id : 'player',
+              slot: 'weapon',
+              damage: scaledDamage,
+              baseDamage: scaledDamage,
+              isEphemeral: true,
+              // Force creation as a unique entity so it doesn't merge with existing items
+              __forceCreate: true
+            } as any;
+
+            // Inform callers/UI that a new item was created during the action
+            (newState as any).newItems = [...((newState as any).newItems || []), conjItem];
+
+            const duration = ef.playerTurns || ef.duration || 3;
             const weaponEffect: any = {
               type: 'conjured_weapon',
               name: conjWeaponName,
-              weapon: {
-                id: `conjured_${conjWeaponName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).slice(2,8)}`,
-                name: conjWeaponName,
-                damage: scaledDamage,
-                slot: 'weapon',
-                conjured: true
-              },
-              duration: ef.playerTurns || ef.duration || 3
+              itemId,
+              duration
             };
 
             // Attach to playerActiveEffects so UI and other systems can see the temporary weapon
-            newState.playerActiveEffects = [...(newState.playerActiveEffects || []), { effect: weaponEffect, turnsRemaining: weaponEffect.duration }];
+            newState.playerActiveEffects = [...(newState.playerActiveEffects || []), { effect: weaponEffect, turnsRemaining: duration }];
 
             // Immediately update newPlayerStats.weaponDamage so subsequent attack resolution uses it
             newPlayerStats = { ...newPlayerStats, weaponDamage: Math.max(newPlayerStats.weaponDamage || 0, scaledDamage) } as any;
 
-            narrative += ` ${conjWeaponName} materializes and is bound to you for ${weaponEffect.duration} turns! (roll ${conjureNat} — ${conjOutcome.outcome})`;
+            narrative += ` ${conjWeaponName} materializes and is bound to you for ${duration} turns! (roll ${conjureNat} — ${conjOutcome.outcome})`;
 
             // Set cooldown and push log
             if (ability.cooldown) {
               newState.abilityCooldowns[ability.id] = ability.cooldown;
             }
+
+            // Expose the added item on the returned object so the UI can optimistically apply it
+            (newState as any).__lastAddedItem = conjItem;
             pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, nat: conjureNat, rollTier: (conjOutcome && conjOutcome.outcome) || undefined, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
             continue;
           }
@@ -4152,6 +4185,29 @@ export const advanceTurn = (state: CombatState): CombatState => {
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
       }
     }
+
+    // Decrement player-side active effects durations (e.g., conjured weapons) and remove/cleanup expired conjured items
+    if (newState.playerActiveEffects && newState.playerActiveEffects.length) {
+      const updated = newState.playerActiveEffects.map(pe => ({ ...pe, turnsRemaining: (pe.turnsRemaining || 0) - 1 }));
+      const expired = updated.filter(pe => (pe.turnsRemaining || 0) <= 0);
+      newState.playerActiveEffects = updated.filter(pe => (pe.turnsRemaining || 0) > 0);
+
+      if (expired.length) {
+        // Ensure removedItems exists
+        newState.removedItems = [...(newState.removedItems || [])];
+        for (const pe of expired) {
+          try {
+            const eff: any = pe && (pe as any).effect;
+            if (eff && eff.type === 'conjured_weapon' && (eff.itemId || (eff.weapon && eff.weapon.id))) {
+              const id = eff.itemId || (eff.weapon && eff.weapon.id);
+              // Queue deletion via id-based removal (quantity=0)
+              (newState as any).removedItems = [...((newState as any).removedItems || []), { id, quantity: 0 } as any];
+              pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'conjured_weapon_expire', narrative: `${eff.name} fades from existence.`, timestamp: Date.now() });
+            }
+          } catch (e) {}
+        }
+      }
+    }
   }
   
   return newState;
@@ -4275,77 +4331,43 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
     newState.combatElapsedSec = elapsedSec;
     const hungerPerMinute = 1 / 180;
     const thirstPerMinute = 1 / 120;
-    const fatiguePerMinute = 1 / 90;
-    const minutes = elapsedSec / 60;
-    newState.survivalDelta = {
-      hunger: Math.round(minutes * hungerPerMinute * 10) / 10,
-      thirst: Math.round(minutes * thirstPerMinute * 10) / 10,
-      fatigue: Math.round(minutes * fatiguePerMinute * 10) / 10
-    };
   }
 
-  // === CLEANUP: Dead summoned companions should not remain active or block new conjures ===
-  try {
-    // Remove pendingSummons entries that point to companions that have died
-    if (newState.pendingSummons && newState.pendingSummons.length) {
-      const alivePending = newState.pendingSummons.filter((s: any) => {
-        const ally = (newState.allies || []).find(a => a.id === s.companionId);
-        // Keep pending if it still has playerTurnsRemaining > 0 AND (ally does not exist yet OR ally is alive)
-        const playerTurns = (s as any).playerTurnsRemaining !== undefined ? (s as any).playerTurnsRemaining : (s as any).turnsRemaining;
-        if (!playerTurns || playerTurns <= 0) return false;
-        if (!ally) return true; // still pending spawn
-        return (ally.currentHealth || 0) > 0;
-      });
-      if (alivePending.length !== newState.pendingSummons.length) {
-        newState.pendingSummons = alivePending.map((s: any) => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: s.playerTurnsRemaining }));
+  // If combat has ended (victory/defeat/fled/etc), ensure ephemeral conjured items are cleaned up
+  if (!newState.active) {
+    try {
+      const conjured = (newState.playerActiveEffects || []).filter((pe: any) => pe && pe.effect && pe.effect.type === 'conjured_weapon' && (pe.effect.itemId || (pe.effect.weapon && pe.effect.weapon.id)));
+      if (conjured.length) {
+        (newState as any).removedItems = [...((newState as any).removedItems || []), ...conjured.map((pe: any) => ({ id: (pe as any).effect.itemId || ((pe as any).effect.weapon && (pe as any).effect.weapon.id), quantity: 0 } as any))];
+        newState.playerActiveEffects = (newState.playerActiveEffects || []).filter((pe: any) => !(pe && (pe as any).effect && (pe as any).effect.type === 'conjured_weapon'));
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'conjured_weapon_cleanup', narrative: `All conjured weapons fade as the battle ends.`, timestamp: Date.now() });
       }
-    }
-
-    // For allies that are summons and dead, clear their summon flags and any decay markers
-    if (newState.allies && newState.allies.length) {
-      newState.allies = newState.allies.map(a => {
-        if ((a as any).companionMeta?.isSummon && (a.currentHealth || 0) <= 0) {
-          const meta = { ...(a as any).companionMeta };
-          // Remove decayActive and isSummon so player can conjure again
-          delete meta.decayActive;
-          meta.isSummon = false;
-          const filteredEffects = (a.activeEffects || []).filter((ae: any) => !(ae.effect && ae.effect.name && ae.effect.name.toLowerCase().includes('decay')));
-          // Log the cleanup
-          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_removed', narrative: `${a.name} has been defeated and is no longer active. You may summon again.`, timestamp: Date.now() });
-          return { ...a, companionMeta: meta, activeEffects: filteredEffects } as any;
-        }
-        return a;
-      });
-    }
-  } catch (e) {
-    console.warn('[combat] cleanup dead summons failed', e);
+    } catch (e) {}
   }
 
   return newState;
 };
 
-// Apply regen after a turn. Uses per-second regen values but applies them for a turn-length equivalent.
-// By default a "turn" yields the same healing as the previous 4s tick (regenPerSec * 4).
-// Now includes health regen based on level and perks
-export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
-  let newPlayerStats = { ...playerStats };
-  const multiplier = secondsPerTurn;
-  
-  // Record pre-regen values so we can log exact deltas
-  const beforeHealth = newPlayerStats.currentHealth || 0;
-  const beforeMagicka = newPlayerStats.currentMagicka || 0;
-  const beforeStamina = newPlayerStats.currentStamina || 0;
+    // Ensure applyTurnRegen has its header and initial state (was accidentally removed during edits)
+    export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
+      let newPlayerStats = { ...playerStats };
+      const multiplier = secondsPerTurn;
+      
+      // Record pre-regen values so we can log exact deltas
+      const beforeHealth = newPlayerStats.currentHealth || 0;
+      const beforeMagicka = newPlayerStats.currentMagicka || 0;
+      const beforeStamina = newPlayerStats.currentStamina || 0;
 
-  // Apply health regen (now available based on level/perks)
-  const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
-  const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
-  const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
-  
-  newPlayerStats.currentHealth = nh;
-  newPlayerStats.currentMagicka = nm;
-  newPlayerStats.currentStamina = ns;
+      // Apply health regen (now available based on level/perks)
+      const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
+      const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
+      const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
+      
+      newPlayerStats.currentHealth = nh;
+      newPlayerStats.currentMagicka = nm;
+      newPlayerStats.currentStamina = ns;
 
-  const newState = { ...state };
+    const newState = { ...state };
   // If any vitals recovered, append a concise turn chat entry to the combat log
   try {
     const deltaH = Math.max(0, (newPlayerStats.currentHealth || 0) - beforeHealth);

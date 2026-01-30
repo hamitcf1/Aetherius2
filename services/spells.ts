@@ -148,16 +148,6 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     effects: [{ type: 'summon', name: 'Storm Atronach', duration: 4 }],
     prerequisites: { level: 25 }
   },
-  summon_dremora: {
-    id: 'summon_dremora',
-    name: 'Conjure Dremora Lord',
-    description: 'Summons a powerful Dremora warrior from Oblivion to fight for you.',
-    cost: 100,
-    perkCost: 7,
-    type: 'utility',
-    effects: [{ type: 'summon', name: 'Dremora Lord', duration: 5 }],
-    prerequisites: { level: 30 }
-  },
   summon_wolf: {
     id: 'summon_wolf',
     name: 'Call of the Wild: Wolf',
@@ -461,6 +451,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 50,
     perkCost: 2,
     type: 'utility',
+    effects: [{ type: 'summon', name: 'Daedra', duration: 4 }],
     prerequisites: { level: 50 }
   },
   summon_dremora_lord: {
@@ -470,6 +461,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 85,
     perkCost: 3,
     type: 'utility',
+    effects: [{ type: 'summon', name: 'Dremora Lord', duration: 5 }],
     prerequisites: { level: 80 }
   },
 

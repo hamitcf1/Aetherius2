@@ -1810,6 +1810,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         }
       }
     }
+
+    // If the engine created an ephemeral item (conjured weapon), surface it to inventory updates/UI
+    const added = (execRes as any).newState && (execRes as any).newState.__lastAddedItem;
+    if (added) {
+      // Apply locally so abilities and equip state update immediately
+      setLocalInventory(prev => [...prev, added]);
+      if (onInventoryUpdate) {
+        const precise: InventoryItem = { ...(added as any) } as InventoryItem;
+        if (character && character.id) precise.characterId = character.id;
+        onInventoryUpdate([precise]);
+      }
+      // Clear the helper marker
+      delete (execRes as any).newState.__lastAddedItem;
+      if (showToast) showToast(`${added.name} materializes as a Bound Weapon!`, 'success');
+    }
     
     // Check combat end
     let finalState = checkCombatEnd(newState, newPlayerStats);
@@ -1847,6 +1862,19 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
     setCombatState(finalState);
     setPlayerStats(newPlayerStats);
+
+    // If the engine requested inventory removals (e.g., conjured weapon expiry), surface them to parent
+    if (finalState.removedItems && finalState.removedItems.length && onInventoryUpdate) {
+      const idBased = (finalState.removedItems || []).filter((r: any) => r && r.id).map((r: any) => ({ id: r.id, quantity: r.quantity || 0, characterId: character && character.id }));
+      const nameBased = (finalState.removedItems || []).filter((r: any) => r && !r.id && r.name).map((r: any) => ({ name: r.name, quantity: r.quantity || 1 }));
+      if (idBased.length) onInventoryUpdate(idBased as any);
+      if (nameBased.length) onInventoryUpdate(nameBased as any);
+
+      // Optimistically update localInventory for any id-based deletions so UI updates promptly
+      if (idBased.length) {
+        setLocalInventory(prev => prev.filter(it => !idBased.some((b: any) => b.id === it.id)));
+      }
+    }
     // Show floating damage based on last combat log entry (if any)
     const last = finalState.combatLog[finalState.combatLog.length - 1];
     if (last && last.actor === 'player' && last.damage && last.damage > 0) {

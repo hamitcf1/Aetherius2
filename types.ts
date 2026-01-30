@@ -205,6 +205,9 @@ export interface InventoryItem {
   effects?: string[];
   // Is this item a quest item (cannot be dropped/sold)
   isQuestItem?: boolean;
+  // Ephemeral items are temporary (e.g., Bound Weapons) and should be cleaned up automatically
+  // when their duration expires or when combat ends. These should not be persisted to permanent storage.
+  isEphemeral?: boolean;
 }
 
 export type LootRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'epic' | 'legendary';

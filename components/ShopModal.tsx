@@ -57,14 +57,10 @@ export const SHOP_INVENTORY: ShopItem[] = [
   { id: 'health_potion_major', name: 'Plentiful Health Potion', type: 'potion', subtype: 'health', description: 'Restores 100 health.', price: 75, category: 'Potions' },
   { id: 'magicka_potion_minor', name: 'Minor Magicka Potion', type: 'potion', description: 'Restores 25 magicka.', price: 15, category: 'Potions' },
   { id: 'magicka_potion', name: 'Magicka Potion', type: 'potion', subtype: 'magicka', description: 'Restores 50 magicka.', price: 35, category: 'Potions' },
+  { id: 'magicka_potion_major', name: 'Plentiful Magicka Potion', type: 'potion', subtype: 'magicka', description: 'Restores 100 magicka.', price: 75, category: 'Potions' },
   { id: 'stamina_potion_minor', name: 'Minor Stamina Potion', type: 'potion', description: 'Restores 25 stamina.', price: 15, category: 'Potions' },
   { id: 'stamina_potion', name: 'Stamina Potion', type: 'potion', subtype: 'stamina', description: 'Restores 50 stamina.', price: 35, category: 'Potions' },
-  { id: 'cure_disease', name: 'Cure Disease Potion', type: 'potion', description: 'Cures all diseases.', price: 50, category: 'Potions' },
-  { id: 'cure_poison', name: 'Cure Poison', type: 'potion', description: 'Removes poison effects.', price: 40, category: 'Potions' },
-  { id: 'invisibility_potion', name: 'Invisibility Potion', type: 'potion', description: 'Become invisible for 30 seconds.', price: 120, category: 'Potions' },
-  { id: 'resist_fire', name: 'Resist Fire Potion', type: 'potion', description: 'Resist 50% fire damage for 60 seconds.', price: 60, category: 'Potions' },
-  { id: 'resist_frost', name: 'Resist Frost Potion', type: 'potion', description: 'Resist 50% frost damage for 60 seconds.', price: 60, category: 'Potions' },
-  { id: 'resist_shock', name: 'Resist Shock Potion', type: 'potion', description: 'Resist 50% shock damage for 60 seconds.', price: 60, category: 'Potions' },
+  { id: 'stamina_potion_major', name: 'Plentiful Stamina Potion', type: 'potion', subtype: 'stamina', description: 'Restores 100 stamina.', price: 75, category: 'Potions' },
 
   // === CAMPING / SURVIVAL ===
   { id: 'bedroll', name: 'Bedroll', type: 'camping', description: 'A simple bedroll for sleeping outdoors. Basic rest.', price: 25, category: 'Camping' },

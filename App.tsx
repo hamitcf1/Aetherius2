@@ -3485,72 +3485,13 @@ const App: React.FC = () => {
           }
         }
 
-      // Non-stat potions: handle known special effects by keyword
+      // Non-stat potions: no longer supported. Consume item and warn the player.
       } else {
-        const name = (item.name || '').toLowerCase();
-        const desc = (item.description || '').toLowerCase();
-
-        // Cure disease / poison
-        if (name.includes('cure') && (name.includes('disease') || desc.includes('disease'))) {
-          handleGameUpdate({ 
-            transactionId: `potion_cure_disease_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(`Cured diseases.`, 'success');
-        } else if (name.includes('cure') && (name.includes('poison') || desc.includes('poison'))) {
-          handleGameUpdate({
-            transactionId: `potion_cure_poison_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(`Cured poison.`, 'success');
-
-        // Invisibility
-        } else if (name.includes('invis') || name.includes('invisibility') || desc.includes('invisible')) {
-          const durationMatch = desc.match(/(\d+)\s*(seconds|second|s)/);
-          const duration = durationMatch ? Number(durationMatch[1]) : 30;
-          const effect = {
-            id: `potion_invis_${Date.now()}`,
-            name: 'Invisibility',
-            type: 'buff' as const,
-            icon: '👁️‍🗨️',
-            duration,
-            description: `Invisible for ${duration} seconds.`,
-            effects: [] as any[],
-          };
-          setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({ 
-            transactionId: `potion_invis_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }] 
-          });
-          showToast(`You are invisible for ${duration} seconds.`, 'success');
-
-        // Resistances (e.g., Resist Fire 50% for 60 seconds)
-        } else if (name.includes('resist') || desc.includes('resist')) {
-          const pctMatch = desc.match(/(\d+)%/);
-          const secondsMatch = desc.match(/(\d+)\s*(seconds|second|s)/);
-          const pct = pctMatch ? Number(pctMatch[1]) : undefined;
-          const seconds = secondsMatch ? Number(secondsMatch[1]) : 60;
-          const which = desc.includes('fire') ? 'fire' : desc.includes('frost') ? 'frost' : desc.includes('shock') ? 'shock' : 'unknown';
-          const effect = {
-            id: `potion_resist_${which}_${Date.now()}`,
-            name: `Resist ${which}`,
-            type: 'buff' as const,
-            icon: '🛡️',
-            duration: seconds,
-            description: pct ? `Resist ${pct}% ${which} for ${seconds}s` : `Resist ${which} for ${seconds}s`,
-            effects: pct ? [{ stat: which, modifier: pct }] as any[] : [] as any[],
-          };
-          setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({
-            transactionId: `potion_resist_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(effect.description, 'success');
-
-        } else {
-          console.error('[app] Potion stat unresolved for', item.name, 'reason=', resolved.reason);
-          showToast(`The effect of ${item.name} is unclear and it has no effect.`, 'warning');
-        }
+        handleGameUpdate({
+          transactionId: `potion_${uniqueId()}`,
+          removedItems: [{ name: item.name, quantity: 1 }]
+        });
+        showToast(`The effect of ${item.name} is no longer supported and it has been consumed.`, 'warning');
       }
 
     } else if (item.type === 'food') {
