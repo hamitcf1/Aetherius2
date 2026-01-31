@@ -38,7 +38,7 @@ export const applyArrowEffects = (
     target.currentHealth = Math.max(0, target.currentHealth - extra);
     const duration = attackResolved.rollTier === 'crit' ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
     const dotValue = Math.max(1, Math.floor(appliedDamage * 0.10 * tierMult));
-    const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocution', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
+    const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocute', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
     target.activeEffects = [...(target.activeEffects || []), { effect: electroEffect, turnsRemaining: electroEffect.duration }];
     const stunChance = attackResolved.rollTier === 'crit' ? 50 : attackResolved.rollTier === 'high' ? 35 : attackResolved.rollTier === 'mid' ? 20 : 10;
     let narrative = `Shock arrow jolts ${target.name}, dealing ${extra} extra shock damage and electrocutes them for ${dotValue}/${duration} turns.`;

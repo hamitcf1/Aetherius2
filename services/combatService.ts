@@ -22,6 +22,7 @@ import { getLearnedSpellIds, createAbilityFromSpell, getSpellById } from './spel
 import { PERK_DEFINITIONS } from '../data/perkDefinitions';
 import { audioService } from './audioService';
 import { applyArrowEffects } from './arrowEffects';
+import { normalizeStatusEffect } from '../utils/statusHelpers';
 import { getRegenBonus } from './standingStonesService';
 import { isFeatureEnabled } from '../featureFlags';
 
@@ -846,7 +847,7 @@ export const generatePlayerAbilities = (
       cost: 15,
       cooldown: 0, // Basic spell - no cooldown
       description: 'A stream of fire that damages enemies.',
-      effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30 }]
+      effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
     });
   }
   if (destructionSkill >= 35) {
@@ -885,7 +886,7 @@ export const generatePlayerAbilities = (
       cost: 20,
       cooldown: 1,
       description: 'A bolt of concentrated fire damage.',
-      effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 40 }]
+      effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 40, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
     });
   }
   // FROST SPELLS
@@ -926,7 +927,7 @@ export const generatePlayerAbilities = (
       description: 'A powerful fire spell that burns all nearby enemies.',
       effects: [
         { type: 'aoe_damage', value: 28 + Math.floor(destructionSkill * 0.42), aoeTarget: 'all_enemies' },
-        { type: 'dot', stat: 'health', value: 4, duration: 3, chance: 60 }
+        { type: 'dot', stat: 'health', value: 4, duration: 3, chance: 60, name: 'Burning', description: 'Targets take X fire damage at the start of each turn.' }
       ]
     });
   }
@@ -969,7 +970,7 @@ export const generatePlayerAbilities = (
       description: 'A massive ball of fire that explodes on impact, burning all enemies.',
       effects: [
         { type: 'aoe_damage', value: 40 + Math.floor(destructionSkill * 0.5), aoeTarget: 'all_enemies' },
-        { type: 'dot', stat: 'health', value: 5, duration: 3, chance: 50 }
+        { type: 'dot', stat: 'health', value: 5, duration: 3, chance: 50, name: 'Burning', description: 'Targets take X fire damage at the start of each turn.' }
       ]
     });
   }
@@ -1764,7 +1765,7 @@ export const initializeCombat = (
         damage: Math.floor(baseDamage * 0.8),
         cost: 5,
         description: `${c.name} swipes with sharp claws.`,
-        effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30 }]
+        effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }]
       });
       abilities.push({
         id: `comp_pounce_${c.id}`,
@@ -2475,7 +2476,10 @@ export const executePlayerAction = (
                   } as any;
                 }
               }
-              narrative += ` ${target.name} is affected by ${effect.type}!`;
+              {
+                const nse = normalizeStatusEffect(effect, effect.name || (effect as any).id || 'effect');
+                narrative += ` ${target.name} is affected by ${nse.name}!`;
+              }
             }
           });
         }
@@ -2676,7 +2680,7 @@ export const executePlayerAction = (
       const battleaxeBleedChance = getCombatPerkBonus(character, 'battleaxeBleed');
       if (isAxe && axeBleedChance > 0 && Math.random() * 100 < axeBleedChance) {
         // Apply bleed effect to target (5 damage/turn for 3 turns)
-        const bleedEffect = { type: 'dot', stat: 'health', value: 5, duration: 3 };
+        const bleedEffect = { type: 'dot', stat: 'health', value: 5, duration: 3, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' };
         if (!targetIsAlly) {
           const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
           if (enemyIndex >= 0) {
@@ -2691,7 +2695,7 @@ export const executePlayerAction = (
       }
       if (isBattleaxe && battleaxeBleedChance > 0 && Math.random() * 100 < battleaxeBleedChance) {
         // Apply stronger bleed effect (7 damage/turn for 3 turns)
-        const bleedEffect = { type: 'dot', stat: 'health', value: 7, duration: 3 };
+        const bleedEffect = { type: 'dot', stat: 'health', value: 7, duration: 3, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' };
         if (!targetIsAlly) {
           const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
           if (enemyIndex >= 0) {
@@ -2864,7 +2868,7 @@ export const executePlayerAction = (
                 }
                 const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
                 const dotValue = Math.max(1, Math.floor(appliedDamage * 0.10 * tierMult * factor));
-                const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocution', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
+                const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocute', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
                 if (targetIsAlly) applyToAlly(electroEffect); else applyToEnemy(electroEffect);
                 const stunChance = attackResolved.isCrit ? 50 : attackResolved.rollTier === 'high' ? 35 : attackResolved.rollTier === 'mid' ? 20 : 10;
                 if (Math.random() * 100 < stunChance) {
@@ -3227,7 +3231,10 @@ export const executePlayerAction = (
                   ]
                 } as any;
               }
-              narrative += ` ${target.name} is affected by ${effect.type}!`;
+              {
+                const nse = normalizeStatusEffect(effect, effect.name || (effect as any).id || 'effect');
+                narrative += ` ${target.name} is affected by ${nse.name}!`;
+              }
             }
           }
         });
@@ -4564,7 +4571,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     possibleAbilities: [
       { id: 'bite', name: 'Bite', type: 'melee', damage: 10, cost: 5, description: 'A vicious bite' },
       { id: 'pounce', name: 'Pounce', type: 'melee', damage: 15, cost: 15, description: 'Leap and attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 15 }] },
-      { id: 'savage_bite', name: 'Savage Bite', type: 'melee', damage: 14, cost: 12, description: 'A tearing bite', effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30 }] },
+      { id: 'savage_bite', name: 'Savage Bite', type: 'melee', damage: 14, cost: 12, description: 'A tearing bite', effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'howl', name: 'Howl', type: 'melee', damage: 0, cost: 10, description: 'A terrifying howl', effects: [{ type: 'debuff', stat: 'damage', value: -3, duration: 2, chance: 25 }] }
     ],
     baseXP: 15,
@@ -4639,10 +4646,10 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     resistances: ['frost'],
     weaknesses: ['fire'],
     possibleAbilities: [
-      { id: 'bite', name: 'Venomous Bite', type: 'melee', damage: 16, cost: 10, description: 'A poisonous bite', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 3, chance: 50 }] },
+      { id: 'bite', name: 'Venomous Bite', type: 'melee', damage: 16, cost: 10, description: 'A poisonous bite', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 3, chance: 50, name: 'Poisoned', description: 'Target takes X poison damage at the start of each turn.' }] },
       { id: 'web', name: 'Web Spray', type: 'ranged', damage: 5, cost: 15, description: 'Spray sticky web', effects: [{ type: 'debuff', stat: 'stamina', value: -20, duration: 2 }] },
       { id: 'lunge', name: 'Lunge', type: 'melee', damage: 18, cost: 14, description: 'A sudden lunge attack' },
-      { id: 'spit_venom', name: 'Spit Venom', type: 'ranged', damage: 10, cost: 12, description: 'Spit corrosive venom', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 60 }] }
+      { id: 'spit_venom', name: 'Spit Venom', type: 'ranged', damage: 10, cost: 12, description: 'Spit corrosive venom', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 60, name: 'Poisoned', description: 'Target takes X poison damage at the start of each turn.' }] }
     ],
     baseXP: 35,
     possibleLoot: [
@@ -4662,7 +4669,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     weaknesses: ['fire'],
     possibleAbilities: [
       { id: 'slam', name: 'Slam', type: 'melee', damage: 30, cost: 15, description: 'A powerful slam attack' },
-      { id: 'rend', name: 'Rend', type: 'melee', damage: 25, cost: 12, description: 'Tear with claws', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 3, chance: 40 }] },
+      { id: 'rend', name: 'Rend', type: 'melee', damage: 25, cost: 12, description: 'Tear with claws', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 3, chance: 40, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'regenerate', name: 'Regenerate', type: 'melee', damage: 0, cost: 20, description: 'Troll regeneration', effects: [{ type: 'heal', stat: 'health', value: 20 }] },
       { id: 'frenzy', name: 'Frenzy', type: 'melee', damage: 35, cost: 25, description: 'A frenzied assault', cooldown: 2 }
     ],
@@ -4682,7 +4689,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     behaviors: ['aggressive', 'berserker', 'defensive'],
     possibleAbilities: [
       { id: 'swipe', name: 'Swipe', type: 'melee', damage: 25, cost: 12, description: 'A powerful claw swipe' },
-      { id: 'maul', name: 'Maul', type: 'melee', damage: 35, cost: 20, description: 'A devastating maul attack', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 2, chance: 35 }] },
+      { id: 'maul', name: 'Maul', type: 'melee', damage: 35, cost: 20, description: 'A devastating maul attack', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 2, chance: 35, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'roar', name: 'Roar', type: 'melee', damage: 0, cost: 10, description: 'A terrifying roar', effects: [{ type: 'debuff', stat: 'stamina', value: -15, duration: 2, chance: 50 }] },
       { id: 'charge', name: 'Charge', type: 'melee', damage: 30, cost: 18, description: 'A charging attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 30 }] }
     ],
@@ -4704,7 +4711,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     possibleAbilities: [
       { id: 'bite', name: 'Sabre Bite', type: 'melee', damage: 28, cost: 10, description: 'A vicious bite with massive fangs' },
       { id: 'pounce', name: 'Pounce', type: 'melee', damage: 35, cost: 18, description: 'A leaping pounce attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 25 }] },
-      { id: 'claw_swipe', name: 'Claw Swipe', type: 'melee', damage: 24, cost: 12, description: 'Quick claw attack', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30 }] },
+      { id: 'claw_swipe', name: 'Claw Swipe', type: 'melee', damage: 24, cost: 12, description: 'Quick claw attack', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'rake', name: 'Rake', type: 'melee', damage: 20, cost: 8, description: 'A raking attack with hind claws' }
     ],
     baseXP: 80,
@@ -4740,7 +4747,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'aeonic_wave', name: 'Aeonic Wave', type: 'aeo', damage: 26, cost: 60, cooldown: 3, description: 'A sweeping aeonic wave — high power, long cooldown.', effects: [{ type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' }] },
       // Enemy-only corrupted variant (higher damage, no ally heal)
       { id: 'necrotic_aeon', name: 'Necrotic Aeon', type: 'aeo', damage: 30, cost: 55, description: 'A corrupted aeonic eruption that favors damage over restoration.', effects: [{ type: 'aoe_damage', value: 30, aoeTarget: 'all_enemies' }] },
-      { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100 }] }
+      { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100, name: 'Frostbite', description: 'Target takes X frost damage at the start of each turn.' }] }
     ],
     baseXP: 120,
     baseGold: 50,
@@ -4765,7 +4772,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'ice_spike', name: 'Ice Spike', type: 'magic', damage: 22, cost: 18, description: 'A spike of ice' },
       { id: 'lightning', name: 'Lightning Bolt', type: 'magic', damage: 28, cost: 25, description: 'A bolt of lightning', effects: [{ type: 'drain', stat: 'magicka', value: 10 }] },
       { id: 'ward', name: 'Lesser Ward', type: 'magic', damage: 0, cost: 15, description: 'A protective ward', effects: [{ type: 'buff', stat: 'armor', value: 20, duration: 2 }] },
-      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40 }] },
+      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }] },
       // SKY-52: Additional AoE and spell abilities
       { id: 'fireball', name: 'Fireball', type: 'magic', damage: 30, cost: 35, description: 'An explosive ball of fire that damages all foes', effects: [{ type: 'aoe_damage', value: 20, aoeTarget: 'all_enemies' }] },
       { id: 'aeonic_pulse', name: 'Aeonic Pulse', type: 'aeo', damage: 10, cost: 38, description: 'A focused pulse of aeonic energy (lesser).', effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }] },

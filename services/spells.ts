@@ -23,7 +23,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     perkCost: 1,
     type: 'damage',
     damage: 15,
-    effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2 }]
+    effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
   },
   ice_spike: {
     id: 'ice_spike',
@@ -63,9 +63,10 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     perkCost: 3,
     type: 'damage',
     damage: 45,
-    effects: [{ type: 'dot', stat: 'health', value: 6, duration: 3 }],
+    effects: [{ type: 'dot', stat: 'health', value: 6, duration: 3, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }],
     prerequisites: { level: 12 }
   },
+
   frost_nova: {
     id: 'frost_nova',
     name: 'Frost Nova',

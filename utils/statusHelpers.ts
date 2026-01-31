@@ -32,7 +32,7 @@ export const normalizeStatusEffect = (s: IncomingStatusEffect, fallbackId: strin
       // Prefer id-based guess for more specific names like Burning
       const guess = nameGuessFromId(id);
       if (guess) return guess;
-      if (t === 'dot') return 'Damage over Time';
+      if (t === 'dot') return 'Burning';
       if (t === 'buff') return 'Buff';
       if (t === 'debuff') return 'Debuff';
       if (t === 'heal') return 'Healed';
@@ -53,7 +53,12 @@ export const normalizeStatusEffect = (s: IncomingStatusEffect, fallbackId: strin
   }
 
   const icon = s.icon || (type === 'buff' ? '✨' : type === 'debuff' ? '🔥' : '🌀');
-  const description = s.description || (name === 'Burning' ? 'Taking damage over time.' : s.type ? `${s.type} effect` : 'An active effect.');
+  let description = s.description;
+  if (!description) {
+    if (name === 'Burning') description = 'Target takes X fire damage at the start of each turn.';
+    else if (s.type && (s.type as string).toLowerCase() === 'dot') description = 'Taking damage over time.';
+    else description = s.type ? `${s.type} effect` : 'An active effect.';
+  }
 
   return {
     id,

@@ -34,6 +34,7 @@ import { populatePendingLoot, finalizeLoot } from '../services/lootService';
 import { BASE_PATH } from '../services/basePath';
 import { getEasterEggName } from './GameFeatures';
 import { EquipmentHUD, getDefaultSlotForItem } from './EquipmentHUD';
+import { normalizeStatusEffect } from '../utils/statusHelpers';
 import { LoadoutManager } from './LoadoutManager';
 import ModalWrapper from './ModalWrapper';
 import { audioService } from '../services/audioService';
@@ -378,11 +379,14 @@ const EnemyCard: React.FC<{
       {enemy.activeEffects && enemy.activeEffects.length > 0 && (
         <div className="flex gap-2 items-center">
           {enemy.activeEffects.filter((ae: any) => ae.effect?.type !== 'summon_decay').map((ae, i) => {
-            const t = ae.effect?.type || 'unknown';
-            const cls = t === 'fire' || t === 'burn' ? 'effect-fire' : t === 'frost' ? 'effect-frost' : t === 'shock' ? 'effect-shock' : t === 'conjuration' ? 'effect-conjuration' : '';
+            const nse = normalizeStatusEffect(ae.effect || {}, ae.effect?.name || ae.effect?.id || 'effect');
+            const t = nse.name || 'Effect';
+            const tl = t.toLowerCase();
+            const cls = tl.includes('burn') || tl.includes('fire') ? 'effect-fire' : tl.includes('frost') ? 'effect-frost' : tl.includes('shock') || tl.includes('electro') ? 'effect-shock' : tl.includes('conjuration') ? 'effect-conjuration' : '';
+            const icon = tl.includes('burn') || tl.includes('fire') ? '🔥' : tl.includes('frost') ? '❄️' : tl.includes('shock') ? '⚡' : tl.includes('poison') ? '☠️' : '🔸';
             return (
-              <div key={`${enemy.id}-effect-${t}-${i}`} className={`enemy-effect-badge ${cls}`} title={`${t} (${ae.turnsRemaining})`}>
-                <span className="effect-icon">{t === 'fire' || t === 'burn' ? '🔥' : t === 'frost' ? '❄️' : t === 'shock' ? '⚡' : t === 'conjuration' ? '✨' : '🔸'}</span>
+              <div key={`${enemy.id}-effect-${t}-${i}`} className={`enemy-effect-badge ${cls}`} title={`${t} (${ae.turnsRemaining}) — ${nse.description}`}>
+                <span className="effect-icon">{icon}</span>
                 <span className="text-xs">{t}{ae.turnsRemaining ? ` ${ae.turnsRemaining}` : ''}</span>
               </div>
             );
@@ -391,7 +395,7 @@ const EnemyCard: React.FC<{
       )}
 
       {/* Per-enemy embedded flame indicator (for persistent fire) */}
-      {effectsEnabled && (enemy.activeEffects || []).some((ae: any) => ['fire','burn'].includes(ae.effect?.type)) && (
+      {effectsEnabled && (enemy.activeEffects || []).some((ae: any) => ['fire','burn'].includes(ae.effect?.type) || (ae.effect?.name||'').toLowerCase().includes('burn')) && (
         <div className="enemy-flame-embed" aria-hidden>
           <div className="ember" />
         </div>
