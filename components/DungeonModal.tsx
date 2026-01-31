@@ -4,6 +4,7 @@ import { DungeonDefinition, DungeonState, DungeonNode, CombatEnemy, Character, I
 import { getDungeonById } from '../data/dungeonDefinitions';
 import { CombatModal } from './CombatModal';
 import { initializeCombat } from '../services/combatService';
+import { updateMusicForContext } from '../services/audioService';
 import { DoomMinigame } from './DoomMinigame';
 import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle, DoorOpen, Swords, Eye, EyeOff, Gamepad2 } from 'lucide-react';
 
@@ -331,6 +332,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         const playerLevel = character?.level || 1;
         const initializedCombat = initializeCombat(enemies, dungeon.location, false, true, false, companionsForCombat, playerLevel);
         setCombatState(initializedCombat);
+        
+        // Switch to combat music
+        updateMusicForContext({ inCombat: true, localeType: 'dungeon', mood: 'tense' });
         break;
 
       case 'rest':
