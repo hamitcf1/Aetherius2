@@ -128,7 +128,7 @@ const shuffleArray = <T>(arr: T[]): T[] => {
 const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|horse|fox|warg|sabrecat|cat/i.test((name || '').toLowerCase());
 
 // Helper: push a combat log entry only if it's not a duplicate of the immediate previous entry
-const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
+export const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
   state.combatLog = state.combatLog || [];
   const last = state.combatLog[state.combatLog.length - 1];
   // Debug: surface when nat/roll entries are pushed (helps trace races in tests)
@@ -2010,9 +2010,15 @@ export const executePlayerAction = (
       const hasSummonEffectEarly = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
       if (hasSummonEffectEarly) {
         consumedAction = 'bonus';
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
@@ -2092,9 +2098,14 @@ export const executePlayerAction = (
       // here (no roll, no resource spend, do not advance/consume the player's turn). This prevents
       // UI races from accidentally letting a conjure attempt consume the turn. Support multiple summons via perk.
       if (hasSummonEffect) {
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
@@ -2229,9 +2240,14 @@ export const executePlayerAction = (
       // Summon abilities: create companion/summon without attack resolution (D20-influenced)
       if (hasSummonEffect) {
         // Enforce allowed number of conjurations per combat (supports conjuration perks)
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           narrative += ' The conjuration fizzles — another summoned ally is already present.';
@@ -2729,6 +2745,42 @@ export const executePlayerAction = (
       if (resisted) damageNarrative += ` (resisted)`;
 
       narrative = `You use ${ability.name} on ${target.name} and ${damageNarrative}!`;
+
+      // === SPECIAL AMMO / ARROW HANDLING ===
+      if (itemId && inventory) {
+        const ammoItem = inventory.find(i => i.id === itemId);
+        if (ammoItem && ammoItem.quantity > 0 && (ammoItem.name.toLowerCase().includes('arrow') || ammoItem.type === 'ammo' || ammoItem.type === 'weapon')) {
+          // Consume one arrow
+          usedItem = { ...ammoItem, quantity: ammoItem.quantity - 1 };
+          consumedAction = 'main'; // Attacks consume main action
+          
+          // Defensive contract: record inventory delta
+          newState.removedItems = [{ id: usedItem.id, quantity: usedItem.quantity } as any];
+
+          // Apply arrow effects if hit confirmed
+          // Use 'attackResolved' which contains the roll results
+          if (attackResolved && attackResolved.hit && !targetIsAlly && enemyIndex >= 0) {
+            const arrowNarrative = applyArrowEffects(newState, enemyIndex, itemId, appliedDamage, attackResolved, ability);
+            if (arrowNarrative) {
+              narrative += ` ${arrowNarrative}`;
+            }
+          }
+          
+          // Handle 'command' arrow (ally trigger) logic directly here if not handled by applyArrowEffects
+          if (itemId.includes('allycall') || itemId.includes('command')) {
+             if (newState.allies && newState.allies.length > 0) {
+               const ally = newState.allies[0]; // trigger first ally
+               // Force an immediate ally action
+               const allyRes = executeCompanionAction(newState, ally.id, (ally.abilities[0]?.id || 'attack'), target.id, undefined, true);
+               if (allyRes.success) {
+                 narrative += ` The command arrow signals ${ally.name} to attack!`;
+                 // Merge state changes (companion action might have updated enemies/log)
+                 newState = allyRes.newState;
+               }
+             }
+          }
+        }
+      }
 
       // === LIFESTEAL PERK EFFECT ===
       if (perkLifesteal > 0 && ability.type === 'melee' && appliedDamage > 0 && !targetIsAlly) {
@@ -3368,7 +3420,7 @@ export const executePlayerAction = (
     }
   }
 
-  return { newState, newPlayerStats, narrative, aoeSummary, consumedAction };
+  return { newState, newPlayerStats, narrative, aoeSummary, consumedAction, usedItem };
 };
 
 export const executeEnemyTurn = (
@@ -3418,9 +3470,16 @@ export const executeEnemyTurn = (
       .map(ae => ({ ...ae, turnsRemaining: ae.turnsRemaining - 1 }))
       .filter(ae => ae.turnsRemaining > 0);
 
-    // If stunned, skip the rest of this turn
-    if (isStunned) {
-      return { newState, newPlayerStats, narrative: `${actor.name} is stunned and skips their turn.`, aoeSummary };
+    // If stunned or just died from DOT/Decay, skip the rest of this turn
+    if (isStunned || actor.currentHealth <= 0) {
+      // CLEANUP: If the actor is dead, ensure they are removed from turn order and correct list
+      if (actor.currentHealth <= 0 && (actor as any).companionMeta?.isSummon) {
+        if (isAlly) newState.allies = (newState.allies || []).filter(a => a.id !== actor.id);
+        else newState.enemies = (newState.enemies || []).filter(e => e.id !== actor.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== actor.id);
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== actor.id);
+      }
+      return { newState, newPlayerStats, narrative: actor.currentHealth <= 0 ? '' : `${actor.name} is stunned and skips their turn.`, aoeSummary };
     }
   }
 
@@ -4085,14 +4144,14 @@ export const advanceTurn = (state: CombatState): CombatState => {
 
     // Activate any companions that had their pending player-turn duration expire on the previous decrement.
     try {
-      (newState.allies || []).forEach(ally => {
-        const meta = (ally as any).companionMeta;
+      const allActors = (newState.allies || []).concat(newState.enemies || []);
+      allActors.forEach(actor => {
+        const meta = (actor as any).companionMeta;
         if (meta && meta.decayPending && meta.isSummon) {
           // Activate decay; do NOT apply decay on the same player-start — decay begins on the following player-start
-          (ally as any).companionMeta = { ...(meta || {}), decayPending: false, decayActive: true, decayJustActivated: true };
-          ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
-          try { console.debug('[combat] activated pending decay for ally (will apply next player-start)', ally.id); } catch (e) {}
-          try { console.debug('[combat] post-activation companionMeta', ally.id, (ally as any).companionMeta); } catch (e) {}
+          (actor as any).companionMeta = { ...(meta || {}), decayPending: false, decayActive: true, decayJustActivated: true };
+          actor.activeEffects = [...(actor.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+          try { console.debug('[combat] activated pending decay for actor (will apply next player-start)', actor.id); } catch (e) {}
         }
       });
     } catch (e) {}
@@ -4132,6 +4191,30 @@ export const advanceTurn = (state: CombatState): CombatState => {
           narrative: `${ally.name} decays completely and vanishes.`, 
           timestamp: Date.now() 
         });
+        
+        // Remove dead summon from allies and turn order immediately
+        newState.allies = (newState.allies || []).filter(a => a.id !== ally.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== ally.id);
+        // Ensure pendingSummons doesn't track it anymore
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== ally.id);
+      }
+    }
+
+    // NEW: Handle decay for enemy summons acted during the previous cycle
+    const decayingEnemies = (newState.enemies || []).filter(e => 
+      (e as any).companionMeta?.decayActive && !(e as any).companionMeta?.decayJustActivated && e.currentHealth > 0
+    );
+    for (const enemy of decayingEnemies) {
+      const decayDamage = Math.floor(enemy.currentHealth * 0.5);
+      const newHealth = Math.max(0, enemy.currentHealth - decayDamage);
+      enemy.currentHealth = newHealth;
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: enemy.name, action: 'decay', target: 'self', damage: decayDamage, narrative: `${enemy.name} decays, losing ${decayDamage} health.`, timestamp: Date.now() });
+      if (newHealth <= 0) {
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: enemy.name, action: 'decay_death', target: 'self', damage: 0, narrative: `${enemy.name} decays completely and vanishes.`, timestamp: Date.now() });
+        newState.enemies = (newState.enemies || []).filter(e => e.id !== enemy.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== enemy.id);
+        // Ensure pendingSummons doesn't track it anymore
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== enemy.id);
       }
     }
 
@@ -4140,6 +4223,11 @@ export const advanceTurn = (state: CombatState): CombatState => {
       (newState.allies || []).forEach(ally => {
         if ((ally as any).companionMeta?.decayJustActivated) {
           (ally as any).companionMeta.decayJustActivated = false;
+        }
+      });
+      (newState.enemies || []).forEach(enemy => {
+        if ((enemy as any).companionMeta?.decayJustActivated) {
+          (enemy as any).companionMeta.decayJustActivated = false;
         }
       });
     } catch (e) {}
@@ -4172,11 +4260,14 @@ export const advanceTurn = (state: CombatState): CombatState => {
       // Mark companions as decaying (they will start losing HP on the next player turn start)
       for (const id of newlyExpired) {
         const ally = (newState.allies || []).find(a => a.id === id);
-        if (ally && (ally as any).companionMeta?.isSummon) {
+        const enemy = (newState.enemies || []).find(e => e.id === id);
+        const actor = ally || enemy;
+        
+        if (actor && (actor as any).companionMeta?.isSummon) {
           // Flag the summon as pending decay; activation and first tick will be handled at the next player-start
-          (ally as any).companionMeta = { ...(ally as any).companionMeta || {}, decayPending: true };
-          ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
-          try { console.debug('[combat] flagged companion as pending decay (will activate next player-start)', id, { companion: ally, companionMeta: (ally as any).companionMeta }); } catch (e) {}
+          (actor as any).companionMeta = { ...(actor as any).companionMeta || {}, decayPending: true };
+          actor.activeEffects = [...(actor.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+          try { console.debug('[combat] flagged companion as pending decay (will activate next player-start)', id, { companion: actor, companionMeta: (actor as any).companionMeta }); } catch (e) {}
         }
       }
       // Keep only pending summons that still have player turns remaining (preserve remaining player-turn counters)
@@ -4215,6 +4306,18 @@ export const advanceTurn = (state: CombatState): CombatState => {
 
 export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStats): CombatState => {
   const newState = { ...state };
+
+  // CLEANUP: Remove dead summoned companions from allies/turnOrder immediately.
+  // This ensures dead summons don't block subsequent summoning attempts.
+  newState.allies = (newState.allies || []).filter(a => {
+    const isDeadSummon = !!a.companionMeta?.isSummon && (a.currentHealth || 0) <= 0;
+    if (isDeadSummon) {
+      newState.turnOrder = (newState.turnOrder || []).filter(id => id !== a.id);
+      newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== a.id);
+      return false;
+    }
+    return true;
+  });
 
   // Normalize/derive explicit enemy states from health when missing.
   newState.enemies = (newState.enemies || []).map(e => {
