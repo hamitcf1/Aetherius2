@@ -9,6 +9,7 @@ export const computeEnemyXP = (enemy: CombatEnemy) => {
 import LOOT_TABLES, { LootTableEntry, getLootTableForEnemy } from '../data/lootTables';
 import { getItemStats, shouldHaveStats } from './itemStats';
 import { generateLootEnchantment } from './enchantingService';
+import { getTransactionLedger } from './transactionLedger';
 
 // Helper: pick one item from weighted table
 const pickWeighted = (table: LootTableEntry[], rng = Math.random): LootTableEntry | null => {
@@ -31,8 +32,8 @@ const scaledChance = (entry: LootTableEntry, level: number, isBoss = false) => {
 };
 
 // Generate loot for an enemy based on its loot table or global tables
-export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; type: string; description: string; quantity: number; rarity?: string }> => {
-  const items: Array<{ name: string; type: string; description: string; quantity: number; rarity?: string }> = [];
+export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; type: string; description: string; quantity: number; rarity?: string; enchantment?: any }> => {
+  const items: Array<{ name: string; type: string; description: string; quantity: number; rarity?: string; enchantment?: any }> = [];
 
   // 1) If enemy declares an explicit loot table, honor it (backwards compat)
   if (enemy.loot && enemy.loot.length > 0) {
@@ -93,7 +94,7 @@ export const generateEnemyLoot = (enemy: CombatEnemy): Array<{ name: string; typ
   }
 
   // Consolidate duplicate names into single entries (sum quantities) to avoid duplicate rows in the loot UI
-  const consolidated: Record<string, { name: string; type: string; description: string; quantity: number; rarity?: string }> = {};
+  const consolidated: Record<string, { name: string; type: string; description: string; quantity: number; rarity?: string; enchantment?: any }> = {};
   items.forEach(it => {
     const key = it.name;
     if (!consolidated[key]) {
@@ -120,9 +121,7 @@ export const populatePendingLoot = (state: CombatState): CombatState => {
   return newState;
 };
 
-// Finalize loot: apply selected items to player's inventory atomically and mark rewards
 // selectedItems: Array of { name, quantity }
-import { getTransactionLedger } from './transactionLedger';
 
 export const finalizeLoot = (
   state: CombatState,
@@ -150,9 +149,6 @@ export const finalizeLoot = (
 
     const qty = sel.quantity || 1;
 
-    // Debug meta for this selection
-    console.log('[finalizeLoot] selection:', sel.name, 'meta=', meta);
-
     // Enrich with item stats when possible
     let itemType = meta?.type || 'misc';
     let itemDesc = meta?.description || '';
@@ -160,8 +156,6 @@ export const finalizeLoot = (
 
     // Use core stats for weapons/apparel. If meta.type is 'misc' (AI-crafted name), attempt to infer type from name
     try {
-      console.log('[finalizeLoot] enrichment try start for', sel.name, 'itemTypeBefore=', itemType);
-      const { getItemStats, shouldHaveStats } = require('./itemStats');
       // If meta reports misc, aggressively infer type by keyword first
       if (itemType === 'misc') {
         const nameLower = (sel.name || '').toLowerCase();
@@ -170,7 +164,6 @@ export const finalizeLoot = (
         } else if (/\b(armor|helm|helmet|boots|gauntlet|shield|cloak|robe|circlet|necklace|ring)\b/.test(nameLower)) {
           itemType = 'apparel';
         }
-        console.log('[finalizeLoot] early inference result =>', sel.name, '->', itemType);
       }
 
       // Now attempt to get stats using the (possibly inferred) type
@@ -179,28 +172,21 @@ export const finalizeLoot = (
       // If no helpful stats and item still labeled as misc, try guessing type based on name keywords
       if ((!stats.damage && !stats.armor) && itemType === 'misc') {
         const nameLower = (sel.name || '').toLowerCase();
-        // debug
-        console.log('[finalizeLoot] attempting type inference for', sel.name, 'nameLower=', nameLower);
         // quick heuristics: prioritize obvious weapon keywords
         if (/\b(dagger|sword|axe|mace|hammer|bow|staff|greatsword|warhammer|battleaxe)\b/.test(nameLower)) {
-          console.log('[finalizeLoot] inferred weapon by keyword');
           itemType = 'weapon';
           stats = getItemStats(sel.name, 'weapon');
         } else if (/\b(armor|helm|helmet|boots|gauntlet|shield|cloak|robe|circlet|necklace|ring)\b/.test(nameLower)) {
-          console.log('[finalizeLoot] inferred apparel by keyword');
           itemType = 'apparel';
           stats = getItemStats(sel.name, 'apparel');
         } else {
           const guessedWeapon = getItemStats(sel.name, 'weapon');
           const guessedArmor = getItemStats(sel.name, 'apparel');
-          console.log('[finalizeLoot] guessedWeapon=', guessedWeapon, 'guessedArmor=', guessedArmor);
           // Prefer weapon if it reports damage, otherwise apparel if it reports armor
           if (guessedWeapon && guessedWeapon.damage) {
-            console.log('[finalizeLoot] inferred weapon by guessedWeapon');
             itemType = 'weapon';
             stats = guessedWeapon;
           } else if (guessedArmor && guessedArmor.armor) {
-            console.log('[finalizeLoot] inferred apparel by guessedArmor');
             itemType = 'apparel';
             stats = guessedArmor;
           }
@@ -218,7 +204,7 @@ export const finalizeLoot = (
       const idx = updatedInventory.findIndex(it => it.name === sel.name);
       if (idx === -1) {
         const newItem: InventoryItem = {
-          id: `loot_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+          id: `loot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           characterId: characterId || '',
           name: sel.name,
           type: itemType as any,
@@ -260,7 +246,7 @@ export const finalizeLoot = (
       const idx = updatedInventory.findIndex(it => it.name === sel.name);
       if (idx === -1) {
         updatedInventory.push({
-          id: `loot_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+          id: `loot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           characterId: characterId || '',
           name: sel.name,
           type: itemType,
@@ -281,8 +267,6 @@ export const finalizeLoot = (
   const grantedXp = Math.max(0, newState.pendingRewards?.xp || 0);
   const grantedGold = Math.max(0, newState.pendingRewards?.gold || 0);
 
-  // Debug log to verify rewards are being read
-  console.log('[finalizeLoot] Granting rewards:', { grantedXp, grantedGold, pendingRewards: newState.pendingRewards });
 
   // Compute companion XP distribution from defeated enemies' XP, split evenly among participating companions
   const defeated = (state.enemies || []).filter(e => e.currentHealth <= 0);
@@ -332,5 +316,5 @@ export const finalizeLoot = (
 
   // DO NOT record here - let the caller record after applying to prevent duplicate-filtering bug
 
-  return { newState, updatedInventory, grantedXp, grantedGold, grantedItems };
+  return { newState, updatedInventory, grantedXp, grantedGold, grantedItems, companionXp };
 };

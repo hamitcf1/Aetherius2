@@ -73,34 +73,34 @@ const getGemmaApiKey = () =>
 // Get all available API keys (dynamically checks for unlimited keys)
 const getAllApiKeys = (): string[] => {
   const keys: string[] = [];
-  
+
   // Add primary keys
   const key1 = getGeminiApiKey1();
   const key2 = getGeminiApiKey2();
   const key3 = getGeminiApiKey3();
-  
+
   if (key1) keys.push(key1);
   if (key2) keys.push(key2);
   if (key3) keys.push(key3);
-  
+
   // Dynamically check for additional keys (KEY_4, KEY_5, etc.)
   for (let i = 4; i <= 20; i++) {
-    const key = viteEnv[`VITE_GEMINI_API_KEY_${i}`] || 
-                process.env[`GEMINI_API_KEY_${i}`] ||
-                viteEnv[`VITE_API_KEY_${i}`] ||
-                process.env[`API_KEY_${i}`];
+    const key = viteEnv[`VITE_GEMINI_API_KEY_${i}`] ||
+      process.env[`GEMINI_API_KEY_${i}`] ||
+      viteEnv[`VITE_API_KEY_${i}`] ||
+      process.env[`API_KEY_${i}`];
     if (key) keys.push(key);
   }
-  
+
   // Add Gemma key if different
   const gemmaKey = getGemmaApiKey();
   if (gemmaKey && !keys.includes(gemmaKey)) keys.push(gemmaKey);
-  
+
   // Keys are loaded from environment variables - no debug logging in production
   if (keys.length === 0) {
     console.warn(`[Gemini Service] No API keys found! Check your environment variables.`);
   }
-  
+
   return keys;
 };
 
@@ -149,11 +149,11 @@ const recordApiCall = () => {
   const now = Date.now();
   rateLimitState.callsThisMinute.push(now);
   rateLimitState.callsThisHour.push(now);
-  
+
   // Clean up old entries
   const oneMinuteAgo = now - 60000;
   const oneHourAgo = now - 3600000;
-  
+
   rateLimitState.callsThisMinute = rateLimitState.callsThisMinute.filter(t => t > oneMinuteAgo);
   rateLimitState.callsThisHour = rateLimitState.callsThisHour.filter(t => t > oneHourAgo);
 };
@@ -162,11 +162,11 @@ export const getRateLimitStats = () => {
   const now = Date.now();
   const oneMinuteAgo = now - 60000;
   const oneHourAgo = now - 3600000;
-  
+
   // Clean up old entries
   rateLimitState.callsThisMinute = rateLimitState.callsThisMinute.filter(t => t > oneMinuteAgo);
   rateLimitState.callsThisHour = rateLimitState.callsThisHour.filter(t => t > oneHourAgo);
-  
+
   return {
     callsThisMinute: rateLimitState.callsThisMinute.length,
     callsThisHour: rateLimitState.callsThisHour.length,
@@ -269,7 +269,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
         description: q.description,
         location: typeof q.location === 'string' ? q.location : undefined,
         dueDate: typeof q.dueDate === 'string' ? q.dueDate : undefined,
-        objectives: Array.isArray(q.objectives) ? q.objectives.filter((o: any) => 
+        objectives: Array.isArray(q.objectives) ? q.objectives.filter((o: any) =>
           o && typeof o.description === 'string'
         ) : []
       }));
@@ -281,7 +281,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
     if (!Array.isArray(response.updateQuests)) {
       errors.push('updateQuests must be an array');
     } else {
-      sanitized.updateQuests = response.updateQuests.filter((q: any) => 
+      sanitized.updateQuests = response.updateQuests.filter((q: any) =>
         q.title && typeof q.title === 'string' &&
         ['completed', 'failed', 'active'].includes(q.status)
       );
@@ -296,7 +296,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
       if (!allowMechanical) {
         errors.push('newItems are forbidden in Adventure responses (mechanical state must be engine-controlled)');
       } else {
-        sanitized.newItems = response.newItems.filter((i: any) => 
+        sanitized.newItems = response.newItems.filter((i: any) =>
           i.name && typeof i.name === 'string'
         ).map((i: any) => ({
           name: i.name,
@@ -318,7 +318,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
       if (!allowMechanical) {
         errors.push('removedItems are forbidden in Adventure responses (mechanical state must be engine-controlled)');
       } else {
-        sanitized.removedItems = response.removedItems.filter((i: any) => 
+        sanitized.removedItems = response.removedItems.filter((i: any) =>
           i.name && typeof i.name === 'string'
         ).map((i: any) => ({
           name: i.name,
@@ -372,7 +372,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
       sanitized.goldChange = typeof response.goldChange === 'number' ? Math.floor(response.goldChange) : 0;
     }
   }
-  
+
   if (response.xpChange !== undefined) {
     if (!allowMechanical) {
       errors.push('xpChange is forbidden in Adventure responses (mechanical state must be engine-controlled)');
@@ -382,7 +382,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
   }
 
   if (response.timeAdvanceMinutes !== undefined) {
-    sanitized.timeAdvanceMinutes = typeof response.timeAdvanceMinutes === 'number' 
+    sanitized.timeAdvanceMinutes = typeof response.timeAdvanceMinutes === 'number'
       ? Math.max(0, Math.floor(response.timeAdvanceMinutes)) : 0;
   }
 
@@ -424,7 +424,7 @@ export const validateGameStateUpdate = (response: any, options: ValidationOption
 
   // Pass through discoveredLocations for map updates
   if (response.discoveredLocations && Array.isArray(response.discoveredLocations)) {
-    sanitized.discoveredLocations = response.discoveredLocations.filter((loc: any) => 
+    sanitized.discoveredLocations = response.discoveredLocations.filter((loc: any) =>
       loc.name && typeof loc.name === 'string'
     );
   }
@@ -457,7 +457,7 @@ const getAvailableApiKey = (forGemma: boolean = false): string | null => {
     const gemmaKey = getGemmaApiKey();
     if (gemmaKey && !isCoolingDown(apiKeyCooldownUntil.get(gemmaKey))) return gemmaKey;
   }
-  
+
   const allKeys = getAllApiKeys();
   for (const key of allKeys) {
     if (!isCoolingDown(apiKeyCooldownUntil.get(key))) return key;
@@ -492,7 +492,7 @@ const extractJsonObject = (text: string): string | null => {
     .replace(/^```+\s*(?:json)?\s*\n?/i, '')  // Opening fence with optional 'json' label
     .replace(/\n?```+\s*$/i, '')               // Closing fence
     .trim();
-  
+
   // Also handle cases where fence might have extra backticks or spaces
   if (unfenced.startsWith('`')) {
     unfenced = unfenced.replace(/^`+\s*/, '').replace(/\s*`+$/, '').trim();
@@ -515,15 +515,15 @@ const extractJsonObject = (text: string): string | null => {
 const getClientForModel = (modelId: string, specificKey?: string): GoogleGenAI => {
   const forGemma = isGemmaModel(modelId);
   const key = specificKey || getAvailableApiKey(forGemma);
-  
+
   if (!key) {
     throw new Error(forGemma ? 'No available GEMMA API key found.' : 'No available GEMINI API key found.');
   }
-  
+
   if (!clientCache.has(key)) {
     clientCache.set(key, new GoogleGenAI({ apiKey: key }));
   }
-  
+
   return clientCache.get(key)!;
 };
 
@@ -586,29 +586,29 @@ const executeWithFallback = async <T>(
   operation: (model: string, apiKey: string) => Promise<T>,
   options: FallbackOptions = {}
 ): Promise<T> => {
-  const { 
-    preferredModel, 
+  const {
+    preferredModel,
     fallbackChain = TEXT_MODEL_FALLBACK_CHAIN,
-    isImageGeneration = false 
+    isImageGeneration = false
   } = options;
-  
+
   // Build the model list to try
   const modelsToTry: AvailableModel[] = [];
-  
+
   // Add preferred model first if it's in available models
   if (preferredModel && AVAILABLE_MODELS.includes(preferredModel as AvailableModel)) {
     modelsToTry.push(preferredModel as AvailableModel);
   }
-  
+
   // Add rest of fallback chain
   for (const model of fallbackChain) {
     if (!modelsToTry.includes(model)) {
       modelsToTry.push(model);
     }
   }
-  
+
   const errors: Array<{ model: string; error: any }> = [];
-  
+
   for (const model of modelsToTry) {
     if (isCoolingDown(modelCooldownUntil.get(model))) {
       console.warn(`[Gemini Service] Skipping cooling-down model ${model} (${Math.ceil(getCooldownRemainingMs(modelCooldownUntil.get(model)) / 1000)}s remaining)`);
@@ -617,25 +617,21 @@ const executeWithFallback = async <T>(
     // Use all available keys for both Gemini and Gemma models
     const allKeys = getAllApiKeys();
     const keyStatus = getApiKeyStatus();
-    console.log(`[Gemini Service] Trying model: ${model} | Keys: ${keyStatus.available}/${keyStatus.total} available`);
-    
+
     let modelNotFound = false;
-    
+
     let sawQuotaOrOverload = false;
 
     for (const apiKey of allKeys) {
       if (!apiKey) {
-        console.log(`[Gemini Service] Skipping empty key`);
         continue;
       }
       const keyUntil = apiKeyCooldownUntil.get(apiKey);
       if (isCoolingDown(keyUntil)) {
-        console.log(`[Gemini Service] Skipping cooling-down key ...${apiKey.slice(-4)} (${Math.ceil(getCooldownRemainingMs(keyUntil) / 1000)}s remaining)`);
         continue;
       }
-      
+
       try {
-        console.log(`[Gemini Service] Trying model: ${model} with key ending ...${apiKey.slice(-4)}`);
         recordApiCall(); // Track for rate limiting
         const result = await operation(model, apiKey);
         return result;
@@ -643,14 +639,14 @@ const executeWithFallback = async <T>(
         const errorMessage = error?.message || JSON.stringify(error);
         console.warn(`[Gemini Service] Model ${model} failed:`, errorMessage);
         errors.push({ model, error });
-        
+
         // Check if model doesn't exist (404) - skip to next model immediately
         if (errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND')) {
           console.warn(`[Gemini Service] Model ${model} not found, skipping to next model`);
           modelNotFound = true;
           break;
         }
-        
+
         if (isQuotaError(error)) {
           sawQuotaOrOverload = true;
           const retryMs = extractRetryDelayMs(error) ?? DEFAULT_KEY_COOLDOWN_MS;
@@ -667,13 +663,13 @@ const executeWithFallback = async <T>(
           markKeyCooldown(apiKey, Math.min(DEFAULT_KEY_COOLDOWN_MS, retryMs), 'retryable');
           continue;
         }
-        
+
         // Non-retryable error for this key, try next key
         console.warn(`[Gemini Service] Non-retryable error, trying next key...`);
         continue;
       }
     }
-    
+
     // If model wasn't found, it already broke out. Otherwise, all keys exhausted for this model.
     if (!modelNotFound) {
       if (sawQuotaOrOverload) {
@@ -683,7 +679,7 @@ const executeWithFallback = async <T>(
       console.warn(`[Gemini Service] All keys unavailable for model ${model}, trying next model...`);
     }
   }
-  
+
   // All models failed
   const lastError = errors[errors.length - 1]?.error;
   const errorMessage = lastError?.message || JSON.stringify(lastError) || 'Unknown error';
@@ -772,7 +768,7 @@ export const generateGameMasterResponse = async (
   try {
     return await executeWithFallback(async (model, apiKey) => {
       const ai = getClientForModel(model, apiKey);
-      
+
       const run = async (useJsonMode: boolean) => {
         const config = useJsonMode
           ? { responseMimeType: 'application/json' as const }
@@ -798,13 +794,13 @@ export const generateGameMasterResponse = async (
       const text = response.text || "{}";
       const json = extractJsonObject(text) || "{}";
       const parsed = JSON.parse(json);
-      
+
       // Validate and sanitize the response
       const validation = validateGameStateUpdate(parsed);
       if (validation.errors.length > 0) {
         console.warn('[Gemini Service] GM Response validation warnings:', validation.errors);
       }
-      
+
       return validation.sanitized;
     }, { preferredModel, fallbackChain: TEXT_MODEL_FALLBACK_CHAIN });
   } catch (error) {
@@ -822,9 +818,9 @@ export const generateAdventureResponse = async (
 ): Promise<GameStateUpdate> => {
   const preferredModel = String(options?.model || 'gemini-2.5-flash');
   const language = options?.language || 'en';
-  
+
   // Language instruction for non-English responses
-  const languageInstruction = language === 'tr' 
+  const languageInstruction = language === 'tr'
     ? '\n\nIMPORTANT: Respond in Turkish (Türkçe). All narrative content, dialogue, and descriptions must be in Turkish. Keep JSON field names in English but values in Turkish.'
     : '';
 
@@ -868,17 +864,17 @@ export const generateAdventureResponse = async (
       const text = response.text || "{}";
       const json = extractJsonObject(text) || "{}";
       const parsed = JSON.parse(json);
-      
+
       // Validate and sanitize the response - Adventure mode forbids mechanical changes
       const validation = validateGameStateUpdate(parsed, { allowMechanical: false });
       if (validation.errors.length > 0) {
         // Log warnings for the caller to display if needed
         console.warn('[Gemini Service] Adventure response validation warnings:', validation.errors);
       }
-      
+
       // Use sanitized response
       const result = validation.sanitized;
-      
+
       if (!result?.narrative) {
         return { narrative: { title: 'Adventure', content: 'The winds carry no response...' } };
       }
@@ -905,7 +901,7 @@ export const generateLoreImage = async (prompt: string): Promise<string | null> 
           }
         }
       });
-      
+
       // Iterate through parts to find image
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) {
@@ -921,10 +917,10 @@ export const generateLoreImage = async (prompt: string): Promise<string | null> 
 };
 
 export const generateCharacterProfile = async (
-    prompt: string, 
-    mode: 'random' | 'chat_result' | 'text_import' = 'random'
+  prompt: string,
+  mode: 'random' | 'chat_result' | 'text_import' = 'random'
 ): Promise<GeneratedCharacterData | null> => {
-    const baseSchema = `
+  const baseSchema = `
     {
         "name": "String",
         "race": "String",
@@ -956,10 +952,10 @@ export const generateCharacterProfile = async (
     }
     `;
 
-    let instructions = "";
+  let instructions = "";
 
-    if (mode === 'random') {
-        instructions = `Generate a completely random, detailed, unique, and lore-friendly Skyrim character in JSON format. 
+  if (mode === 'random') {
+    instructions = `Generate a completely random, detailed, unique, and lore-friendly Skyrim character in JSON format. 
            Include:
            1. Gender (Male or Female).
            2. Stats balanced to ~300 total.
@@ -969,8 +965,8 @@ export const generateCharacterProfile = async (
            6. An initial journal entry.
            7. An opening story chapter setting the scene.
            Follow this JSON structure exactly: ${baseSchema}`;
-    } else if (mode === 'chat_result') {
-        instructions = `Analyze the conversation transcript between Player and Scribe. Extract all character details (Name, Race, Gender, Class, Backstory, etc.). 
+  } else if (mode === 'chat_result') {
+    instructions = `Analyze the conversation transcript between Player and Scribe. Extract all character details (Name, Race, Gender, Class, Backstory, etc.). 
            Generate a full JSON profile matching these details. 
            If details are missing, extrapolate them creatively to fit the theme.
            Include:
@@ -982,8 +978,8 @@ export const generateCharacterProfile = async (
            6. Initial journal entry.
            7. Opening story chapter.
            Follow this JSON structure exactly: ${baseSchema}`;
-    } else if (mode === 'text_import') {
-        instructions = `Analyze the provided text which represents a character sheet, description, or paste. 
+  } else if (mode === 'text_import') {
+    instructions = `Analyze the provided text which represents a character sheet, description, or paste. 
            Extract all known details (Name, Race, Gender, Class, Stats, Backstory, Inventory, etc.) and map them to the JSON structure.
            For any missing fields (e.g., if the text doesn't specify exact stats numbers or skills), INFER appropriate values based on the character's description and archetype to ensure a complete and playable profile.
            Include:
@@ -995,87 +991,87 @@ export const generateCharacterProfile = async (
            6. An initial journal entry reflecting the text.
            7. An opening story chapter.
            Follow this JSON structure exactly: ${baseSchema}`;
-    }
+  }
 
-    let contents = instructions;
-    if (prompt) {
-         if (mode === 'chat_result') {
-             contents = `${instructions}\n\n--- TRANSCRIPT START ---\n${prompt}\n--- TRANSCRIPT END ---`;
-         } else if (mode === 'text_import') {
-             contents = `${instructions}\n\n--- USER TEXT INPUT ---\n${prompt}\n--- INPUT END ---`;
-         } else {
-             contents = `${instructions}\n\nAdditional Context: ${prompt}`;
-         }
+  let contents = instructions;
+  if (prompt) {
+    if (mode === 'chat_result') {
+      contents = `${instructions}\n\n--- TRANSCRIPT START ---\n${prompt}\n--- TRANSCRIPT END ---`;
+    } else if (mode === 'text_import') {
+      contents = `${instructions}\n\n--- USER TEXT INPUT ---\n${prompt}\n--- INPUT END ---`;
+    } else {
+      contents = `${instructions}\n\nAdditional Context: ${prompt}`;
     }
+  }
 
-    try {
-        return await executeWithFallback(async (model, apiKey) => {
-            const ai = getClientForModel(model, apiKey);
-            
-            const run = async (useJsonMode: boolean) => {
-                const config = useJsonMode
-                    ? { responseMimeType: 'application/json' as const }
-                    : undefined;
-                return await ai.models.generateContent({
-                    model: model,
-                    contents: contents,
-                    ...(config ? { config } : {})
-                });
-            };
+  try {
+    return await executeWithFallback(async (model, apiKey) => {
+      const ai = getClientForModel(model, apiKey);
 
-            let response: any;
-            try {
-                response = await run(supportsJsonMimeType(model));
-            } catch (e) {
-                if (isJsonModeNotEnabledError(e)) {
-                    response = await run(false);
-                } else {
-                    throw e;
-                }
-            }
-            
-            const text = response.text;
-            if (!text) throw new Error('No response text');
-            const json = extractJsonObject(text) || text;
-            return JSON.parse(json) as GeneratedCharacterData;
-        }, { preferredModel: 'gemini-2.5-flash-lite', fallbackChain: TEXT_MODEL_FALLBACK_CHAIN });
-    } catch (e) {
-        console.error("Character Gen Error (all models failed)", e);
-        return null;
-    }
+      const run = async (useJsonMode: boolean) => {
+        const config = useJsonMode
+          ? { responseMimeType: 'application/json' as const }
+          : undefined;
+        return await ai.models.generateContent({
+          model: model,
+          contents: contents,
+          ...(config ? { config } : {})
+        });
+      };
+
+      let response: any;
+      try {
+        response = await run(supportsJsonMimeType(model));
+      } catch (e) {
+        if (isJsonModeNotEnabledError(e)) {
+          response = await run(false);
+        } else {
+          throw e;
+        }
+      }
+
+      const text = response.text;
+      if (!text) throw new Error('No response text');
+      const json = extractJsonObject(text) || text;
+      return JSON.parse(json) as GeneratedCharacterData;
+    }, { preferredModel: 'gemini-2.5-flash-lite', fallbackChain: TEXT_MODEL_FALLBACK_CHAIN });
+  } catch (e) {
+    console.error("Character Gen Error (all models failed)", e);
+    return null;
+  }
 };
 
-export const chatWithScribe = async (history: {role: 'user' | 'model', parts: [{ text: string }]}[], message: string) => {
-    // chatWithScribe uses fallback but keeps chat context, so we try models sequentially
-    const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
-    
-    for (const model of modelsToTry) {
-        try {
-            const apiKey = getAvailableApiKey(isGemmaModel(model));
-            if (!apiKey) continue;
-            
-            const ai = getClientForModel(model, apiKey);
-            const chat = ai.chats.create({
-                model: model,
-                history: history,
-                config: {
-                    systemInstruction: "You are the Character Creation Scribe for a Skyrim RPG app. Your goal is to help the user create a character by asking them questions one by one. \n\nIMPORTANT: You MUST ask for the character's NAME at some point if the user hasn't provided it.\n\nStart by asking about their preferred playstyle or race. Ask 3-4 probing questions about their morality, background, gender, or goals. Keep responses short and immersive. Once you have enough info, or if the user asks to 'finish' or 'generate', output a SPECIAL TOKEN '[[GENERATE_CHARACTER]]' at the end of your message to signal the UI to trigger generation."
-                }
-            });
+export const chatWithScribe = async (history: { role: 'user' | 'model', parts: [{ text: string }] }[], message: string) => {
+  // chatWithScribe uses fallback but keeps chat context, so we try models sequentially
+  const modelsToTry: AvailableModel[] = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
 
-            const result = await chat.sendMessage({ message });
-            return result.text;
-        } catch (error: any) {
-            console.warn(`[chatWithScribe] Model ${model} failed:`, error?.message);
-            if (isQuotaError(error)) {
-                const apiKey = getAvailableApiKey(isGemmaModel(model));
-                if (apiKey) markKeyCooldown(apiKey, DEFAULT_KEY_COOLDOWN_MS, 'quota');
-            }
-            continue;
+  for (const model of modelsToTry) {
+    try {
+      const apiKey = getAvailableApiKey(isGemmaModel(model));
+      if (!apiKey) continue;
+
+      const ai = getClientForModel(model, apiKey);
+      const chat = ai.chats.create({
+        model: model,
+        history: history,
+        config: {
+          systemInstruction: "You are the Character Creation Scribe for a Skyrim RPG app. Your goal is to help the user create a character by asking them questions one by one. \n\nIMPORTANT: You MUST ask for the character's NAME at some point if the user hasn't provided it.\n\nStart by asking about their preferred playstyle or race. Ask 3-4 probing questions about their morality, background, gender, or goals. Keep responses short and immersive. Once you have enough info, or if the user asks to 'finish' or 'generate', output a SPECIAL TOKEN '[[GENERATE_CHARACTER]]' at the end of your message to signal the UI to trigger generation."
         }
+      });
+
+      const result = await chat.sendMessage({ message });
+      return result.text;
+    } catch (error: any) {
+      console.warn(`[chatWithScribe] Model ${model} failed:`, error?.message);
+      if (isQuotaError(error)) {
+        const apiKey = getAvailableApiKey(isGemmaModel(model));
+        if (apiKey) markKeyCooldown(apiKey, DEFAULT_KEY_COOLDOWN_MS, 'quota');
+      }
+      continue;
     }
-    
-    throw new Error('All models failed for chatWithScribe');
+  }
+
+  throw new Error('All models failed for chatWithScribe');
 };
 
 // Chat with a companion (in-character reply)
@@ -1106,13 +1102,13 @@ export const chatWithCompanion = async (companion: { name: string; personality?:
 };
 
 export const generateCharacterProfileImage = async (
-    characterName: string,
-    race: string,
-    gender: string,
-    archetype: string
+  characterName: string,
+  race: string,
+  gender: string,
+  archetype: string
 ): Promise<string | null> => {
   const imagePrompt = `A detailed character portrait of a ${gender.toLowerCase()} ${race.split(' ')[0].toLowerCase()} ${archetype.toLowerCase()} named ${characterName} from Skyrim. Fantasy art style, high quality, heroic pose, detailed armor and features, professional fantasy game character design, no text, plain background.`;
-  
+
   try {
     return await executeWithFallback(async (model, apiKey) => {
       const ai = getClientForModel(model, apiKey);
@@ -1127,7 +1123,7 @@ export const generateCharacterProfileImage = async (
           }
         }
       });
-      
+
       // Iterate through parts to find image
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) {
@@ -1273,7 +1269,7 @@ Return ONLY valid JSON.`;
   try {
     return await executeWithFallback(async (model, apiKey) => {
       const ai = getClientForModel(model, apiKey);
-      
+
       const run = async (useJsonMode: boolean) => {
         const config = useJsonMode
           ? { responseMimeType: 'application/json' as const }
@@ -1377,7 +1373,7 @@ export const generateDynamicEvents = async (
   const tier = playerLevel <= 5 ? 1 : playerLevel <= 10 ? 2 : playerLevel <= 15 ? 3 : playerLevel <= 25 ? 4 : playerLevel <= 35 ? 5 : 6;
   const tierNames = ['Novice', 'Apprentice', 'Adept', 'Expert', 'Master', 'Legendary'];
   const tierName = tierNames[tier - 1];
-  
+
   const rewardCaps: Record<number, { maxGold: number; maxXp: number }> = {
     1: { maxGold: 200, maxXp: 150 },
     2: { maxGold: 500, maxXp: 350 },
@@ -1488,7 +1484,7 @@ Return ONLY the JSON array, no other text.`;
       const text = response.text || "[]";
       const json = extractJsonObject(text) || "[]";
       const events: GeneratedEventData[] = JSON.parse(json);
-      
+
       // Validate and sanitize events
       return events.map(event => ({
         name: String(event.name || 'Unknown Event'),

@@ -23,7 +23,7 @@ interface Transaction {
 class TransactionLedger {
   private completedTransactions: Map<string, Transaction> = new Map();
   private characterId: string | null = null;
-  
+
   // Maximum age before a transaction ID is forgotten (prevents memory leak)
   private readonly MAX_TRANSACTION_AGE_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -55,12 +55,12 @@ class TransactionLedger {
     }
   ): void {
     if (!this.characterId) return;
-    
+
     let type: Transaction['type'] = 'mixed';
     if (details.goldAmount && !details.items?.length && !details.xpAmount) type = 'gold';
     else if (!details.goldAmount && details.items?.length && !details.xpAmount) type = 'items';
     else if (!details.goldAmount && !details.items?.length && details.xpAmount) type = 'xp';
-    
+
     this.completedTransactions.set(transactionId, {
       id: transactionId,
       type,
@@ -132,13 +132,13 @@ class TransactionLedger {
   private cleanupOldTransactions(): void {
     const now = Date.now();
     const toDelete: string[] = [];
-    
+
     this.completedTransactions.forEach((txn, id) => {
       if (now - txn.timestamp > this.MAX_TRANSACTION_AGE_MS) {
         toDelete.push(id);
       }
     });
-    
+
     toDelete.forEach(id => this.completedTransactions.delete(id));
   }
 
@@ -186,11 +186,6 @@ export function filterDuplicateTransactions(
 } {
   const ledger = getTransactionLedger();
 
-  // Debug: log inputs for easier tracing of filtered XP/gold issues
-  try {
-    console.log('[TransactionLedger] filterDuplicateTransactions input:', { transactionId: update.transactionId, goldChange: update.goldChange, xpChange: update.xpChange, isPreview: update.isPreview, newItems: update.newItems?.length });
-  } catch (e) {}
-
   // Check gold
   const goldRes = ledger.shouldApplyGoldChange(update.goldChange, update.transactionId, update.isPreview);
   // Check xp
@@ -227,8 +222,8 @@ export function filterDuplicateTransactions(
   // If any of them will be applied, record the transaction to avoid duplicates
   if (!wasFiltered && update.transactionId) {
     const recordedItems = [
-        ...(update.newItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: true })) || []),
-        ...(update.removedItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: false })) || [])
+      ...(update.newItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: true })) || []),
+      ...(update.removedItems?.map((i: any) => ({ name: i.name, quantity: i.quantity, added: false })) || [])
     ];
 
     ledger.recordTransaction(update.transactionId, {
@@ -239,13 +234,7 @@ export function filterDuplicateTransactions(
   }
 
   if (wasFiltered) {
-    try {
-      console.warn('[TransactionLedger] update filtered:', { transactionId: update.transactionId, reason: reasons.join(','), filteredKeys: Object.keys(filtered) });
-      // Also show recent transactions for context
-      console.log('[TransactionLedger] recentTransactions:', ledger.getRecentTransactions(5));
-    } catch (e) {}
-  } else {
-    try { console.log('[TransactionLedger] transaction recorded:', update.transactionId); } catch (e) {}
+    // Transaction was filtered as duplicate
   }
 
   return {

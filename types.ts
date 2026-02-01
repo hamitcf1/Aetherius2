@@ -82,7 +82,7 @@ export interface Character {
   isDead?: boolean; // Mark character as dead (cannot be played)
   deathDate?: string; // When the character died (narrative)
   deathCause?: string; // How the character died
-  
+
   // Progression
   level: number;
   experience: number; // Current level progress or total XP
@@ -96,7 +96,7 @@ export interface Character {
   // Stats (max values)
   stats: Stats;
   skills: Skill[];
-  
+
   // Current vitals (for adventure/combat)
   currentVitals?: CurrentVitals;
 
@@ -109,27 +109,27 @@ export interface Character {
   psychology: string;
   breakingPoint: string;
   moralCode: string;
-  
+
   // Constraints
   allowedActions: string;
   forbiddenActions: string;
-  
+
   // Weaknesses & Strengths
   fears: string;
   weaknesses: string;
   talents: string;
   magicApproach: string;
-  
+
   // Worldview
   factionAllegiance: string;
   worldview: string;
   daedricPerception: string;
-  
+
   // Evolution
   forcedBehavior: string;
   longTermEvolution: string;
   milestones: Milestone[];
-  
+
   // Narrative
   backstory: string;
   lastPlayed: number;
@@ -139,14 +139,14 @@ export interface Character {
   completedCombats?: string[];
   // Cleared dungeon IDs with clearance count (for tracking re-entries with scaling enemies)
   clearedDungeons?: Array<{ dungeonId: string; clearCount: number; lastCleared: number }>;
-  
+
   // Extended game systems state (opaque to avoid circular imports)
   shoutState?: unknown; // ShoutState from shoutsService
   enchantingState?: unknown; // EnchantingState from enchantingService
   standingStoneState?: unknown; // StandingStoneState from standingStoneService
   bountyState?: unknown; // BountyState from bountyService
   factionReputation?: unknown[]; // FactionReputation[] from factionService
-  
+
   // Additional extended systems
   trainingState?: unknown; // TrainingState from trainingService
   transformationState?: unknown; // TransformationState from transformationService
@@ -242,7 +242,7 @@ export interface CustomQuest {
   questType?: 'main' | 'side' | 'misc' | 'bounty';
   // Difficulty level (affects rewards)
   difficulty?: 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary';
-} 
+}
 
 export interface StoryChapter {
   id: string;
@@ -360,8 +360,8 @@ export interface GameStateUpdate {
     xpReward?: number;
     goldReward?: number;
   }>;
-  updateQuests?: Array<{ 
-    title: string; 
+  updateQuests?: Array<{
+    title: string;
     status: 'completed' | 'failed' | 'active';
     xpAwarded?: number;
     goldAwarded?: number;
@@ -381,10 +381,10 @@ export interface GameStateUpdate {
   // Progression / survival
   timeAdvanceMinutes?: number;
   needsChange?: Partial<SurvivalNeeds>;
-  
+
   // Current location for map updates
   currentLocation?: string;
-  
+
   // Vitals (health, magicka, stamina) changes for adventure
   vitalsChange?: Partial<CurrentVitals>;
   // Effect objects representing atomic game effects (applied via central gate)
@@ -426,11 +426,11 @@ export interface GameStateUpdate {
   _alreadyAppliedLocally?: boolean;
   // Optional tags emitted by AI/narrative to signal special handling (e.g., 'bonfire')
   tags?: string[];
-  
+
   // Dialogue choices to present as clickable options
-  choices?: Array<{ 
-    label: string; 
-    playerText: string; 
+  choices?: Array<{
+    label: string;
+    playerText: string;
     topic?: string;
     // Preview costs shown on the button (NOT applied until selected)
     previewCost?: {
@@ -485,7 +485,7 @@ export interface GameStateUpdate {
       interactionState?: 'idle' | 'conversing' | 'suspicious' | 'hostile' | 'resolved';
       dismissed?: boolean;
     }>;
-    
+
     // Scene operations
     sceneStart?: {
       type: 'checkpoint' | 'dialogue' | 'combat' | 'exploration' | 'trade' | 'quest' | 'random_encounter';
@@ -496,7 +496,7 @@ export interface GameStateUpdate {
     topicsResolved?: string[];
     optionsExhausted?: string[];
     sceneEvents?: string[];
-    
+
     // Player facts
     factsEstablished?: Array<{
       category: 'identity' | 'situation' | 'relationships' | 'claims';
@@ -508,7 +508,7 @@ export interface GameStateUpdate {
       factKey: string;
       toNPCNames: string[];
     }>;
-    
+
     // Consequences
     consequencesTriggered?: Array<'entry_granted' | 'entry_denied' | 'arrest_attempt' | 'combat_initiated' | 'bounty_added' | 'reputation_change' | 'item_confiscated' | 'gold_paid' | 'quest_updated' | 'npc_disposition_change' | 'forced_retreat' | 'death'>;
     newConsequences?: Array<{
@@ -592,7 +592,7 @@ export interface CombatEnemy {
   abilities: CombatAbility[];
   weaknesses?: string[]; // e.g., 'fire', 'silver'
   resistances?: string[]; // e.g., 'frost', 'poison'
-  loot?: Array<{ name: string; type: string; description: string; quantity: number; dropChance: number }>;
+  loot?: Array<{ name: string; type: string; description: string; quantity: number; dropChance: number }>; // kept simple for source data
   xpReward: number;
   goldReward?: number;
   isBoss?: boolean;
@@ -636,14 +636,14 @@ export interface CombatState {
   pendingRewards?: {
     xp: number;
     gold: number;
-    items: Array<{ name: string; type: string; description?: string; quantity: number }>;
+    items: Array<{ name: string; type: string; description?: string; quantity: number; enchantment?: any }>;
   };
 
   // Per-enemy loot snapshot (so defeated enemy state persists until looted)
   pendingLoot?: Array<{
     enemyId: string;
     enemyName: string;
-    loot: Array<{ name: string; type: string; description?: string; quantity: number; rarity?: string }>;
+    loot: Array<{ name: string; type: string; description?: string; quantity: number; rarity?: string; enchantment?: any }>;
   }>;
   // Count player action types used during combat to drive skill progression
   playerActionCounts?: Record<string, number>;
@@ -666,7 +666,7 @@ export interface CombatState {
   rewards?: {
     xp: number;
     gold: number;
-    items: Array<{ name: string; type: string; description: string; quantity: number }>;
+    items: Array<{ name: string; type: string; description: string; quantity: number; enchantment?: any }>;
     transactionId?: string;
     combatId?: string;
     companionXp?: Array<{ companionId: string; xp: number }>;
@@ -678,7 +678,7 @@ export interface CombatState {
     winner?: 'player' | 'enemy' | 'escaped' | 'unresolved';
     survivors: Array<{ id: string; name: string; currentHealth: number }>;
     playerStatus: { currentHealth: number; currentMagicka: number; currentStamina: number; isAlive: boolean };
-    rewards?: { xp: number; gold: number; items: Array<{ name: string; type?: string; description?: string; quantity: number }>; transactionId?: string; combatId?: string };
+    rewards?: { xp: number; gold: number; items: Array<{ name: string; type?: string; description?: string; quantity: number; enchantment?: any }>; transactionId?: string; combatId?: string };
     timestamp: number;
   };
 }
@@ -1104,13 +1104,13 @@ export const DEFAULT_DYNAMIC_EVENT_STATE: Omit<DynamicEventState, 'characterId'>
 // FAST TRAVEL & LOCATION TYPES
 // ============================================================================
 
-export type LocationType = 
-  | 'city' | 'town' | 'village' | 'fort' | 'camp' | 'ruin' 
-  | 'cave' | 'mine' | 'dungeon' | 'tower' | 'landmark' 
+export type LocationType =
+  | 'city' | 'town' | 'village' | 'fort' | 'camp' | 'ruin'
+  | 'cave' | 'mine' | 'dungeon' | 'tower' | 'landmark'
   | 'farm' | 'mill' | 'estate' | 'dock' | 'standing_stone'
   | 'dragon_lair' | 'giant_camp' | 'bandit_camp' | 'nordic_ruin';
 
-export type HoldName = 
+export type HoldName =
   | 'Whiterun' | 'Haafingar' | 'Eastmarch' | 'The Rift' | 'The Reach'
   | 'Falkreath' | 'The Pale' | 'Winterhold' | 'Hjaalmarch';
 
@@ -1124,14 +1124,14 @@ export interface TravelState {
 // FACTION & REPUTATION TYPES
 // ============================================================================
 
-export type FactionId = 
+export type FactionId =
   | 'empire' | 'stormcloaks' | 'companions' | 'thieves_guild' | 'dark_brotherhood'
   | 'college_of_winterhold' | 'greybeards' | 'blades' | 'bards_college'
   | 'dawnguard' | 'volkihar' | 'vigilants_of_stendarr'
   | 'forsworn' | 'silver_hand' | 'thalmor' | 'penitus_oculatus'
   | 'whiterun' | 'solitude' | 'windhelm' | 'riften' | 'markarth' | 'morthal' | 'falkreath' | 'dawnstar' | 'winterhold';
 
-export type ReputationLevel = 
+export type ReputationLevel =
   | 'hated' | 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'honored' | 'revered' | 'exalted';
 
 export interface FactionReputationState {
@@ -1148,7 +1148,7 @@ export interface FactionReputationState {
 // WEATHER TYPES
 // ============================================================================
 
-export type WeatherType = 
+export type WeatherType =
   | 'clear' | 'cloudy' | 'overcast' | 'foggy' | 'misty'
   | 'rain' | 'light_rain' | 'heavy_rain' | 'thunderstorm'
   | 'snow' | 'light_snow' | 'heavy_snow' | 'blizzard'

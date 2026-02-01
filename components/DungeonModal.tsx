@@ -61,13 +61,13 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
   const visited = new Set<string>();
   const rowAssignment = new Map<string, number>();
   const queue: { id: string; row: number }[] = [{ id: startNode.id, row: 0 }];
-  
+
   while (queue.length > 0) {
     const { id, row } = queue.shift()!;
     if (visited.has(id)) continue;
     visited.add(id);
     rowAssignment.set(id, row);
-    
+
     const node = nodeMap.get(id);
     if (node && Array.isArray(node.connections)) {
       for (const connId of node.connections) {
@@ -109,7 +109,7 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
   const revealedSet = new Set<string>();
   completedNodes.forEach(id => revealedSet.add(id));
   revealedSet.add(currentNodeId);
-  
+
   // Reveal immediate connections from current node
   const currentNode = nodeMap.get(currentNodeId);
   if (currentNode && Array.isArray(currentNode.connections)) {
@@ -139,9 +139,9 @@ function generateSlayTheSpireMap(dungeon: DungeonDefinition, completedNodes: str
   return { nodes: mapNodes, rows, cols: maxCols };
 }
 
-export const DungeonModal: React.FC<DungeonModalProps> = ({ 
-  open, dungeonId, onClose, activeCharacterId, character, companions, inventory, 
-  onApplyRewards, onApplyBuff, onStartCombat, showToast, onInventoryUpdate
+export const DungeonModal: React.FC<DungeonModalProps> = ({
+  open, dungeonId, onClose, activeCharacterId, character, companions, inventory,
+  onApplyRewards, onApplyBuff, onStartCombat, showToast, onInventoryUpdate, onNeedsChange
 }) => {
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
   const [state, setState] = useState<DungeonState | null>(null);
@@ -153,10 +153,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   const [showFloorComplete, setShowFloorComplete] = useState(false);
   const [currentFloor, setCurrentFloor] = useState(1);
   const [floorScalingFactor, setFloorScalingFactor] = useState(1);
-  
+
   // Doom-style minigame mode
   const [doomModeOpen, setDoomModeOpen] = useState(false);
-  
+
   // Refs for node positions (to draw connections accurately)
   const nodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -170,7 +170,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
   useEffect(() => {
     if (!open || !dungeon) return;
-    
+
     // Check minimum level requirement
     const playerLevel = character?.level || 1;
     if (dungeon.minimumLevel && playerLevel < dungeon.minimumLevel) {
@@ -178,18 +178,18 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
       onClose();
       return;
     }
-    
+
     // Warn about recommended level (but don't block)
     if (playerLevel < dungeon.recommendedLevel) {
       showToast?.(`Warning: ${dungeon.name} is recommended for level ${dungeon.recommendedLevel}+. You are level ${playerLevel}.`, 'warning');
     }
-    
+
     const startNode = dungeon.nodes.find(n => n.id === dungeon.startNodeId) || dungeon.nodes[0];
     // Use character's actual current vitals, or max stats if no current vitals
     const maxHealth = character?.stats?.health || 100;
     const maxMagicka = character?.stats?.magicka || 100;
     const maxStamina = character?.stats?.stamina || 100;
-    const playerVitals = { 
+    const playerVitals = {
       currentHealth: character?.currentVitals?.currentHealth ?? maxHealth,
       currentMagicka: character?.currentVitals?.currentMagicka ?? maxMagicka,
       currentStamina: character?.currentVitals?.currentStamina ?? maxStamina,
@@ -224,14 +224,14 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   // Calculate node positions after render for accurate connection lines
   useEffect(() => {
     if (!mapData || !mapContainerRef.current) return;
-    
+
     const updatePositions = () => {
       const container = mapContainerRef.current;
       if (!container) return;
-      
+
       const containerRect = container.getBoundingClientRect();
       const newPositions = new Map<string, { x: number; y: number }>();
-      
+
       nodeRefs.current.forEach((el, nodeId) => {
         if (el) {
           const rect = el.getBoundingClientRect();
@@ -242,15 +242,15 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           });
         }
       });
-      
+
       setNodePositions(newPositions);
     };
-    
+
     // Wait for layout to complete
     const timer = setTimeout(updatePositions, 100);
     // Also update on resize
     window.addEventListener('resize', updatePositions);
-    
+
     return () => {
       clearTimeout(timer);
       window.removeEventListener('resize', updatePositions);
@@ -299,9 +299,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     if (!state || !dungeon) return;
 
     // Mark as visited
-    setState(prev => prev ? { 
-      ...prev, 
-      visitedNodes: Array.from(new Set([...prev.visitedNodes, node.id])) 
+    setState(prev => prev ? {
+      ...prev,
+      visitedNodes: Array.from(new Set([...prev.visitedNodes, node.id]))
     } : prev);
 
     switch (node.type) {
@@ -313,7 +313,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         const clearCount = clearData?.clearCount || 0;
         const baseScaleFactor = 1 + (clearCount * 0.25); // 25% stronger per clear
         const totalScaleFactor = baseScaleFactor * floorScalingFactor; // Also scale by current floor
-        
+
         const enemies = (node.enemies || []).map(e => {
           const scaled: CombatEnemy = {
             ...e,
@@ -354,10 +354,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             currentMagicka: Math.min(prev.playerVitals.currentMagicka + healM, maxM),
             currentStamina: Math.min(prev.playerVitals.currentStamina + healS, maxS),
           };
-          return { 
-            ...prev, 
-            playerVitals: newVitals, 
-            completedNodes: Array.from(new Set([...prev.completedNodes, node.id])) 
+          return {
+            ...prev,
+            playerVitals: newVitals,
+            completedNodes: Array.from(new Set([...prev.completedNodes, node.id]))
           };
         });
         // Auto-advance to next if only one connection
@@ -369,21 +369,21 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
       case 'reward':
         if (node.rewards) {
           // Accumulate rewards instead of applying immediately
-          setState(prev => prev ? { 
-            ...prev, 
-            collectedRewards: { 
-              ...prev.collectedRewards, 
-              gold: prev.collectedRewards.gold + (node.rewards?.gold || 0), 
-              xp: prev.collectedRewards.xp + (node.rewards?.xp || 0), 
-              items: [...prev.collectedRewards.items, ...(node.rewards?.items || [])] 
-            }, 
-            completedNodes: Array.from(new Set([...prev.completedNodes, node.id])) 
+          setState(prev => prev ? {
+            ...prev,
+            collectedRewards: {
+              ...prev.collectedRewards,
+              gold: prev.collectedRewards.gold + (node.rewards?.gold || 0),
+              xp: prev.collectedRewards.xp + (node.rewards?.xp || 0),
+              items: [...prev.collectedRewards.items, ...(node.rewards?.items || [])]
+            },
+            completedNodes: Array.from(new Set([...prev.completedNodes, node.id]))
           } : prev);
         }
         if (node.rewards?.buff && onApplyBuff) {
           const b = node.rewards.buff;
           const eff = {
-            id: `dungeon_buff_${b.name.toLowerCase().replace(/\s+/g,'_')}_${Date.now()}`,
+            id: `dungeon_buff_${b.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
             name: b.name,
             type: 'buff',
             icon: '✨',
@@ -418,27 +418,27 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   // Handle event choice
   const handleEventChoice = (choice: { label: string; outcome: string; value?: number }) => {
     if (!eventChoice || !state) return;
-    
+
     if (choice.outcome === 'reward') {
       // Accumulate rewards instead of applying immediately
-      setState(prev => prev ? { 
-        ...prev, 
-        collectedRewards: { ...prev.collectedRewards, gold: prev.collectedRewards.gold + (choice.value || 0) }, 
-        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id])) 
+      setState(prev => prev ? {
+        ...prev,
+        collectedRewards: { ...prev.collectedRewards, gold: prev.collectedRewards.gold + (choice.value || 0) },
+        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id]))
       } : prev);
     } else if (choice.outcome === 'damage') {
-      setState(prev => prev ? { 
-        ...prev, 
-        playerVitals: { ...prev.playerVitals, currentHealth: Math.max(0, prev.playerVitals.currentHealth - (choice.value || 0)) }, 
-        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id])) 
+      setState(prev => prev ? {
+        ...prev,
+        playerVitals: { ...prev.playerVitals, currentHealth: Math.max(0, prev.playerVitals.currentHealth - (choice.value || 0)) },
+        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id]))
       } : prev);
     } else {
-      setState(prev => prev ? { 
-        ...prev, 
-        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id])) 
+      setState(prev => prev ? {
+        ...prev,
+        completedNodes: Array.from(new Set([...prev.completedNodes, eventChoice.id]))
       } : prev);
     }
-    
+
     // Auto-advance
     if (eventChoice.connections.length === 1) {
       setTimeout(() => advanceToNode(eventChoice.connections[0]), 500);
@@ -480,14 +480,14 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
       if (rewards) {
         // Accumulate gold/XP only - items are already in inventory from CombatModal
-        setState(prev => prev ? { 
-          ...prev, 
-          collectedRewards: { 
-            gold: prev.collectedRewards.gold + (rewards.gold || 0), 
-            xp: prev.collectedRewards.xp + (rewards.xp || 0), 
+        setState(prev => prev ? {
+          ...prev,
+          collectedRewards: {
+            gold: prev.collectedRewards.gold + (rewards.gold || 0),
+            xp: prev.collectedRewards.xp + (rewards.xp || 0),
             // Track items for display purposes only (they're already in inventory)
-            items: [...prev.collectedRewards.items, ...(rewards.items || [])] 
-          } 
+            items: [...prev.collectedRewards.items, ...(rewards.items || [])]
+          }
         } : prev);
         showToast?.(`Combat won! +${rewards.gold || 0}g, +${rewards.xp || 0}XP accumulated`, 'info');
       }
@@ -600,20 +600,20 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   // Render connections between nodes using actual DOM positions
   const renderConnections = () => {
     if (!mapData || !state || nodePositions.size === 0) return null;
-    
+
     const connections: React.ReactNode[] = [];
     const rendered = new Set<string>(); // Avoid duplicate lines
-    
+
     mapData.nodes.forEach(node => {
       const fromPos = nodePositions.get(node.id);
       if (!fromPos) return;
-      
+
       node.connections.forEach(toId => {
         // Create a consistent key to avoid duplicate lines (A->B and B->A)
         const lineKey = [node.id, toId].sort().join('-');
         if (rendered.has(lineKey)) return;
         rendered.add(lineKey);
-        
+
         const toPos = nodePositions.get(toId);
         if (!toPos) return;
 
@@ -622,7 +622,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         const toNode = mapData.nodes.find(n => n.id === toId);
         const fromRevealed = fromNode?.revealed || state.completedNodes.includes(node.id);
         const toRevealed = toNode?.revealed || state.completedNodes.includes(toId);
-        
+
         // Only draw connection if at least one endpoint is revealed
         if (!fromRevealed && !toRevealed) return;
 
@@ -630,10 +630,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         const isToActive = state.currentNodeId === toId || state.completedNodes.includes(toId);
         const isActive = isFromActive || isToActive;
         const isFullyActive = isFromActive && isToActive;
-        
+
         // Dimmer line if connecting to unrevealed node
         const opacity = (!fromRevealed || !toRevealed) ? 0.3 : 1;
-        
+
         connections.push(
           <line
             key={`${node.id}-${toId}`}
@@ -672,12 +672,11 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             <h2 className="text-2xl font-serif text-skyrim-gold">{dungeon.name}</h2>
             <p className="text-xs text-skyrim-text/70 mt-1">{dungeon.ambientDescription}</p>
             <div className="flex items-center gap-3 mt-1">
-              <span className={`text-xs px-2 py-0.5 rounded ${
-                dungeon.difficulty === 'easy' ? 'bg-green-900/50 text-green-300' :
-                dungeon.difficulty === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
-                dungeon.difficulty === 'hard' ? 'bg-orange-900/50 text-orange-300' :
-                'bg-red-900/50 text-red-300'
-              }`}>
+              <span className={`text-xs px-2 py-0.5 rounded ${dungeon.difficulty === 'easy' ? 'bg-green-900/50 text-green-300' :
+                  dungeon.difficulty === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
+                    dungeon.difficulty === 'hard' ? 'bg-orange-900/50 text-orange-300' :
+                      'bg-red-900/50 text-red-300'
+                }`}>
                 {dungeon.difficulty.toUpperCase()}
               </span>
               <span className="text-xs text-skyrim-text/70">
@@ -694,14 +693,14 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             )}
             <div className="text-sm text-skyrim-gold">Gold: {state.collectedRewards.gold}</div>
             <div className="text-sm text-blue-300">XP: {state.collectedRewards.xp}</div>
-            <button 
+            <button
               onClick={() => setDoomModeOpen(true)}
               className="px-3 py-1.5 bg-amber-600/30 text-amber-300 rounded hover:bg-amber-600/50 flex items-center gap-1 border border-amber-600/50 transition-all hover:scale-105"
               title="Enter Doom Mode - First-person dungeon crawler!"
             >
               <Gamepad2 size={14} /> Doom Mode
             </button>
-            <button 
+            <button
               onClick={() => setShowExitConfirm(true)}
               className="px-3 py-1.5 bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1"
             >
@@ -715,11 +714,11 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           <div className="flex-1 relative p-4 overflow-auto" ref={mapContainerRef}>
             {/* Connection lines */}
             {renderConnections()}
-            
+
             {/* Nodes Grid */}
-            <div 
+            <div
               className="relative min-h-full"
-              style={{ 
+              style={{
                 display: 'grid',
                 gridTemplateRows: `repeat(${mapData.rows}, 80px)`,
                 gridTemplateColumns: `repeat(${mapData.cols + 1}, 1fr)`,
@@ -781,13 +780,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                     }}
                     className="w-full px-3 py-2 bg-skyrim-gold text-black rounded font-medium hover:bg-amber-400"
                   >
-                    {selectedNode.type === 'combat' ? 'Fight' : 
-                     selectedNode.type === 'elite' ? 'Challenge Elite' :
-                     selectedNode.type === 'boss' ? 'Engage Boss' :
-                     selectedNode.type === 'rest' ? 'Rest Here' :
-                     selectedNode.type === 'reward' ? 'Collect Treasure' :
-                     selectedNode.type === 'event' ? 'Investigate' :
-                     'Proceed'}
+                    {selectedNode.type === 'combat' ? 'Fight' :
+                      selectedNode.type === 'elite' ? 'Challenge Elite' :
+                        selectedNode.type === 'boss' ? 'Engage Boss' :
+                          selectedNode.type === 'rest' ? 'Rest Here' :
+                            selectedNode.type === 'reward' ? 'Collect Treasure' :
+                              selectedNode.type === 'event' ? 'Investigate' :
+                                'Proceed'}
                   </button>
                 </div>
               ) : currentNode && !state.completedNodes.includes(currentNode.id) && currentNode.type !== 'start' ? (
@@ -803,13 +802,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                     onClick={() => executeNodeAction(currentNode)}
                     className="w-full px-3 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-500"
                   >
-                    {currentNode.type === 'combat' ? 'Fight!' : 
-                     currentNode.type === 'elite' ? 'Challenge Elite!' :
-                     currentNode.type === 'boss' ? 'Engage Boss!' :
-                     currentNode.type === 'rest' ? 'Rest' :
-                     currentNode.type === 'reward' ? 'Open Treasure' :
-                     currentNode.type === 'event' ? 'Investigate' :
-                     'Continue'}
+                    {currentNode.type === 'combat' ? 'Fight!' :
+                      currentNode.type === 'elite' ? 'Challenge Elite!' :
+                        currentNode.type === 'boss' ? 'Engage Boss!' :
+                          currentNode.type === 'rest' ? 'Rest' :
+                            currentNode.type === 'reward' ? 'Open Treasure' :
+                              currentNode.type === 'event' ? 'Investigate' :
+                                'Continue'}
                   </button>
                 </div>
               ) : (
@@ -875,11 +874,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                 <button
                   key={idx}
                   onClick={() => handleEventChoice(choice)}
-                  className={`w-full px-4 py-2 rounded text-left ${
-                    choice.outcome === 'damage' 
-                      ? 'bg-red-600/20 text-red-300 hover:bg-red-600/30' 
+                  className={`w-full px-4 py-2 rounded text-left ${choice.outcome === 'damage'
+                      ? 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
                       : 'bg-skyrim-gold/20 text-skyrim-gold hover:bg-skyrim-gold/30'
-                  }`}
+                    }`}
                 >
                   {choice.label}
                   {choice.outcome === 'reward' && choice.value && (
@@ -907,9 +905,9 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
               Leaving now will grant your accumulated rewards but forfeit boss completion bonuses.
             </p>
             <div className="flex gap-2">
-              <button 
-                onClick={() => { 
-                  setShowExitConfirm(false); 
+              <button
+                onClick={() => {
+                  setShowExitConfirm(false);
                   // Apply accumulated rewards (gold/XP only - items already in inventory)
                   if (state.collectedRewards.gold > 0 || state.collectedRewards.xp > 0) {
                     onApplyRewards({
@@ -920,13 +918,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                     });
                     showToast?.(`Dungeon exit: +${state.collectedRewards.gold}g, +${state.collectedRewards.xp}XP`, 'success');
                   }
-                  onClose({ cleared: false, rewards: state.collectedRewards }); 
+                  onClose({ cleared: false, rewards: state.collectedRewards });
                 }}
                 className="flex-1 px-3 py-2 bg-amber-600 text-white rounded hover:bg-amber-500"
               >
                 Leave with Rewards
               </button>
-              <button 
+              <button
                 onClick={() => setShowExitConfirm(false)}
                 className="flex-1 px-3 py-2 border border-stone-600 text-stone-300 rounded hover:bg-stone-800"
               >
@@ -948,7 +946,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                 Boss defeated! Choose to continue deeper or leave with your rewards.
               </p>
             </div>
-            
+
             {/* Current Rewards Summary - Include completion bonus */}
             <div className="bg-stone-800 rounded p-3 mb-4 border border-stone-700">
               <div className="text-xs text-stone-500 mb-2 uppercase tracking-wider">Total Rewards (with completion bonus)</div>
@@ -971,16 +969,16 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                 ⚠️ Next floor enemies will be <span className="font-bold">{Math.round((floorScalingFactor + 0.15) * 100)}%</span> stronger!
               </p>
             </div>
-            
+
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={() => {
                   // Leave dungeon with all rewards including completion bonus
                   setShowFloorComplete(false);
                   const totalGold = state.collectedRewards.gold + (dungeon?.completionRewards?.gold || 0);
                   const totalXp = state.collectedRewards.xp + (dungeon?.completionRewards?.xp || 0);
                   const completionItems = dungeon?.completionRewards?.items || [];
-                  
+
                   // Apply accumulated rewards + completion bonus
                   onApplyRewards({
                     gold: totalGold,
@@ -989,7 +987,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                     transactionId: `dungeon_clear_${dungeonId}_${Date.now()}`
                   });
                   showToast?.(`Dungeon cleared! +${totalGold}g, +${totalXp}XP`, 'success');
-                  
+
                   setState(prev => prev ? { ...prev, result: 'cleared', active: false } : prev);
                   onClose({ cleared: true, rewards: { gold: totalGold, xp: totalXp, items: [...state.collectedRewards.items, ...completionItems] } });
                 }}
@@ -998,13 +996,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                 <DoorOpen size={18} />
                 Claim & Exit
               </button>
-              <button 
+              <button
                 onClick={() => {
                   // Continue to next floor - Reset dungeon state but keep character progress/buffs/rewards
                   setShowFloorComplete(false);
                   setCurrentFloor(prev => prev + 1);
                   setFloorScalingFactor(prev => prev + 0.15);
-                  
+
                   // Reset map progress to start but keep accumulated rewards
                   if (dungeon) {
                     const startNode = dungeon.nodes.find(n => n.id === dungeon.startNodeId) || dungeon.nodes[0];
