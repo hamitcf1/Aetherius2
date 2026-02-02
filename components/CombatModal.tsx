@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { AnimatedCard } from './AnimatedUI';
 import { useAppContext } from '../AppContext';
 import { useLocalization } from '../services/localization';
 import { waitMs } from '../utils/animation';
@@ -125,15 +127,20 @@ const HealthBar = React.memo<{
 
   return (
     <div className="w-full">
-      <div className="flex justify-between text-xs mb-1 font-cinzel">
-        <span className="text-zinc-200/90 tracking-wide text-shadow">{label}</span>
-        {showNumbers && <span className="text-zinc-400 font-sans">{current}/{max}</span>}
+      <div className="flex justify-between text-xs mb-1.5 font-cinzel">
+        <span className="text-zinc-200/90 tracking-wide font-medium">{label}</span>
+        {showNumbers && <span className="text-zinc-400 font-sans font-medium">{current}/{max}</span>}
       </div>
-      <div className="progress-container h-3">
-        <div
-          className={`progress-fill ${isHealing ? 'bg-green-500 animate-pulse' : color}`}
-          style={{ width: `${percentage}%` }}
-        />
+      <div className="relative h-2.5 bg-zinc-900/50 rounded-full overflow-hidden border border-white/5 shadow-inner">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: "circOut" }}
+          className={`h-full relative ${isHealing ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : color}`}
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+        </motion.div>
         {isHealing && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <span className="text-green-300 text-lg animate-bounce drop-shadow-md">✨</span>
@@ -281,16 +288,16 @@ const EnemyCard: React.FC<{
   const isDecaying = !!(enemy as any).companionMeta?.decayActive;
 
   return (
-    <div
-      ref={containerRef}
+    <AnimatedCard
+      containerRef={containerRef}
       data-testid={`enemy-card-${enemy.id}`}
       onClick={isDead ? undefined : onClick}
       className={`
-        premium-card p-3 transition-all duration-300
+        p-3 transition-shadow duration-300
         ${isDead
           ? 'opacity-50 cursor-not-allowed grayscale'
           : isTarget
-            ? 'active'
+            ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.2)]'
             : 'cursor-pointer'
         }
         ${isHighlighted ? 'ring-2 ring-amber-300 animate-pulse-gold' : ''}
@@ -411,7 +418,7 @@ const EnemyCard: React.FC<{
           <span className="text-2xl">💀</span>
         </div>
       )}
-    </div>
+    </AnimatedCard>
   );
 };
 
@@ -555,7 +562,7 @@ const ActionButton = React.memo<ActionButtonProps>(({ ability, disabled, cooldow
 export const CombatModal: React.FC<CombatModalProps> = ({
   character,
   inventory,
-  combatState: initialCombatState,
+  initialCombatState,
   onCombatEnd,
   onNarrativeUpdate,
   onInventoryUpdate,
@@ -640,8 +647,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       let name = 'Target';
       if (selectedTarget === 'player') name = getEasterEggName(character.name);
       else {
-        const ally = (combatState.allies || []).find(a => a.id === selectedTarget);
-        const enemy = (combatState.enemies || []).find(e => e.id === selectedTarget);
+        const ally = (combatState?.allies || []).find(a => a.id === selectedTarget);
+        const enemy = (combatState?.enemies || []).find(e => e.id === selectedTarget);
         if (ally) name = ally.name;
         else if (enemy) name = enemy.name;
       }
@@ -718,7 +725,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // roll animation that started within the same interaction window to avoid click->selection races.
     try {
       const msSinceTarget = Date.now() - (lastUserTargetChangeAt.current || 0);
-      const selectedIsAlly = selectedTarget === 'player' || !!((combatState.allies || []).find(a => a.id === selectedTarget));
+      const selectedIsAlly = selectedTarget === 'player' || !!((combatState?.allies || []).find(a => a.id === selectedTarget));
       if (msSinceTarget > 0 && msSinceTarget < 120 && selectedIsAlly) {
         // eslint-disable-next-line no-console
         console.debug && console.debug('[combat] animateRoll suppressed due to recent user target change to ally', { msSinceTarget, selectedTarget });
@@ -936,7 +943,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
       const firstAlive = combatState.enemies.find(e => e.currentHealth > 0);
       if (firstAlive) setSelectedTarget(firstAlive.id);
     }
-  }, [combatState.enemies, selectedTarget, pendingTargeting]);
+  }, [combatState?.enemies, selectedTarget, pendingTargeting]);
 
   // Slow down combat animations at higher player levels for more dramatic pacing
   // During tests we want animations to be effectively instant to keep tests fast and deterministic

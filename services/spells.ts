@@ -236,7 +236,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 38,
     perkCost: 2,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }],
     prerequisites: { level: 8 }
   },
   aeonic_surge: {
@@ -246,7 +246,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 45,
     perkCost: 3,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' }],
     prerequisites: { level: 12 }
   },
   aeonic_wave: {
@@ -256,7 +256,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 60,
     perkCost: 6,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' }],
     prerequisites: { level: 18 }
   },
 
@@ -573,9 +573,9 @@ export const getAllSpells = (): Spell[] => Object.values(SPELL_REGISTRY);
 export const getSpellById = (id: string): Spell | undefined => {
   // Support high-level variant suffixes like 'flames:high' or 'flames_high'
   if (!id) return undefined;
-  const parts = id.split(/[:_]/);
-  if (parts.length > 1 && (parts[1] === 'high' || parts[1] === 'empowered')) {
-    const baseId = parts[0];
+  const match = id.match(/^(.+)([:_])(high|empowered)$/);
+  if (match) {
+    const baseId = match[1];
     const base = SPELL_REGISTRY[baseId];
     if (!base) return undefined;
     // Produce an empowered variant on the fly
@@ -600,11 +600,9 @@ export const getSpellById = (id: string): Spell | undefined => {
 export const isSpellVariantUnlocked = (character: { level: number; perks?: any[] } | null | undefined, id: string): boolean => {
   if (!character) return false;
   if (!id) return false;
-  const parts = id.split(/[:_]/);
-  if (parts.length === 1) return true;
-  const variant = parts[1];
-  if (!(variant === 'high' || variant === 'empowered')) return true;
-  const baseId = parts[0];
+  const match = id.match(/^(.+)([:_])(high|empowered)$/);
+  if (!match) return true;
+  const baseId = match[1];
   const base = SPELL_REGISTRY[baseId];
   if (!base) return false;
   // Unlock early if character has explicit perk 'empower_spells' or 'empower_magic'

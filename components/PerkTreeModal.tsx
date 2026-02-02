@@ -193,7 +193,8 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                         const mastery = (character.perks || []).find(p => p.id === def.id)?.mastery || 0;
                         const perRank = def.effect?.type === 'stat' ? (def.effect?.amount || 0) : null;
                         const currentContribution = perRank ? (perRank * curr) : null;
-                        const name = t(`perks.data.${def.id}.name`) || def.name;
+                        const locName = t(`perks.data.${def.id}.name`);
+                        const name = locName !== `perks.data.${def.id}.name` ? locName : def.name;
 
                         return (
                           <button key={def.id} onClick={() => setSelected(def.id)}
@@ -226,8 +227,10 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
 
           <div className="w-1/2 p-4 overflow-y-auto bg-skyrim-dark/10">
             {selectedDef ? (() => {
-              const name = t(`perks.data.${selectedDef.id}.name`) || selectedDef.name;
-              const description = t(`perks.data.${selectedDef.id}.description`) || selectedDef.description;
+              const locName = t(`perks.data.${selectedDef.id}.name`);
+              const name = locName !== `perks.data.${selectedDef.id}.name` ? locName : selectedDef.name;
+              const locDesc = t(`perks.data.${selectedDef.id}.description`);
+              const description = locDesc !== `perks.data.${selectedDef.id}.description` ? locDesc : selectedDef.description;
               const statusLabel = st => {
                 if (st === 'unlocked') return t('map.filter.unlocked');
                 if (st === 'available') return t('spells.learn'); // "Learn" / "Available" equivalent? 

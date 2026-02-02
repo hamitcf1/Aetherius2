@@ -83,7 +83,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
   const handleLearn = (id: string) => {
     const spell = getSpellById(id);
     const perkCost = spell?.perkCost || 1;
-    if (id.includes(':') || id.includes('_high')) {
+    const match = id.match(/^(.+)([:_])(high|empowered)$/);
+    if (match) {
       if (!isSpellVariantUnlocked(character, id)) return;
     }
     if ((character.perkPoints || 0) < perkCost) return;
@@ -117,24 +118,26 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
 
   // Helper for localized spell text
   const getSpellText = (spell: Spell) => {
-    const parts = spell.id.split(/[:_]/);
-    const baseId = parts[0];
-    const isEmpowered = parts.length > 1 && (parts[1] === 'high' || parts[1] === 'empowered');
+    // Empowered suffix can be :high, _high, or :empowered
+    const match = spell.id.match(/^(.+)([:_])(high|empowered)$/);
+    const baseId = match ? match[1] : spell.id;
+    const isEmpowered = !!match;
 
     const localizedName = t(`spells.data.${baseId}.name`);
     let localizedDesc = t(`spells.data.${baseId}.description`);
 
     // For empowered spells, append the empowered note if not already handled by logic
     if (isEmpowered) {
-      // In the original, empowered name was "Name (Empowered)" and desc had "(Empowered variant...)"
-      // We can reconstruct this if the name logic isn't sufficient
       return {
-        name: `${localizedName} (Empowered)`, // Hardcoded suffix or define 'empowered' string
-        description: `${localizedDesc} (${t('spells.labels.empoweredAvailable')})` // Simplified
+        name: `${localizedName !== `spells.data.${baseId}.name` ? localizedName : spell.name} (Empowered)`,
+        description: `${localizedDesc !== `spells.data.${baseId}.description` ? localizedDesc : spell.description} (${t('spells.labels.empoweredAvailable')})`
       };
     }
 
-    return { name: localizedName || spell.name, description: localizedDesc || spell.description };
+    return {
+      name: (localizedName !== `spells.data.${baseId}.name` ? localizedName : null) || spell.name,
+      description: (localizedDesc !== `spells.data.${baseId}.description` ? localizedDesc : null) || spell.description
+    };
   };
 
   return (
@@ -183,7 +186,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                       {spells.map(spell => {
                         const status = getSpellStatus(spell);
                         const isSelected = selectedSpellId === spell.id;
-                        const isEmpowered = spell.id.includes(':') || spell.id.includes('_high') || spell.id.includes('_empowered');
+                        const match = spell.id.match(/^(.+)([:_])(high|empowered)$/);
+                        const isEmpowered = !!match;
                         const cost = spell.perkCost || 1;
                         const { name } = getSpellText(spell);
 
@@ -214,8 +218,9 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
               const status = getSpellStatus(selectedSpell);
               const cost = selectedSpell.perkCost || 1;
               const canLearn = status === 'available';
-              const isEmpowered = selectedSpell.id.includes(':') || selectedSpell.id.includes('_high');
-              const baseId = selectedSpell.id.split(/[:_]/)[0];
+              const match = selectedSpell.id.match(/^(.+)([:_])(high|empowered)$/);
+              const baseId = match ? match[1] : selectedSpell.id;
+              const isEmpowered = !!match;
               const empoweredId = `${baseId}:high`;
               const hasEmpowered = !isEmpowered && learned.includes(selectedSpell.id);
               const empoweredUnlocked = isSpellVariantUnlocked(character, empoweredId);

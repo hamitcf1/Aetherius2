@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { AnimatedCard } from './AnimatedUI';
 import { Character, Milestone, Perk, InventoryItem, CustomQuest, JournalEntry, StoryChapter } from '../types';
 import { ChevronDown, ChevronRight, User, Brain, ShieldBan, Zap, Map, Activity, Info, Heart, Droplets, BicepsFlexed, CheckCircle, Circle, Trash2, Plus, Star, LayoutList, Layers, Ghost, Sparkles, ScrollText, Download, Image as ImageIcon, Loader2, Moon, Apple, Shield, Sword, Swords, Calendar, TrendingUp, FlaskConical, Coins } from 'lucide-react';
 import { generateCharacterProfileImage } from '../services/geminiService';
@@ -44,24 +46,29 @@ const Section: React.FC<{
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   return (
-    <div className="mb-4 glass-panel border-zinc-700/50 rounded-xl overflow-hidden transition-all hover:shadow-lg hover:border-amber-500/30">
+    <AnimatedCard className="mb-4 !p-0 overflow-hidden !rounded-xl border-zinc-700/50">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 bg-zinc-900/40 hover:bg-zinc-800/60 transition-colors"
       >
-        <div className="flex items-center gap-3 text-skyrim-gold font-serif text-lg">
+        <div className="flex items-center gap-3 text-skyrim-gold font-serif text-lg heading-premium">
           {icon}
           <span>{title}</span>
         </div>
-        {isOpen ? <ChevronDown size={20} className="text-skyrim-text" /> : <ChevronRight size={20} className="text-skyrim-text" />}
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+        >
+          <ChevronDown size={20} className="text-skyrim-text" />
+        </motion.div>
       </button>
 
       {isOpen && (
-        <div className="p-6 space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="p-6 space-y-6">
           {children}
         </div>
       )}
-    </div>
+    </AnimatedCard>
   );
 };
 
@@ -106,10 +113,13 @@ const StatBar: React.FC<{
   icon: React.ReactNode;
   onChange: (val: number) => void;
 }> = ({ label, value, color, icon, onChange }) => {
+  const percentage = Math.max(0, Math.min(100, (value / 600) * 100));
+  const vitalClass = color === 'bg-red-700' ? 'bg-vitals-health' : color === 'bg-blue-600' ? 'bg-vitals-magicka' : 'bg-vitals-stamina';
+
   return (
     <div className="flex-1 min-w-0 group">
-      <div className="flex justify-between text-xs uppercase mb-1 text-skyrim-text font-bold items-center">
-        <span className="flex items-center gap-1 group-hover:text-skyrim-gold transition-colors">{icon} {label}</span>
+      <div className="flex justify-between text-xs uppercase mb-1.5 text-skyrim-text font-bold items-center">
+        <span className="flex items-center gap-1 group-hover:text-blue-400 transition-colors">{icon} {label}</span>
         <input
           type="number"
           min="0"
@@ -121,81 +131,29 @@ const StatBar: React.FC<{
             if (v > 600) v = 600;
             onChange(v);
           }}
-          className="w-14 sm:w-16 glass-panel-lighter border-zinc-700/50 rounded text-skyrim-text text-sm px-2 ml-2 focus:outline-none focus:border-amber-500 text-right tracking-widest"
-          style={{ height: 24, letterSpacing: '0.05em', color: 'var(--skyrim-text)' }}
+          className="w-14 sm:w-16 glass-panel-lighter border-zinc-700/50 rounded text-skyrim-text text-sm px-2 ml-2 focus:outline-none focus:border-blue-500 text-right font-medium"
+          style={{ height: 24, color: 'var(--skyrim-text)' }}
         />
       </div>
       <div
-        className="relative h-2 bg-black rounded-full overflow-hidden border border-transparent group-hover:border-skyrim-border transition-colors cursor-pointer skyrim-bar-glow"
+        className="relative h-2.5 bg-zinc-900/50 rounded-full overflow-hidden border border-white/5 shadow-inner cursor-pointer"
         onClick={e => {
           const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
           const x = e.clientX - rect.left;
-          const percent = Math.max(0, Math.min(1, x / rect.width));
-          const newValue = Math.round(percent * 600);
+          const pct = Math.max(0, Math.min(1, x / rect.width));
+          const newValue = Math.round(pct * 600);
           onChange(newValue);
         }}
-        onMouseDown={e => {
-          const bar = e.currentTarget as HTMLDivElement;
-          function onMove(ev: MouseEvent) {
-            const rect = bar.getBoundingClientRect();
-            const x = ev.clientX - rect.left;
-            const percent = Math.max(0, Math.min(1, x / rect.width));
-            const newValue = Math.round(percent * 600);
-            onChange(newValue);
-          }
-          function onUp() {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-          }
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
-        }}
-        style={{
-          // reduced static shadow (cheaper paint); animated glow moved to composited overlay
-          boxShadow: `${color === 'bg-red-700' ? '0 0 24px 8px rgba(255,40,40,0.45)' :
-            color === 'bg-blue-600' ? '0 0 24px 8px rgba(80,180,255,0.45)' :
-              color === 'bg-green-600' ? '0 0 24px 8px rgba(80,255,120,0.45)' :
-                '0 0 24px 8px rgba(255,255,255,0.18)'
-            }`,
-          position: 'relative'
-        }}
       >
-        <div
-          className={`absolute top-0 left-0 h-full ${color} transition-all duration-700 ease-out group-hover:brightness-125`}
-          style={{ width: `${Math.max(0, Math.min(value / 6, 100))}%` }}
-        ></div>
-
-        {/* composited overlay for glow — transforms & opacity only (GPU-composited) */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-end">
-          <div className="bar-glow-overlay" aria-hidden="true" />
-        </div>
-
-        <style>{` 
-                  .bar-glow-overlay {
-                    width: 56px;
-                    height: 28px;
-                    margin-right: 6px;
-                    border-radius: 999px;
-                    background: radial-gradient(closest-side, rgba(255,255,255,0.12), rgba(255,255,255,0));
-                    transform: translateZ(0) scale(0.98);
-                    opacity: 0.0;
-                    will-change: transform, opacity;
-                    box-shadow: none;
-                    pointer-events: none;
-                    mix-blend-mode: screen;
-                    animation: skyrim-bar-glow-fade 2200ms ease-in-out infinite;
-                  }
-
-                  @keyframes skyrim-bar-glow-fade {
-                    0% { transform: translateY(0) scale(0.92); opacity: 0; }
-                    50% { transform: translateY(-2px) scale(1); opacity: 0.9; }
-                    100% { transform: translateY(0) scale(0.92); opacity: 0; }
-                  }
-
-                  @media (prefers-reduced-motion: reduce) {
-                    .bar-glow-overlay { animation: none !important; opacity: 0.6; }
-                  }
-                `}</style>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: "circOut" }}
+          className={`h-full relative ${vitalClass} shadow-lg`}
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent animate-shimmer" />
+        </motion.div>
       </div>
     </div>
   );

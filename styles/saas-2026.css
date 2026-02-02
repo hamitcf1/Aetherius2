@@ -1,0 +1,225 @@
+/* 2026 Premium SaaS Design System */
+
+:root {
+    /* Ultra-modern palette */
+    --saas-bg: #050505;
+    --saas-card: rgba(18, 18, 18, 0.7);
+    --saas-accent: #3b82f6;
+    /* Electric Blue */
+    --saas-accent-glow: rgba(59, 130, 246, 0.5);
+    --saas-gold: #f59e0b;
+    --saas-gold-glow: rgba(245, 158, 11, 0.3);
+
+    /* Glassmorphism 2026 */
+    --glass-blur: 24px;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-surface: rgba(255, 255, 255, 0.03);
+
+    /* Layout */
+    --radius-xl: 24px;
+    --radius-lg: 16px;
+    --radius-md: 12px;
+
+    /* Animations */
+    --spring-duration: 0.5s;
+    --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+body {
+    background-color: var(--saas-bg);
+    color: #f4f4f5;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+        radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.1) 0%, transparent 60%),
+        radial-gradient(circle at 0% 100%, rgba(245, 158, 11, 0.05) 0%, transparent 40%);
+    background-attachment: fixed;
+}
+
+.premium-2026-card {
+    background: var(--saas-card);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow:
+        0 10px 30px -10px rgba(0, 0, 0, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s var(--spring-bounce), border-color 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.premium-2026-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-4px) scale(1.01);
+}
+
+.premium-2026-card::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(from 0deg, transparent, rgba(255, 255, 255, 0.1), transparent 25%);
+    animation: rotate-shimmer 8s linear infinite;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.premium-2026-card:hover::after {
+    opacity: 1;
+}
+
+@keyframes rotate-shimmer {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.btn-saas {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1.5rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-saas:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+.btn-saas-primary {
+    background: var(--saas-accent);
+    border: none;
+    box-shadow: 0 0 20px var(--saas-accent-glow);
+}
+
+.btn-saas-primary:hover {
+    background: #2563eb;
+    box-shadow: 0 0 30px var(--saas-accent-glow);
+}
+
+.heading-premium {
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
+    background: linear-gradient(to bottom right, #fff, #a1a1aa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 1.5rem;
+}
+
+.bento-item {
+    grid-column: span 12;
+}
+
+/* Nav Link Styling */
+.nav-link-saas {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    color: #a1a1aa;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.nav-link-saas:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-link-saas.active {
+    color: #fff;
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.1);
+}
+
+.nav-link-saas.active::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 2px;
+    background: var(--saas-accent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--saas-accent-glow);
+}
+
+/* Glass UI Refinements */
+.glass-panel-saas {
+    background: rgba(23, 23, 23, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+@keyframes shimmer {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+.animate-shimmer {
+    animation: shimmer 2s infinite linear;
+}
+
+/* Health Bar Colors */
+.bg-vitals-health {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.bg-vitals-magicka {
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.bg-vitals-stamina {
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+@media (min-width: 768px) {
+    .bento-item-4 {
+        grid-column: span 4;
+    }
+
+    .bento-item-8 {
+        grid-column: span 8;
+    }
+
+    .bento-item-6 {
+        grid-column: span 6;
+    }
+}

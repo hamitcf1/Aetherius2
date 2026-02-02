@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { AnimatedCard } from './AnimatedUI';
 import { InventoryItem, EquipmentSlot } from '../types';
 import { Shield, Sword, FlaskConical, Gem, Key, Package, Trash2, Plus, Coins, Apple, Droplets, Tent, ArrowDownToLine as ArrowDownToLineAlt, ArrowUpFromLine as ArrowUpFromLineAlt, ArrowUpDown, User, Backpack, Check, ShoppingBag, Weight, Star, Eye, EyeOff, Heart, Zap, Sparkles } from 'lucide-react';
 import RarityBadge from './RarityBadge';
@@ -97,10 +99,13 @@ const InventoryItemCard: React.FC<{
   const isEquipped = item.equipped;
 
   return (
-    <div className={`glass-panel p-4 rounded-xl flex items-center gap-4 transition-all duration-300 ${isEquipped
-      ? 'border-amber-500/50 shadow-gold bg-amber-950/40'
-      : 'border-zinc-700/30 hover:border-amber-500/30 hover:bg-zinc-800/40'
-      } ${item.enchantments && item.enchantments.length > 0 ? 'ring-1 ring-purple-500/30 bg-gradient-to-r from-purple-900/10 to-transparent' : ''}`}>
+    <AnimatedCard
+      data-testid={`inventory-item-${item.id}`}
+      className={`p-4 flex items-center gap-4 transition-all duration-300 ${isEquipped
+        ? 'border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] bg-amber-950/20'
+        : ''
+        } ${item.enchantments && item.enchantments.length > 0 ? 'ring-1 ring-purple-500/30 bg-gradient-to-r from-purple-900/10 to-transparent shadow-[0_0_10px_rgba(168,85,247,0.1)]' : ''}`}
+    >
       <div className={`p-3 rounded-full border ${isEquipped
         ? 'bg-skyrim-gold/30 text-skyrim-gold border-skyrim-gold'
         : 'bg-skyrim-paper/40 text-skyrim-gold border-skyrim-border'
@@ -266,10 +271,10 @@ const InventoryItemCard: React.FC<{
           </>
         )}
       </div>
-      <button onClick={onRemove} className="text-gray-600 hover:text-red-500 flex-shrink-0">
+      <button onClick={onRemove} className="text-gray-600 hover:text-red-500 flex-shrink-0 transition-colors">
         <Trash2 size={16} />
       </button>
-    </div>
+    </AnimatedCard>
   );
 };
 
@@ -827,21 +832,18 @@ export const Inventory: React.FC<InventoryProps> = ({ items, setItems, gold, set
           )}
 
           {/* Category Tabs */}
-          <div className="mb-4 overflow-x-auto">
-            <div className="flex gap-1 min-w-max pb-2">
+          <div className="mb-6 overflow-x-auto pb-2 -mx-2 px-2">
+            <div className="flex gap-2 min-w-max">
               {CATEGORY_TABS.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded text-sm transition-colors whitespace-nowrap ${activeTab === tab.key
-                    ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-                    : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-gold hover:bg-skyrim-paper/50 border border-skyrim-border/50'
-                    }`}
+                  className={`nav-link-saas flex-shrink-0 !py-2.5 !px-4 ${activeTab === tab.key ? 'active' : ''}`}
                 >
-                  {tab.icon}
-                  <span>{tab.label}</span>
+                  <span className="text-saas-accent-glow/70">{tab.icon}</span>
+                  <span className="font-medium">{tab.label}</span>
                   {categoryCounts[tab.key] > 0 && (
-                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? 'bg-skyrim-dark/30' : 'bg-skyrim-gold/20 text-skyrim-gold'
+                    <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? 'bg-saas-accent/20 text-white' : 'bg-zinc-800 text-zinc-400'
                       }`}>
                       {categoryCounts[tab.key]}
                     </span>

@@ -20,6 +20,8 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
 import BugReportModal from './components/BugReportModal';
+import { AnimatePresence } from 'framer-motion';
+import { AnimatedPage, AnimatedCard } from './components/AnimatedUI';
 import { LockpickingMinigame, LockDifficulty } from './components/LockpickingMinigame';
 import { BlessingModal, Blessing } from './components/BlessingModal';
 import MapPage, { MapEvent, MapMission } from './components/MapPage';
@@ -5711,71 +5713,58 @@ const App: React.FC = () => {
         )}
 
         {/* Navigation Header */}
-        <nav className="fixed top-0 left-0 right-0 glass-panel border-b-0 border-zinc-700/50 z-40 shadow-2xl">
+        <nav className="fixed top-0 left-0 right-0 saas-nav z-40 border-b border-white/5 backdrop-blur-xl bg-black/40">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
-                <Skull size={24} />
-                <span className="hidden md:inline">Skyrim Aetherius</span>
+              <div className="flex items-center gap-2 text-white font-serif font-bold text-xl tracking-tight cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Skull size={18} className="text-white" />
+                </div>
+                <span className="hidden md:inline heading-premium">Aetherius</span>
               </div>
-              <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-x-auto scrollbar-hide max-w-[calc(100vw-140px)] sm:max-w-none">
+              <div className="flex flex-nowrap items-center gap-1 sm:gap-4 relative">
                 {/* Character Sheet */}
                 <button
                   onClick={() => setActiveTab(TABS.CHARACTER)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${activeTab === TABS.CHARACTER
-                    ? 'bg-zinc-800 text-amber-500 font-bold shadow-md border border-amber-500/20'
-                    : 'text-zinc-400 hover:text-amber-400 hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.CHARACTER ? 'active' : ''}`}
                 >
-                  <User size={14} className="sm:w-4 sm:h-4" />
+                  <User size={16} />
                   <span className="hidden sm:inline">{t('nav.hero')}</span>
                 </button>
 
                 {/* Equipment */}
                 <button
                   onClick={() => setActiveTab(TABS.INVENTORY)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${activeTab === TABS.INVENTORY
-                    ? 'bg-zinc-800 text-amber-500 font-bold shadow-md border border-amber-500/20'
-                    : 'text-zinc-400 hover:text-amber-400 hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.INVENTORY ? 'active' : ''}`}
                 >
-                  <Package size={14} className="sm:w-4 sm:h-4" />
+                  <Package size={16} />
                   <span className="hidden sm:inline">{t('nav.equipment')}</span>
                 </button>
 
                 {/* Adventure Chat */}
                 <button
                   onClick={() => setActiveTab(TABS.ADVENTURE)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${activeTab === TABS.ADVENTURE
-                    ? 'bg-zinc-800 text-amber-500 font-bold shadow-md border border-amber-500/20'
-                    : 'text-zinc-400 hover:text-amber-400 hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.ADVENTURE ? 'active' : ''}`}
                 >
-                  <Swords size={14} className="sm:w-4 sm:h-4" />
+                  <Swords size={16} />
                   <span className="hidden sm:inline">{t('nav.adventure')}</span>
                 </button>
 
                 {/* Map */}
                 <button
                   onClick={() => setActiveTab(TABS.MAP)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${activeTab === TABS.MAP
-                    ? 'bg-zinc-800 text-amber-500 font-bold shadow-md border border-amber-500/20'
-                    : 'text-zinc-400 hover:text-amber-400 hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.MAP ? 'active' : ''}`}
                 >
-                  <Compass size={14} className="sm:w-4 sm:h-4" />
+                  <Compass size={16} />
                   <span className="hidden sm:inline">{t('nav.map')}</span>
                 </button>
 
                 {/* Quests */}
                 <button
                   onClick={() => setActiveTab(TABS.QUESTS)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${activeTab === TABS.QUESTS
-                    ? 'bg-zinc-800 text-amber-500 font-bold shadow-md border border-amber-500/20'
-                    : 'text-zinc-400 hover:text-amber-400 hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.QUESTS ? 'active' : ''}`}
                 >
-                  <Scroll size={14} className="sm:w-4 sm:h-4" />
+                  <Scroll size={16} />
                   <span className="hidden sm:inline">{t('nav.quests')}</span>
                 </button>
 
@@ -5814,174 +5803,190 @@ const App: React.FC = () => {
 
         {/* Main Content Area */}
         <main className={`pt-24 ${activeTab === TABS.MAP ? 'px-0' : 'px-2 sm:px-4'} ${(activeTab === TABS.ADVENTURE || activeTab === TABS.MAP) ? 'h-screen overflow-hidden' : 'min-h-screen pb-20'}`}>
-          <div className={`${activeTab === TABS.MAP ? 'w-full h-full' : 'max-w-6xl mx-auto'} animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
-            {activeTab === TABS.CHARACTER && activeCharacter && (
-              <CharacterSheet
-                character={activeCharacter}
-                updateCharacter={updateCharacter}
-                inventory={getCharacterItems()}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                story={getCharacterStory()}
-                onRest={openBonfireMenu}
-                onEat={handleEatItem}
-                onDrink={handleDrinkItem}
-                onUseItem={handleUseItem}
-                hasCampingGear={hasCampingGear}
-                hasBedroll={hasBedroll}
-                onRequestLevelUp={() => requestLevelUp(activeCharacter)}
-                onOpenPerkTree={() => setPerkModalOpen(true)}
-                levelUpAvailable={!!availableLevelUps[activeCharacter.id]}
-              />
-            )}
-            {activeTab === TABS.INVENTORY && activeCharacter && (
-              <Inventory
-                items={getCharacterItems()}
-                setItems={setCharacterItems}
-                gold={activeCharacter.gold || 0}
-                setGold={(amt) => updateCharacter('gold', amt)}
-                maxCarryWeight={getMaxCarryWeight(activeCharacter)}
-                onUseItem={handleUseItem}
-              />
-            )}
-            {activeTab === TABS.QUESTS && (
-              <QuestLog
-                quests={getCharacterQuests()}
-                setQuests={setCharacterQuests}
-                onDelete={handleDeleteQuest}
-                onQuestComplete={handleQuestComplete}
-              />
-            )}
-            {activeTab === TABS.STORY && (
-              <StoryLog
-                chapters={getCharacterStory()}
-                onUpdateChapter={updateStoryChapter}
-                onDeleteChapter={handleDeleteStoryChapter}
-                onAddChapter={(chapter) => setStoryChapters(prev => [...prev, chapter])}
-                onGameUpdate={handleGameUpdate}
-                character={activeCharacter}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                items={getCharacterItems()}
-                userId={currentUser?.uid}
-              />
-            )}
-            {activeTab === TABS.JOURNAL && (
-              <Journal entries={getCharacterJournal()} setEntries={setCharacterJournal} onDeleteEntry={handleDeleteJournalEntry} />
-            )}
-            {activeTab === TABS.ADVENTURE && (
-              <AdventureChat
-                userId={currentUser?.uid}
-                model={aiModel}
-                character={activeCharacter}
-                inventory={getCharacterItems()}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                story={getCharacterStory()}
-                onUpdateState={handleGameUpdate}
-                onEnterDungeon={handleEnterDungeonFromMap}
-                pauseChat={dungeonOpen}
-                chatFontSize={userSettings?.chatFontSize || 'medium'}
-                chatFontWeight={userSettings?.chatFontWeight || 'normal'}
-                onChatSettingsChange={async (settings) => {
-                  if (currentUser?.uid) {
-                    const next: UserSettings = {
-                      ...(userSettings || {}),
-                      chatFontSize: settings.fontSize,
-                      chatFontWeight: settings.fontWeight,
-                    };
-                    setUserSettings(next);
-                    try {
-                      await saveUserSettings(currentUser.uid, next);
-                    } catch (e) {
-                      console.warn('Failed to save chat settings:', e);
-                    }
-                  }
-                }}
-              />
-            )}
-            {activeTab === TABS.MAP && activeCharacter && (
-              <MapPage
-                character={activeCharacter}
-                currentLocation={activeCharacter.currentLocation}
-                visitedLocations={activeCharacter.visitedLocations || []}
-                questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.title }))}
-                discoveredLocations={activeCharacter.discoveredLocations || []}
-                clearedDungeons={activeCharacter.clearedDungeons || []}
-                onEnterDungeon={handleEnterDungeonFromMap}
-                // Dynamic Events Integration
-                dynamicEventState={dynamicEventState || undefined}
-                onStartDynamicEvent={handleStartDynamicEvent}
-                onCompleteDynamicEvent={handleCompleteDynamicEvent}
-                onStartEvent={(ev: MapEvent) => {
-                  showToast(`Event started: ${ev.id}`, 'info');
-                  // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
-                  if (currentCharacterId && shouldStartCombatForEvent(ev)) {
-                    try {
-                      const character = activeCharacter;
-                      const comps = companions.filter(c => c.characterId === currentCharacterId);
-                      const combat = createCombatStateForEvent(ev, character?.level || 1, comps || []);
-                      setCombatState(combat as any);
-                      // Record narrative that combat started from map event
-                      handleGameUpdate({ narrative: `Combat started against ${ev.name}` } as any);
-                      return;
-                    } catch (e) {
-                      console.warn('Failed to start combat from event:', e);
-                    }
-                  }
+          <div className={`${activeTab === TABS.MAP ? 'w-full h-full' : 'max-w-6xl mx-auto'} ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+            <AnimatePresence mode="wait">
+              {activeTab === TABS.CHARACTER && activeCharacter && (
+                <AnimatedPage key="character">
+                  <CharacterSheet
+                    character={activeCharacter}
+                    updateCharacter={updateCharacter}
+                    inventory={getCharacterItems()}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    story={getCharacterStory()}
+                    onRest={openBonfireMenu}
+                    onEat={handleEatItem}
+                    onDrink={handleDrinkItem}
+                    onUseItem={handleUseItem}
+                    hasCampingGear={hasCampingGear}
+                    hasBedroll={hasBedroll}
+                    onRequestLevelUp={() => requestLevelUp(activeCharacter)}
+                    onOpenPerkTree={() => setPerkModalOpen(true)}
+                    levelUpAvailable={!!availableLevelUps[activeCharacter.id]}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.INVENTORY && activeCharacter && (
+                <AnimatedPage key="inventory">
+                  <Inventory
+                    items={getCharacterItems()}
+                    setItems={setCharacterItems}
+                    gold={activeCharacter.gold || 0}
+                    setGold={(amt) => updateCharacter('gold', amt)}
+                    maxCarryWeight={getMaxCarryWeight(activeCharacter)}
+                    onUseItem={handleUseItem}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.QUESTS && (
+                <AnimatedPage key="quests">
+                  <QuestLog
+                    quests={getCharacterQuests()}
+                    setQuests={setCharacterQuests}
+                    onDelete={handleDeleteQuest}
+                    onQuestComplete={handleQuestComplete}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.STORY && (
+                <AnimatedPage key="story">
+                  <StoryLog
+                    chapters={getCharacterStory()}
+                    onUpdateChapter={updateStoryChapter}
+                    onDeleteChapter={handleDeleteStoryChapter}
+                    onAddChapter={(chapter) => setStoryChapters(prev => [...prev, chapter])}
+                    onGameUpdate={handleGameUpdate}
+                    character={activeCharacter}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    items={getCharacterItems()}
+                    userId={currentUser?.uid}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.JOURNAL && (
+                <AnimatedPage key="journal">
+                  <Journal entries={getCharacterJournal()} setEntries={setCharacterJournal} onDeleteEntry={handleDeleteJournalEntry} />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.ADVENTURE && (
+                <AnimatedPage key="adventure" className="h-full">
+                  <AdventureChat
+                    userId={currentUser?.uid}
+                    model={aiModel}
+                    character={activeCharacter}
+                    inventory={getCharacterItems()}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    story={getCharacterStory()}
+                    onUpdateState={handleGameUpdate}
+                    onEnterDungeon={handleEnterDungeonFromMap}
+                    pauseChat={dungeonOpen}
+                    chatFontSize={userSettings?.chatFontSize || 'medium'}
+                    chatFontWeight={userSettings?.chatFontWeight || 'normal'}
+                    onChatSettingsChange={async (settings) => {
+                      if (currentUser?.uid) {
+                        const next: UserSettings = {
+                          ...(userSettings || {}),
+                          chatFontSize: settings.fontSize,
+                          chatFontWeight: settings.fontWeight,
+                        };
+                        setUserSettings(next);
+                        try {
+                          await saveUserSettings(currentUser.uid, next);
+                        } catch (e) {
+                          console.warn('Failed to save chat settings:', e);
+                        }
+                      }
+                    }}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.MAP && activeCharacter && (
+                <AnimatedPage key="map" className="h-full">
+                  <MapPage
+                    character={activeCharacter}
+                    currentLocation={activeCharacter.currentLocation}
+                    visitedLocations={activeCharacter.visitedLocations || []}
+                    questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.title }))}
+                    discoveredLocations={activeCharacter.discoveredLocations || []}
+                    clearedDungeons={activeCharacter.clearedDungeons || []}
+                    onEnterDungeon={handleEnterDungeonFromMap}
+                    // Dynamic Events Integration
+                    dynamicEventState={dynamicEventState || undefined}
+                    onStartDynamicEvent={handleStartDynamicEvent}
+                    onCompleteDynamicEvent={handleCompleteDynamicEvent}
+                    onStartEvent={(ev: MapEvent) => {
+                      showToast(`Event started: ${ev.id}`, 'info');
+                      // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
+                      if (currentCharacterId && shouldStartCombatForEvent(ev)) {
+                        try {
+                          const character = activeCharacter;
+                          const comps = companions.filter(c => c.characterId === currentCharacterId);
+                          const combat = createCombatStateForEvent(ev, character?.level || 1, comps || []);
+                          setCombatState(combat as any);
+                          // Record narrative that combat started from map event
+                          handleGameUpdate({ narrative: `Combat started against ${ev.name}` } as any);
+                          return;
+                        } catch (e) {
+                          console.warn('Failed to start combat from event:', e);
+                        }
+                      }
 
-                  // Fallback: create an investigation quest
-                  handleGameUpdate({
-                    newQuests: [{
-                      title: `Investigate: ${ev.name}`,
-                      description: ev.description || `${ev.type} event`,
-                      objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
-                      xpReward: ev.rewards?.xp?.min || 25,
-                      goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
-                      difficulty: ev.levelRequirement > 20 ? 'hard' : 'medium'
-                    }]
-                  });
-                }}
-                onStartMission={(mission: MapMission) => {
-                  showToast(`Mission accepted: ${mission.id}`, 'success');
-                  // For some missions, trigger direct combat or a mini-game
-                  if (mission.id === 'mission_dragon_bounty' && currentCharacterId) {
-                    try {
-                      const character = activeCharacter;
-                      const comps = companions.filter(c => c.characterId === currentCharacterId);
-                      const combat = createCombatStateForEvent(mission as any, character?.level || 1, comps || []);
-                      setCombatState(combat as any);
-                      handleGameUpdate({ narrative: `Bounty mission: engaged ${mission.name}` } as any);
-                      return;
-                    } catch (e) {
-                      console.warn('Failed to start bounty combat:', e);
-                    }
-                  }
+                      // Fallback: create an investigation quest
+                      handleGameUpdate({
+                        newQuests: [{
+                          title: `Investigate: ${ev.name}`,
+                          description: ev.description || `${ev.type} event`,
+                          objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
+                          xpReward: ev.rewards?.xp?.min || 25,
+                          goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
+                          difficulty: ev.levelRequirement > 20 ? 'hard' : 'medium'
+                        }]
+                      });
+                    }}
+                    onStartMission={(mission: MapMission) => {
+                      showToast(`Mission accepted: ${mission.id}`, 'success');
+                      // For some missions, trigger direct combat or a mini-game
+                      if (mission.id === 'mission_dragon_bounty' && currentCharacterId) {
+                        try {
+                          const character = activeCharacter;
+                          const comps = companions.filter(c => c.characterId === currentCharacterId);
+                          const combat = createCombatStateForEvent(mission as any, character?.level || 1, comps || []);
+                          setCombatState(combat as any);
+                          handleGameUpdate({ narrative: `Bounty mission: engaged ${mission.name}` } as any);
+                          return;
+                        } catch (e) {
+                          console.warn('Failed to start bounty combat:', e);
+                        }
+                      }
 
-                  // Example interactive mission: open prototype mini-game for "Lost Artifact"
-                  if (mission.id === 'mission_retrieve_artifact') {
-                    setMiniGameMission(mission);
-                    setMiniGameOpen(true);
-                    return;
-                  }
+                      // Example interactive mission: open prototype mini-game for "Lost Artifact"
+                      if (mission.id === 'mission_retrieve_artifact') {
+                        setMiniGameMission(mission);
+                        setMiniGameOpen(true);
+                        return;
+                      }
 
-                  // Default behaviour: create a quest
-                  handleGameUpdate({
-                    newQuests: [{
-                      title: mission.name,
-                      description: mission.objective,
-                      location: mission.locationId,
-                      objectives: [{ description: mission.objective, completed: false }],
-                      xpReward: mission.rewards?.xp?.min || 100,
-                      goldReward: mission.rewards?.gold?.min || 200,
-                      difficulty: mission.difficulty as any || 'moderate',
-                      questType: 'bounty'
-                    }]
-                  });
-                }}
-                showToast={showToast}
-              />
-            )}
+                      // Default behaviour: create a quest
+                      handleGameUpdate({
+                        newQuests: [{
+                          title: mission.name,
+                          description: mission.objective,
+                          location: mission.locationId,
+                          objectives: [{ description: mission.objective, completed: false }],
+                          xpReward: mission.rewards?.xp?.min || 100,
+                          goldReward: mission.rewards?.gold?.min || 200,
+                          difficulty: mission.difficulty as any || 'moderate',
+                          questType: 'bounty'
+                        }]
+                      });
+                    }}
+                    showToast={showToast}
+                  />
+                </AnimatedPage>
+              )}
+            </AnimatePresence>
           </div>
         </main>
 
