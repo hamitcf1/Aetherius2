@@ -735,7 +735,7 @@ export function disenchantItem(
 
   // Learn the enchantment
   const newLearned: LearnedEnchantment = {
-    enchantmentId,
+    enchantmentId: effectiveEnchantmentId!,
     learnedAt: Date.now(),
     timesUsed: 0,
     itemsDisenchanted: 1,
@@ -769,11 +769,11 @@ export function calculateEnchantmentMagnitude(
 
   const gemPower = SOUL_GEM_SIZES[soulGemSize].capacity;
   const soulPower = Math.min(soulLevel, gemPower);
-  
+
   // Base formula: baseMagnitude * (1 + skill/100) * (soulPower/5) * scalingFactor
   const skillMultiplier = 1 + (enchantingSkill / 100);
   const soulMultiplier = soulPower / 5;
-  
+
   return Math.floor(enchantment.baseMagnitude * skillMultiplier * soulMultiplier * enchantment.scalingFactor);
 }
 
@@ -786,10 +786,10 @@ export function enchantItem(
   enchantmentId: string,
   soulGemId: string,
   newItemName?: string
-): { 
-  state: EnchantingState; 
-  success: boolean; 
-  message: string; 
+): {
+  state: EnchantingState;
+  success: boolean;
+  message: string;
   enchantedItem?: InventoryItem;
   xpGained: number;
 } {
@@ -818,7 +818,7 @@ export function enchantItem(
   if (enchantment.type === 'weapon' && itemType !== 'weapon') {
     return { state, success: false, message: 'This enchantment can only be applied to weapons.', xpGained: 0 };
   }
-  if (enchantment.type === 'armor' && itemType !== 'armor' && itemType !== 'jewelry') {
+  if ((enchantment.type === 'armor' || enchantment.type === 'jewelry') && itemType !== 'apparel') {
     return { state, success: false, message: 'This enchantment can only be applied to armor or jewelry.', xpGained: 0 };
   }
 
@@ -939,12 +939,12 @@ export function findBestSoulGemForCreature(
   creatureType: string
 ): SoulGem | null {
   const soulLevel = CREATURE_SOUL_LEVELS[creatureType.toLowerCase()] || 1;
-  
+
   // Find smallest empty gem that can hold this soul
   const suitableGems = state.soulGems
     .filter(g => !g.filled && g.capacity >= soulLevel)
     .sort((a, b) => a.capacity - b.capacity);
-  
+
   return suitableGems[0] || null;
 }
 
@@ -964,6 +964,8 @@ export function soulGemToInventoryItem(gem: SoulGem): InventoryItem {
     weight: gem.size === 'azura_star' ? 0 : 0.5,
     effects: gem.filled ? [`Soul Level: ${gem.soulLevel}`] : [],
     quantity: 1,
+    characterId: '', // Placeholder, should be set by addItem
+    equipped: false,
   };
 }
 

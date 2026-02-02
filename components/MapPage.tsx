@@ -4,13 +4,14 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { 
-  Compass, ZoomIn, ZoomOut, Navigation, Castle, Mountain, Skull, Home, Shield, Flame, 
-  Eye, EyeOff, TreePine, Waves, Swords, Lock, Unlock, Star, AlertTriangle, 
+import {
+  Compass, ZoomIn, ZoomOut, Navigation, Castle, Mountain, Skull, Home, Shield, Flame,
+  Eye, EyeOff, TreePine, Waves, Swords, Lock, Unlock, Star, AlertTriangle,
   MapPin, Clock, Coins, Award, ChevronRight, X, Sparkles, Target, Calendar,
   Link2, Trophy
 } from 'lucide-react';
 import { Character, DynamicEvent, DynamicEventState, LevelTier, getLevelTier, getGameTimeInHours, LEVEL_TIER_THRESHOLDS } from '../types';
+import { useLocalization } from '../services/localization';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -153,20 +154,20 @@ export const SKYRIM_LOCATIONS: MapLocation[] = [
   { id: 'embershard_mine', name: 'Embershard Mine', type: 'dungeon', x: 36, y: 64, hold: 'Whiterun Hold', description: 'An iron mine taken over by bandits.', dangerLevel: 'moderate', levelRequirement: 1, rumors: ['Bandits have claimed the mine', 'Iron ore litters the tunnels'], rewards: { gold: { min: 100, max: 300 }, xp: { min: 100, max: 200 }, items: ['Iron Ore', 'Bandit Loot'] }, dungeonId: 'mineshaft_dg' },
   { id: 'white_river_watch', name: 'White River Watch', type: 'cave', x: 46, y: 54, hold: 'Whiterun Hold', description: 'A cave overlooking the White River, home to bandits.', dangerLevel: 'moderate', levelRequirement: 3, rumors: ['A blind bandit leader rules here', 'Good view of approaching travelers'], rewards: { gold: { min: 150, max: 350 }, xp: { min: 120, max: 220 } } },
   { id: 'halted_stream_camp', name: 'Halted Stream Camp', type: 'camp', x: 44, y: 46, hold: 'Whiterun Hold', description: 'A fortified bandit camp with a mammoth-bone mine.', dangerLevel: 'moderate', levelRequirement: 5, rumors: ['Poachers hunt mammoths here', 'The Transmute spell book is hidden within'], rewards: { gold: { min: 200, max: 450 }, xp: { min: 150, max: 280 }, items: ['Transmute Spell Tome'] }, dungeonId: 'bandit_hideout_dg' },
-  
+
   // Intermediate Dungeons (Level 10-20)
   { id: 'dustmans_cairn', name: "Dustman's Cairn", type: 'dungeon', x: 36, y: 50, hold: 'Whiterun Hold', description: 'An ancient Nordic barrow with Silver Hand werewolf hunters.', dangerLevel: 'dangerous', levelRequirement: 10, rumors: ['The Companions have business here', 'Silver Hand fanatics lurk within'], rewards: { gold: { min: 400, max: 800 }, xp: { min: 300, max: 500 }, items: ['Silver Weapons', 'Fragment of Wuuthrad'] }, dungeonId: 'dustmans_cairn_dg' },
   { id: 'silent_moons_camp', name: 'Silent Moons Camp', type: 'dungeon', x: 40, y: 44, hold: 'Whiterun Hold', description: 'Nordic ruins with a lunar forge that enchants weapons at night.', dangerLevel: 'dangerous', levelRequirement: 12, rumors: ['The Lunar Forge creates unique weapons', 'Bandits guard an ancient secret'], rewards: { gold: { min: 350, max: 700 }, xp: { min: 280, max: 450 }, items: ['Lunar Weapon'] }, dungeonId: 'silent_moons_camp_dg' },
   { id: 'shroud_hearth_barrow', name: 'Shroud Hearth Barrow', type: 'dungeon', x: 60, y: 64, hold: 'The Rift', description: 'A haunted Nordic tomb near Ivarstead.', dangerLevel: 'dangerous', levelRequirement: 14, rumors: ['A ghost protects ancient treasure', 'The Sapphire Dragon Claw opens the way'], rewards: { gold: { min: 450, max: 900 }, xp: { min: 350, max: 550 }, items: ['Sapphire Dragon Claw'] }, dungeonId: 'shroud_hearth_barrow_dg' },
   { id: 'vampire_lair', name: 'Movarth\'s Lair', type: 'dungeon', x: 26, y: 28, hold: 'Hjaalmarch', description: 'A dark lair saturated with blood magics near Morthal.', dangerLevel: 'dangerous', levelRequirement: 15, rumors: ['Vampires have been seen nearby', 'Blood altars glow in darkness', 'The undead feast on travelers'], rewards: { gold: { min: 500, max: 1000 }, xp: { min: 400, max: 600 }, items: ['Vampire Dust', 'Enchanted Ring'] }, dungeonId: 'vampire_lair_dg' },
   { id: 'broken_fang_cave', name: 'Broken Fang Cave', type: 'cave', x: 24, y: 54, hold: 'Whiterun Hold', description: 'A vampire den west of Whiterun.', dangerLevel: 'dangerous', levelRequirement: 16, rumors: ['Vampires prey on travelers', 'A master vampire rules the coven'], rewards: { gold: { min: 450, max: 850 }, xp: { min: 380, max: 580 } }, dungeonId: 'broken_fang_cave_dg' },
-  
+
   // Advanced Dungeons (Level 20-35)
   { id: 'labyrinthian', name: 'Labyrinthian', type: 'dungeon', x: 34, y: 30, hold: 'Hjaalmarch', description: 'Vast ruins of an ancient Nordic city. Dragon priests and twisted corridors await.', dangerLevel: 'deadly', levelRequirement: 20, rumors: ['Dragon priests ruled here', 'The Staff of Magnus awaits', 'Many enter, few return'], rewards: { gold: { min: 1500, max: 3000 }, xp: { min: 800, max: 1200 }, items: ['Staff of Magnus', 'Dragon Priest Mask'] }, dungeonId: 'labyrinthian_dg' },
   { id: 'forelhost', name: 'Forelhost', type: 'dungeon', x: 92, y: 72, hold: 'The Rift', description: 'A dragon cult temple high in the Jerall Mountains.', dangerLevel: 'deadly', levelRequirement: 22, rumors: ['Dragon cultists made their last stand here', 'Rahgot guards the peak'], rewards: { gold: { min: 1200, max: 2500 }, xp: { min: 750, max: 1100 }, items: ['Rahgot (Dragon Priest Mask)'] }, dungeonId: 'forelhost_dg' },
   { id: 'nchuand_zel', name: 'Nchuand-Zel', type: 'ruin', x: 6, y: 46, hold: 'The Reach', description: 'Dwemer ruins beneath Markarth, overrun by Falmer.', dangerLevel: 'deadly', levelRequirement: 25, rumors: ['The Falmer have claimed the depths', 'Dwemer automatons still function', 'The expedition never returned'], rewards: { gold: { min: 1800, max: 3500 }, xp: { min: 900, max: 1300 }, items: ['Dwemer Artifacts', 'Aetherial Shard'] }, dungeonId: 'nchuand_zel_dg' },
   { id: 'volunruud', name: 'Volunruud', type: 'dungeon', x: 40, y: 22, hold: 'The Pale', description: 'An ancient Nordic tomb containing the legendary Shout, Aura Whisper.', dangerLevel: 'deadly', levelRequirement: 28, rumors: ['Dark Brotherhood contracts lead here', 'A Word Wall awaits the worthy'], rewards: { gold: { min: 1400, max: 2800 }, xp: { min: 850, max: 1250 }, items: ['Ceremonial Weapons', 'Word of Power'] }, dungeonId: 'volunruud_dg' },
-  
+
   // Expert Dungeons (Level 35-50)
   { id: 'blackreach', name: 'Blackreach', type: 'dungeon', x: 50, y: 36, description: 'A massive underground Dwemer cavern. Bioluminescent fungi and Falmer hunters roam.', dangerLevel: 'deadly', levelRequirement: 35, rumors: ['Crimson Nirnroot grows here', 'The Falmer claim these depths', 'Dwemer automatons still patrol'], rewards: { gold: { min: 3000, max: 6000 }, xp: { min: 1500, max: 2500 }, items: ['Crimson Nirnroot', 'Elder Scroll'] }, dungeonId: 'blackreach_dg' },
   { id: 'skuldafn', name: 'Skuldafn', type: 'dungeon', x: 95, y: 45, hold: 'Eastmarch', description: 'The ancient Nordic temple serving as Alduin\'s portal to Sovngarde.', dangerLevel: 'legendary', levelRequirement: 40, rumors: ['Dragons guard the approach', 'The portal to Sovngarde awaits', 'Only the Dragonborn may enter'], rewards: { gold: { min: 5000, max: 10000 }, xp: { min: 3000, max: 5000 }, items: ['Nahkriin (Dragon Priest Mask)'] }, dungeonId: 'skuldafn_dg' },
@@ -317,6 +318,7 @@ export const MapPage: React.FC<MapPageProps> = ({
   onStartDynamicEvent,
   onCompleteDynamicEvent,
 }) => {
+  const { t } = useLocalization();
   // State
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -338,14 +340,14 @@ export const MapPage: React.FC<MapPageProps> = ({
   const playerLevel = character?.level || 1;
   const currentTier = getLevelTier(playerLevel);
   const currentLocationObj = currentLocation ? findLocationByName(currentLocation) : undefined;
-  
+
   // Get current game time for expiration checks
   const currentGameTime = character?.time ? getGameTimeInHours(character.time) : 0;
 
   // Dynamic events - filter active ones that haven't expired and match player level
   const activeDynamicEvents = useMemo(() => {
     if (!dynamicEventState?.activeEvents) return [];
-    return dynamicEventState.activeEvents.filter(e => 
+    return dynamicEventState.activeEvents.filter(e =>
       (e.status === 'available' || e.status === 'active') &&
       e.levelRequirement <= playerLevel && // Only show events matching player level for progression
       (currentGameTime < e.createdAtGameTime + e.durationHours)
@@ -373,7 +375,7 @@ export const MapPage: React.FC<MapPageProps> = ({
   }, [playerLevel]);
 
   // Filter available missions by level - only show missions matching player progression
-  const availableMissions = useMemo(() => 
+  const availableMissions = useMemo(() =>
     MAP_MISSIONS.filter(m => m.levelRequirement <= playerLevel && !m.isCompleted),
     [playerLevel]
   );
@@ -421,7 +423,7 @@ export const MapPage: React.FC<MapPageProps> = ({
       if (loc.levelRequirement && loc.levelRequirement > playerLevel && filterType !== 'quests') {
         return false;
       }
-      
+
       if (filterType === 'all') return true;
       if (filterType === 'cities') return ['city', 'town', 'village'].includes(loc.type);
       if (filterType === 'dungeons') return ['dungeon', 'ruin', 'cave', 'fort', 'camp'].includes(loc.type);
@@ -457,11 +459,11 @@ export const MapPage: React.FC<MapPageProps> = ({
     if (!container) return;
     let rafId: number | null = null;
     let lastZoom = zoom;
-    
+
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (rafId) return; // Throttle
-      
+
       rafId = requestAnimationFrame(() => {
         lastZoom = Math.max(0.5, Math.min(3, lastZoom + (e.deltaY > 0 ? -0.1 : 0.1)));
         setZoom(lastZoom);
@@ -517,11 +519,11 @@ export const MapPage: React.FC<MapPageProps> = ({
     const color = getMarkerColor(location, currentLocationObj?.id, visitedLocations, questLocations);
     const size = location.type === 'city' ? 22 : location.type === 'town' ? 18 : 14;
     const isLocked = location.levelRequirement && location.levelRequirement > playerLevel;
-    
+
     if (isLocked) {
       return <Lock size={size} color="#6b7280" strokeWidth={2} />;
     }
-    
+
     switch (location.type) {
       case 'city': return <Castle size={size} color={color} fill={isCurrent ? color : 'none'} strokeWidth={2} />;
       case 'town': case 'village': return <Home size={size} color={color} fill={isCurrent ? color : 'none'} strokeWidth={2} />;
@@ -548,41 +550,40 @@ export const MapPage: React.FC<MapPageProps> = ({
   };
 
   return (
-    <div className="h-[calc(100vh-6rem)] flex flex-col bg-gradient-to-b from-stone-900 via-stone-950 to-black overflow-hidden">
+    <div className="h-[calc(100vh-6rem)] flex flex-col bg-zinc-950 overflow-hidden relative">
       {/* Header Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-stone-900/80 border-b border-amber-900/30">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 glass-panel border-x-0 border-t-0 border-b border-zinc-800 z-20 shrink-0">
         <div className="flex items-center gap-3">
           <Compass className="text-amber-500" size={28} />
           <div>
-            <h1 className="text-xl font-serif font-bold text-amber-400 tracking-wide">Map of Skyrim</h1>
+            <h1 className="text-xl font-serif font-bold text-amber-400 tracking-wide">{t('map.title')}</h1>
             {currentLocation && (
               <p className="text-xs text-stone-400">
-                Current: <span className="text-green-400 font-medium">{currentLocation}</span>
+                {t('map.current')}: <span className="text-green-400 font-medium">{currentLocation}</span>
                 <span className="mx-2 text-stone-600">|</span>
-                Level <span className="text-amber-400 font-bold">{playerLevel}</span>
+                {t('map.level')} <span className="text-amber-400 font-bold">{playerLevel}</span>
               </p>
             )}
           </div>
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1 bg-stone-800/50 rounded-lg p-1">
+        <div className="flex flex-wrap items-center gap-1 glass-panel-lighter rounded-lg p-1 border border-zinc-700/30">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'cities', label: 'Cities' },
-            { id: 'dungeons', label: 'Dungeons' },
-            { id: 'landmarks', label: 'Landmarks' },
-            { id: 'unlocked', label: 'Unlocked' },
-            { id: 'quests', label: 'Quests' },
+            { id: 'all', label: t('map.filter.all') },
+            { id: 'cities', label: t('map.filter.cities') },
+            { id: 'dungeons', label: t('map.filter.dungeons') },
+            { id: 'landmarks', label: t('map.filter.landmarks') },
+            { id: 'unlocked', label: t('map.filter.unlocked') },
+            { id: 'quests', label: t('map.filter.quests') },
           ].map(f => (
             <button
               key={f.id}
               onClick={() => setFilterType(f.id)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                filterType === f.id 
-                  ? 'bg-amber-600 text-white' 
-                  : 'text-stone-400 hover:text-white hover:bg-stone-700'
-              }`}
+              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${filterType === f.id
+                ? 'bg-amber-600 text-white'
+                : 'text-stone-400 hover:text-white hover:bg-stone-700'
+                }`}
             >
               {f.label}
             </button>
@@ -591,13 +592,13 @@ export const MapPage: React.FC<MapPageProps> = ({
 
         {/* View Controls */}
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowEvents(!showEvents)} className={`p-2 rounded transition-colors ${showEvents ? 'bg-red-900/40 text-red-400' : 'bg-stone-800 text-stone-500'}`} title="Toggle Events">
+          <button onClick={() => setShowEvents(!showEvents)} className={`p-2 rounded transition-colors ${showEvents ? 'bg-red-900/40 text-red-400' : 'bg-stone-800 text-stone-500'}`} title={t('map.tooltips.toggleEvents')}>
             <AlertTriangle size={18} />
           </button>
-          <button onClick={() => setShowMissions(!showMissions)} className={`p-2 rounded transition-colors ${showMissions ? 'bg-blue-900/40 text-blue-400' : 'bg-stone-800 text-stone-500'}`} title="Toggle Missions">
+          <button onClick={() => setShowMissions(!showMissions)} className={`p-2 rounded transition-colors ${showMissions ? 'bg-blue-900/40 text-blue-400' : 'bg-stone-800 text-stone-500'}`} title={t('map.tooltips.toggleMissions')}>
             <Target size={18} />
           </button>
-          <button onClick={() => setShowLabels(!showLabels)} className={`p-2 rounded transition-colors ${showLabels ? 'bg-amber-900/40 text-amber-400' : 'bg-stone-800 text-stone-500'}`} title="Toggle Labels">
+          <button onClick={() => setShowLabels(!showLabels)} className={`p-2 rounded transition-colors ${showLabels ? 'bg-amber-900/40 text-amber-400' : 'bg-stone-800 text-stone-500'}`} title={t('map.tooltips.toggleLabels')}>
             {showLabels ? <Eye size={18} /> : <EyeOff size={18} />}
           </button>
           <div className="h-6 w-px bg-stone-700" />
@@ -608,7 +609,7 @@ export const MapPage: React.FC<MapPageProps> = ({
             <ZoomOut size={18} className="text-amber-400" />
           </button>
           {currentLocationObj && (
-            <button onClick={() => centerOnLocation(currentLocationObj)} className="p-2 bg-green-900/40 rounded hover:bg-green-900/60" title="Center on you">
+            <button onClick={() => centerOnLocation(currentLocationObj)} className="p-2 bg-green-900/40 rounded hover:bg-green-900/60" title={t('map.tooltips.centerPlayer')}>
               <Navigation size={18} className="text-green-400" />
             </button>
           )}
@@ -631,8 +632,8 @@ export const MapPage: React.FC<MapPageProps> = ({
         >
           <div
             className="absolute inset-0 flex items-center justify-center"
-            style={{ 
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, 
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: 'center center',
               willChange: 'transform', // GPU acceleration for transforms
             }}
@@ -659,25 +660,25 @@ export const MapPage: React.FC<MapPageProps> = ({
                     <stop offset="100%" stopColor="#0a1812" />
                   </linearGradient>
                   <pattern id="snow" patternUnits="userSpaceOnUse" width="4" height="4">
-                    <circle cx="1" cy="1" r="0.3" fill="#fff" opacity="0.08"/>
-                    <circle cx="3" cy="3" r="0.2" fill="#fff" opacity="0.06"/>
+                    <circle cx="1" cy="1" r="0.3" fill="#fff" opacity="0.08" />
+                    <circle cx="3" cy="3" r="0.2" fill="#fff" opacity="0.06" />
                   </pattern>
                   <pattern id="trees" patternUnits="userSpaceOnUse" width="3" height="3">
-                    <path d="M1.5 0 L2.2 2.5 L0.8 2.5 Z" fill="#1a3020" opacity="0.4"/>
+                    <path d="M1.5 0 L2.2 2.5 L0.8 2.5 Z" fill="#1a3020" opacity="0.4" />
                   </pattern>
                   <filter id="glow">
-                    <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
-                    <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    <feGaussianBlur stdDeviation="0.5" result="coloredBlur" />
+                    <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
                   </filter>
                 </defs>
-                
+
                 {/* Background */}
                 <rect width="100" height="100" fill="url(#mapBg)" />
-                
+
                 {/* Sea of Ghosts */}
                 <path d="M0 0 L100 0 L100 10 Q85 14 70 11 Q55 8 40 12 Q25 15 10 10 L0 8 Z" fill="url(#waterGrad)" />
                 <path d="M0 0 L0 12 Q8 16 12 12 Q18 8 22 10 L30 0" fill="url(#waterGrad)" opacity="0.9" />
-                
+
                 {/* Mountain Ranges */}
                 <g opacity="0.8">
                   <path d="M45 42 L52 48 L55 42 L60 50 L65 44 L58 58 L48 58 L42 50 Z" fill="url(#mountainGrad)" />
@@ -695,26 +696,26 @@ export const MapPage: React.FC<MapPageProps> = ({
                 <g opacity="0.55">
                   <path d="M20 88 L32 94 L45 90 L58 95 L72 88 L80 95 L72 100 L48 100 L25 100 L15 94 Z" fill="url(#mountainGrad)" />
                 </g>
-                
+
                 {/* Forests */}
                 <ellipse cx="32" cy="78" rx="14" ry="10" fill="url(#forestGrad)" opacity="0.5" />
                 <ellipse cx="80" cy="72" rx="12" ry="14" fill="url(#forestGrad)" opacity="0.45" />
                 <circle cx="40" cy="68" r="6" fill="url(#forestGrad)" opacity="0.35" />
-                
+
                 {/* Swamps */}
                 <ellipse cx="28" cy="28" rx="10" ry="6" fill="#0a1815" opacity="0.5" />
-                
+
                 {/* Snow */}
                 <rect x="0" y="0" width="100" height="22" fill="url(#snow)" />
                 <rect x="60" y="0" width="40" height="35" fill="url(#snow)" opacity="0.6" />
-                
+
                 {/* Rivers */}
                 <g stroke="#1a3545" strokeWidth="0.5" fill="none" opacity="0.7">
                   <path d="M78 28 Q72 40 74 52 Q72 62 68 72 Q62 82 58 92" />
                   <path d="M32 28 Q36 38 40 48 Q42 55 42 58" />
                   <path d="M10 50 Q18 56 24 65 Q28 75 32 85" />
                 </g>
-                
+
                 {/* Roads */}
                 <g stroke="#3d352a" strokeWidth="0.4" fill="none" strokeDasharray="1.5,0.8" opacity="0.5">
                   <path d="M15 17 Q22 22 28 26" />
@@ -725,7 +726,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                   <path d="M42 52 Q28 50 8 48" />
                   <path d="M45 12 Q44 32 42 52" />
                 </g>
-                
+
                 {/* Hold Names */}
                 {showHolds && (
                   <g fontFamily="serif" fontStyle="italic" opacity="0.35" fontSize="2.3">
@@ -740,7 +741,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                     <text x="68" y="16" fill="#8B7355">WINTERHOLD</text>
                   </g>
                 )}
-                
+
                 {/* Compass Rose */}
                 <g transform="translate(92,92)">
                   <circle cx="0" cy="0" r="5" fill="#1a1510" stroke="#8B7355" strokeWidth="0.3" />
@@ -748,7 +749,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                   <path d="M-4 0 L0 0.8 L4 0 L0 -0.8 Z" fill="#8B7355" opacity="0.7" />
                   <text x="0" y="-5.5" textAnchor="middle" fill="#d4a44a" fontSize="1.8" fontWeight="bold">N</text>
                 </g>
-                
+
                 {/* Title Card */}
                 <g transform="translate(85,6)">
                   <rect x="-10" y="-3" width="20" height="8" fill="#1a1510" stroke="#8B7355" strokeWidth="0.25" rx="0.5" opacity="0.95" />
@@ -764,19 +765,19 @@ export const MapPage: React.FC<MapPageProps> = ({
                 const isVisited = visitedLocations.some(v => findLocationByName(v)?.id === location.id);
                 const isLocked = location.levelRequirement && location.levelRequirement > playerLevel;
                 const clearedData = clearedDungeons.find(d => d.dungeonId.includes(location.id));
-                
+
                 return (
                   <div
                     key={location.id}
                     className={`absolute cursor-pointer transition-all duration-200 hover:scale-125 hover:z-50 ${isLocked ? 'opacity-50' : ''}`}
-                    style={{ 
-                      left: `${location.x}%`, 
-                      top: `${location.y}%`, 
+                    style={{
+                      left: `${location.x}%`,
+                      top: `${location.y}%`,
                       transform: 'translate(-50%, -50%)',
                       zIndex: isCurrent ? 40 : isQuest ? 30 : 20
                     }}
                     onClick={() => { setSelectedLocation(location); setActivePanel('location'); }}
-                    title={isLocked ? `${location.name} (Requires Level ${location.levelRequirement})` : location.name}
+                    title={isLocked ? `${location.name} (${t('map.tooltips.locked', { level: location.levelRequirement || 0 })})` : location.name}
                   >
                     <div className={`relative ${isCurrent ? 'drop-shadow-[0_0_12px_rgba(34,197,94,0.9)] animate-pulse' : 'drop-shadow-md'}`}>
                       {getMarkerIcon(location, isCurrent)}
@@ -794,9 +795,8 @@ export const MapPage: React.FC<MapPageProps> = ({
                       )}
                     </div>
                     {showLabels && (location.type === 'city' || isCurrent || isVisited) && !isLocked && (
-                      <span className={`absolute left-full ml-1 text-[9px] whitespace-nowrap font-medium px-1 rounded ${
-                        isCurrent ? 'text-green-400 bg-black/80' : isVisited ? 'text-blue-300 bg-black/70' : 'text-stone-300 bg-black/60'
-                      }`}>
+                      <span className={`absolute left-full ml-1 text-[9px] whitespace-nowrap font-medium px-1 rounded ${isCurrent ? 'text-green-400 bg-black/80' : isVisited ? 'text-blue-300 bg-black/70' : 'text-stone-300 bg-black/60'
+                        }`}>
                         {location.name}
                       </span>
                     )}
@@ -814,9 +814,9 @@ export const MapPage: React.FC<MapPageProps> = ({
                   <div
                     key={event.id}
                     className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 ${isLocked ? 'opacity-40' : ''}`}
-                    style={{ 
-                      left: `${event.x + offsetX}%`, 
-                      top: `${event.y + offsetY}%`, 
+                    style={{
+                      left: `${event.x + offsetX}%`,
+                      top: `${event.y + offsetY}%`,
                       transform: 'translate(-50%, -50%)',
                       zIndex: 35 // Higher than locations but lower than hover
                     }}
@@ -846,9 +846,9 @@ export const MapPage: React.FC<MapPageProps> = ({
                   <div
                     key={mission.id}
                     className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 ${isLocked ? 'opacity-40' : ''}`}
-                    style={{ 
-                      left: `${mission.x + offsetX}%`, 
-                      top: `${mission.y + offsetY}%`, 
+                    style={{
+                      left: `${mission.x + offsetX}%`,
+                      top: `${mission.y + offsetY}%`,
                       transform: 'translate(-50%, -50%)',
                       zIndex: 34 // Between locations and events
                     }}
@@ -878,18 +878,18 @@ export const MapPage: React.FC<MapPageProps> = ({
                 // Offset to prevent overlap
                 const offsetX = ((idx + 2) % 4 - 2) * 1.8;
                 const offsetY = Math.floor((idx + 2) / 4) % 2 === 0 ? -2.5 : 2.5;
-                
+
                 // Calculate remaining time
                 const remainingHours = Math.max(0, (event.createdAtGameTime + event.durationHours) - currentGameTime);
                 const isExpiringSoon = remainingHours < 6;
-                
+
                 return (
                   <div
                     key={event.id}
                     className={`absolute cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 ${isLocked ? 'opacity-40' : ''}`}
-                    style={{ 
-                      left: `${event.location.x + offsetX}%`, 
-                      top: `${event.location.y + offsetY}%`, 
+                    style={{
+                      left: `${event.location.x + offsetX}%`,
+                      top: `${event.location.y + offsetY}%`,
                       transform: 'translate(-50%, -50%)',
                       zIndex: isActive ? 38 : 36
                     }}
@@ -897,11 +897,10 @@ export const MapPage: React.FC<MapPageProps> = ({
                     title={`${event.name} (Tier ${event.levelTier})`}
                   >
                     <div className={`relative drop-shadow-lg ${isActive ? 'animate-pulse' : ''}`}>
-                      <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-[0_0_12px_rgba(168,85,247,0.5)] ${
-                        isActive 
-                          ? 'bg-purple-800/90 border-purple-400' 
-                          : 'bg-emerald-900/80 border-emerald-500'
-                      }`}>
+                      <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-[0_0_12px_rgba(168,85,247,0.5)] ${isActive
+                        ? 'bg-purple-800/90 border-purple-400'
+                        : 'bg-emerald-900/80 border-emerald-500'
+                        }`}>
                         {getDynamicEventIcon(event)}
                       </div>
                       {/* New badge */}
@@ -940,23 +939,23 @@ export const MapPage: React.FC<MapPageProps> = ({
         </div>
 
         {/* Side Panel */}
-        <div className="w-80 bg-stone-900/95 border-l border-amber-900/30 flex flex-col overflow-hidden">
+        <div className="w-80 glass-panel border-y-0 border-r-0 border-l border-zinc-800 flex flex-col overflow-hidden z-20">
           {/* Panel Tabs */}
           <div className="flex border-b border-stone-700">
-            <button 
-              onClick={() => setActivePanel('legend')} 
+            <button
+              onClick={() => setActivePanel('legend')}
               className={`flex-1 px-2 py-2 text-xs font-medium ${activePanel === 'legend' ? 'bg-stone-800 text-amber-400' : 'text-stone-500 hover:text-stone-300'}`}
             >
               Legend
             </button>
-            <button 
-              onClick={() => setActivePanel('location')} 
+            <button
+              onClick={() => setActivePanel('location')}
               className={`flex-1 px-2 py-2 text-xs font-medium ${activePanel === 'location' ? 'bg-stone-800 text-amber-400' : 'text-stone-500 hover:text-stone-300'}`}
             >
               Location
             </button>
-            <button 
-              onClick={() => setActivePanel('dynamicEvent')} 
+            <button
+              onClick={() => setActivePanel('dynamicEvent')}
               className={`flex-1 px-2 py-2 text-xs font-medium relative ${activePanel === 'dynamicEvent' ? 'bg-stone-800 text-emerald-400' : 'text-stone-500 hover:text-stone-300'}`}
             >
               Events
@@ -966,8 +965,8 @@ export const MapPage: React.FC<MapPageProps> = ({
                 </span>
               )}
             </button>
-            <button 
-              onClick={() => setActivePanel('mission')} 
+            <button
+              onClick={() => setActivePanel('mission')}
               className={`flex-1 px-2 py-2 text-xs font-medium ${activePanel === 'mission' ? 'bg-stone-800 text-blue-400' : 'text-stone-500 hover:text-stone-300'}`}
             >
               Missions
@@ -1037,11 +1036,10 @@ export const MapPage: React.FC<MapPageProps> = ({
 
                 {/* Level Requirement */}
                 {selectedLocation.levelRequirement && (
-                  <div className={`flex items-center gap-2 px-3 py-2 rounded border ${
-                    selectedLocation.levelRequirement <= playerLevel 
-                      ? 'bg-green-900/30 border-green-700/50' 
-                      : 'bg-red-900/30 border-red-700/50'
-                  }`}>
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded border ${selectedLocation.levelRequirement <= playerLevel
+                    ? 'bg-green-900/30 border-green-700/50'
+                    : 'bg-red-900/30 border-red-700/50'
+                    }`}>
                     {selectedLocation.levelRequirement <= playerLevel ? (
                       <Unlock size={16} className="text-green-400" />
                     ) : (
@@ -1073,8 +1071,8 @@ export const MapPage: React.FC<MapPageProps> = ({
                     <div className="px-2 py-1 rounded bg-stone-800 border border-stone-700">
                       <span className="text-stone-400">Faction: </span>
                       <span className={
-                        selectedLocation.faction === 'Imperial' ? 'text-red-400' : 
-                        selectedLocation.faction === 'Stormcloak' ? 'text-blue-400' : 'text-stone-300'
+                        selectedLocation.faction === 'Imperial' ? 'text-red-400' :
+                          selectedLocation.faction === 'Stormcloak' ? 'text-blue-400' : 'text-stone-300'
                       }>{selectedLocation.faction}</span>
                     </div>
                   )}
@@ -1150,7 +1148,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                         Requires Level {selectedLocation.levelRequirement}
                       </button>
                     ) : (
-                      <button 
+                      <button
                         onClick={() => {
                           if (onEnterDungeon) {
                             onEnterDungeon(selectedLocation.name);
@@ -1213,7 +1211,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={() => {
                     if (selectedEvent.levelRequirement > playerLevel) {
                       showToast?.(`Requires Level ${selectedEvent.levelRequirement}`, 'warning');
@@ -1222,11 +1220,10 @@ export const MapPage: React.FC<MapPageProps> = ({
                     onStartEvent?.(selectedEvent);
                   }}
                   disabled={selectedEvent.levelRequirement > playerLevel}
-                  className={`w-full py-2 rounded text-sm font-bold transition-colors ${
-                    selectedEvent.levelRequirement > playerLevel 
-                      ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-red-900 to-orange-800 hover:from-red-800 hover:to-orange-700 text-white'
-                  }`}
+                  className={`w-full py-2 rounded text-sm font-bold transition-colors ${selectedEvent.levelRequirement > playerLevel
+                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-red-900 to-orange-800 hover:from-red-800 hover:to-orange-700 text-white'
+                    }`}
                 >
                   {selectedEvent.levelRequirement > playerLevel ? (
                     <>
@@ -1257,12 +1254,12 @@ export const MapPage: React.FC<MapPageProps> = ({
                   {dynamicEventState?.tierProgress && (
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-stone-700 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all"
-                          style={{ 
-                            width: `${dynamicEventState.tierProgress[currentTier]?.total > 0 
-                              ? (dynamicEventState.tierProgress[currentTier].completed / dynamicEventState.tierProgress[currentTier].total) * 100 
-                              : 0}%` 
+                          style={{
+                            width: `${dynamicEventState.tierProgress[currentTier]?.total > 0
+                              ? (dynamicEventState.tierProgress[currentTier].completed / dynamicEventState.tierProgress[currentTier].total) * 100
+                              : 0}%`
                           }}
                         />
                       </div>
@@ -1276,20 +1273,19 @@ export const MapPage: React.FC<MapPageProps> = ({
                 <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <Sparkles size={14} /> Active Events ({activeDynamicEvents.length}/5)
                 </h3>
-                
+
                 {selectedDynamicEvent ? (
                   <div className="space-y-3">
                     <button onClick={() => setSelectedDynamicEvent(null)} className="text-xs text-stone-500 hover:text-white flex items-center gap-1">
                       ← Back to list
                     </button>
-                    
+
                     <div className="bg-stone-800/50 rounded p-3 border border-emerald-900/50">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${
-                          selectedDynamicEvent.status === 'active' 
-                            ? 'bg-purple-800/90 border-purple-400' 
-                            : 'bg-emerald-900/80 border-emerald-500'
-                        }`}>
+                        <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${selectedDynamicEvent.status === 'active'
+                          ? 'bg-purple-800/90 border-purple-400'
+                          : 'bg-emerald-900/80 border-emerald-500'
+                          }`}>
                           {getDynamicEventIcon(selectedDynamicEvent)}
                         </div>
                         <div className="flex-1">
@@ -1297,9 +1293,9 @@ export const MapPage: React.FC<MapPageProps> = ({
                           <p className="text-xs text-stone-500 uppercase">{selectedDynamicEvent.type} • Tier {selectedDynamicEvent.levelTier}</p>
                         </div>
                       </div>
-                      
+
                       <p className="text-sm text-stone-300 mb-3">{selectedDynamicEvent.description}</p>
-                      
+
                       {/* Event type hint */}
                       <div className="text-xs text-stone-500 italic mb-3 px-2 py-1.5 bg-stone-800/50 rounded border-l-2 border-stone-600">
                         {selectedDynamicEvent.type === 'combat' && '⚔️ Starting this will trigger combat'}
@@ -1313,7 +1309,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                         {selectedDynamicEvent.type === 'mystery' && '🔍 Complete through adventure chat narrative'}
                         {selectedDynamicEvent.type === 'investigation' && '🔍 Complete through adventure chat narrative'}
                       </div>
-                      
+
                       {/* Location */}
                       <div className="flex items-center gap-2 text-xs text-stone-400 mb-2">
                         <MapPin size={12} />
@@ -1322,19 +1318,18 @@ export const MapPage: React.FC<MapPageProps> = ({
                           <span className="text-stone-500">• {selectedDynamicEvent.location.hold}</span>
                         )}
                       </div>
-                      
+
                       {/* Time remaining */}
                       <div className="flex items-center gap-2 text-xs mb-3">
                         <Clock size={12} className="text-orange-400" />
-                        <span className={`${
-                          (selectedDynamicEvent.createdAtGameTime + selectedDynamicEvent.durationHours - currentGameTime) < 6 
-                            ? 'text-orange-400' 
-                            : 'text-stone-400'
-                        }`}>
+                        <span className={`${(selectedDynamicEvent.createdAtGameTime + selectedDynamicEvent.durationHours - currentGameTime) < 6
+                          ? 'text-orange-400'
+                          : 'text-stone-400'
+                          }`}>
                           {Math.max(0, Math.round(selectedDynamicEvent.createdAtGameTime + selectedDynamicEvent.durationHours - currentGameTime))} game hours remaining
                         </span>
                       </div>
-                      
+
                       {/* Chain info */}
                       {selectedDynamicEvent.chainId && (
                         <div className="flex items-center gap-2 text-xs text-pink-400 mb-3 bg-pink-900/20 px-2 py-1 rounded">
@@ -1342,21 +1337,20 @@ export const MapPage: React.FC<MapPageProps> = ({
                           <span>Part of a quest chain (#{selectedDynamicEvent.chainOrder})</span>
                         </div>
                       )}
-                      
+
                       {/* Status badges */}
                       <div className="flex flex-wrap gap-2 mb-3">
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          selectedDynamicEvent.status === 'active' 
-                            ? 'bg-purple-900/50 text-purple-400' 
-                            : 'bg-emerald-900/50 text-emerald-400'
-                        }`}>
+                        <span className={`text-xs px-2 py-1 rounded ${selectedDynamicEvent.status === 'active'
+                          ? 'bg-purple-900/50 text-purple-400'
+                          : 'bg-emerald-900/50 text-emerald-400'
+                          }`}>
                           {selectedDynamicEvent.status === 'active' ? '🔥 In Progress' : '✨ Available'}
                         </span>
                         <span className="text-xs bg-stone-700 text-stone-300 px-2 py-1 rounded">
                           Level {selectedDynamicEvent.levelRequirement}+
                         </span>
                       </div>
-                      
+
                       {/* Rewards */}
                       <div className="mt-3 pt-3 border-t border-stone-700">
                         <h5 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1">
@@ -1379,10 +1373,10 @@ export const MapPage: React.FC<MapPageProps> = ({
                           )}
                         </div>
                       </div>
-                      
+
                       {/* Action buttons */}
                       <div className="mt-4 space-y-2">
-                        <button 
+                        <button
                           onClick={() => {
                             if (selectedDynamicEvent.levelRequirement > playerLevel) {
                               showToast?.(`Requires Level ${selectedDynamicEvent.levelRequirement}`, 'warning');
@@ -1391,13 +1385,12 @@ export const MapPage: React.FC<MapPageProps> = ({
                             onStartDynamicEvent?.(selectedDynamicEvent);
                           }}
                           disabled={selectedDynamicEvent.levelRequirement > playerLevel}
-                          className={`w-full py-2 rounded text-sm font-bold ${
-                            selectedDynamicEvent.levelRequirement > playerLevel
-                              ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                              : selectedDynamicEvent.status === 'active'
-                                ? 'bg-gradient-to-r from-purple-900 to-purple-800 hover:from-purple-800 hover:to-purple-700 text-white'
-                                : 'bg-gradient-to-r from-emerald-900 to-emerald-800 hover:from-emerald-800 hover:to-emerald-700 text-white'
-                          }`}
+                          className={`w-full py-2 rounded text-sm font-bold ${selectedDynamicEvent.levelRequirement > playerLevel
+                            ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                            : selectedDynamicEvent.status === 'active'
+                              ? 'bg-gradient-to-r from-purple-900 to-purple-800 hover:from-purple-800 hover:to-purple-700 text-white'
+                              : 'bg-gradient-to-r from-emerald-900 to-emerald-800 hover:from-emerald-800 hover:to-emerald-700 text-white'
+                            }`}
                         >
                           {selectedDynamicEvent.levelRequirement > playerLevel ? (
                             <>Requires Level {selectedDynamicEvent.levelRequirement}</>
@@ -1407,21 +1400,21 @@ export const MapPage: React.FC<MapPageProps> = ({
                             <>Start Event</>
                           )}
                         </button>
-                        
+
                         {/* Manual complete button for narrative events that are active */}
-                        {selectedDynamicEvent.status === 'active' && 
-                         ['mystery', 'investigation'].includes(selectedDynamicEvent.type) && (
-                          <button 
-                            onClick={() => {
-                              onCompleteDynamicEvent?.(selectedDynamicEvent.id);
-                              setSelectedDynamicEvent(null);
-                              showToast?.(`Completed: ${selectedDynamicEvent.name}`, 'success');
-                            }}
-                            className="w-full py-2 rounded text-sm font-bold bg-gradient-to-r from-amber-900 to-amber-800 hover:from-amber-800 hover:to-amber-700 text-white"
-                          >
-                            ✓ Mark as Completed
-                          </button>
-                        )}
+                        {selectedDynamicEvent.status === 'active' &&
+                          ['mystery', 'investigation'].includes(selectedDynamicEvent.type) && (
+                            <button
+                              onClick={() => {
+                                onCompleteDynamicEvent?.(selectedDynamicEvent.id);
+                                setSelectedDynamicEvent(null);
+                                showToast?.(`Completed: ${selectedDynamicEvent.name}`, 'success');
+                              }}
+                              className="w-full py-2 rounded text-sm font-bold bg-gradient-to-r from-amber-900 to-amber-800 hover:from-amber-800 hover:to-amber-700 text-white"
+                            >
+                              ✓ Mark as Completed
+                            </button>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -1441,25 +1434,22 @@ export const MapPage: React.FC<MapPageProps> = ({
                           <button
                             key={event.id}
                             onClick={() => setSelectedDynamicEvent(event)}
-                            className={`w-full p-3 rounded border text-left transition-colors ${
-                              event.status === 'active'
-                                ? 'bg-purple-900/30 border-purple-700/50 hover:border-purple-500/50'
-                                : 'bg-stone-800/50 border-stone-700 hover:border-emerald-700/50'
-                            }`}
+                            className={`w-full p-3 rounded border text-left transition-colors ${event.status === 'active'
+                              ? 'bg-purple-900/30 border-purple-700/50 hover:border-purple-500/50'
+                              : 'bg-stone-800/50 border-stone-700 hover:border-emerald-700/50'
+                              }`}
                           >
                             <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                event.status === 'active' 
-                                  ? 'bg-purple-800/90 border-purple-400' 
-                                  : 'bg-emerald-900/80 border-emerald-500'
-                              }`}>
+                              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${event.status === 'active'
+                                ? 'bg-purple-800/90 border-purple-400'
+                                : 'bg-emerald-900/80 border-emerald-500'
+                                }`}>
                                 {getDynamicEventIcon(event)}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className={`font-bold truncate ${
-                                    event.status === 'active' ? 'text-purple-300' : 'text-emerald-300'
-                                  }`}>
+                                  <span className={`font-bold truncate ${event.status === 'active' ? 'text-purple-300' : 'text-emerald-300'
+                                    }`}>
                                     {event.name}
                                   </span>
                                   <span className="text-xs text-amber-500 shrink-0 ml-2">T{event.levelTier}</span>
@@ -1493,17 +1483,17 @@ export const MapPage: React.FC<MapPageProps> = ({
                 <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2">
                   <Target size={14} /> Available Missions
                 </h3>
-                
+
                 {selectedMission ? (
                   <div className="space-y-3">
                     <button onClick={() => setSelectedMission(null)} className="text-xs text-stone-500 hover:text-white flex items-center gap-1">
                       ← Back to list
                     </button>
-                    
+
                     <div className="bg-stone-800/50 rounded p-3 border border-blue-900/50">
                       <h4 className="text-lg font-bold text-blue-300">{selectedMission.name}</h4>
                       <p className="text-sm text-stone-300 mt-2">{selectedMission.objective}</p>
-                      
+
                       <div className="flex flex-wrap gap-2 mt-3">
                         <span className={`text-xs px-2 py-1 rounded ${getDangerBgColor(selectedMission.difficulty)}`}>
                           <span className={getDangerColor(selectedMission.difficulty)}>{selectedMission.difficulty}</span>
@@ -1514,7 +1504,7 @@ export const MapPage: React.FC<MapPageProps> = ({
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="mt-3 pt-3 border-t border-stone-700">
                         <h5 className="text-xs font-bold text-amber-400 mb-2">Rewards</h5>
                         <div className="space-y-1 text-xs">
@@ -1534,15 +1524,14 @@ export const MapPage: React.FC<MapPageProps> = ({
                           )}
                         </div>
                       </div>
-                      
-                      <button 
+
+                      <button
                         onClick={() => onStartMission?.(selectedMission)}
                         disabled={selectedMission.levelRequirement > playerLevel}
-                        className={`w-full mt-4 py-2 rounded text-sm font-bold ${
-                          selectedMission.levelRequirement > playerLevel
-                            ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-blue-900 to-blue-800 hover:from-blue-800 hover:to-blue-700 text-white'
-                        }`}
+                        className={`w-full mt-4 py-2 rounded text-sm font-bold ${selectedMission.levelRequirement > playerLevel
+                          ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-blue-900 to-blue-800 hover:from-blue-800 hover:to-blue-700 text-white'
+                          }`}
                       >
                         {selectedMission.levelRequirement > playerLevel ? (
                           <>Requires Level {selectedMission.levelRequirement}</>

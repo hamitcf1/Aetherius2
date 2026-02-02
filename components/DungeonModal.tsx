@@ -7,6 +7,7 @@ import { initializeCombat } from '../services/combatService';
 import { updateMusicForContext } from '../services/audioService';
 import { DoomMinigame } from './DoomMinigame';
 import { Sword, Shield, Heart, Gift, HelpCircle, Skull, Coffee, ChevronRight, X, Sparkles, Lock, CheckCircle, DoorOpen, Swords, Eye, EyeOff, Gamepad2 } from 'lucide-react';
+import { useLocalization } from '../services/localization';
 
 interface DungeonModalProps {
   open: boolean;
@@ -26,15 +27,15 @@ interface DungeonModalProps {
 }
 
 // Node type icons and colors - enhanced with emoji for fog-of-war display
-const NODE_STYLES: Record<string, { icon: React.ReactNode; color: string; bgColor: string; borderColor: string; label: string; emoji: string }> = {
-  start: { icon: <ChevronRight size={16} />, color: 'text-green-400', bgColor: 'bg-green-900/40', borderColor: 'border-green-500', label: 'Start', emoji: '🚪' },
-  combat: { icon: <Sword size={16} />, color: 'text-red-400', bgColor: 'bg-red-900/40', borderColor: 'border-red-500', label: 'Combat', emoji: '⚔️' },
-  elite: { icon: <Shield size={16} />, color: 'text-orange-400', bgColor: 'bg-orange-900/40', borderColor: 'border-orange-500', label: 'Elite', emoji: '🛡️' },
-  boss: { icon: <Skull size={16} />, color: 'text-purple-400', bgColor: 'bg-purple-900/50', borderColor: 'border-purple-500', label: 'Boss', emoji: '💀' },
-  rest: { icon: <Coffee size={16} />, color: 'text-cyan-400', bgColor: 'bg-cyan-900/40', borderColor: 'border-cyan-500', label: 'Rest', emoji: '🏕️' },
-  reward: { icon: <Gift size={16} />, color: 'text-yellow-400', bgColor: 'bg-yellow-900/40', borderColor: 'border-yellow-500', label: 'Treasure', emoji: '💰' },
-  event: { icon: <HelpCircle size={16} />, color: 'text-pink-400', bgColor: 'bg-pink-900/40', borderColor: 'border-pink-500', label: 'Event', emoji: '❓' },
-  empty: { icon: <Sparkles size={16} />, color: 'text-gray-400', bgColor: 'bg-gray-800/40', borderColor: 'border-gray-600', label: 'Empty', emoji: '🌫️' },
+const NODE_STYLES: Record<string, { icon: React.ReactNode; color: string; bgColor: string; borderColor: string; emoji: string }> = {
+  start: { icon: <ChevronRight size={16} />, color: 'text-green-400', bgColor: 'bg-green-900/40', borderColor: 'border-green-500', emoji: '🚪' },
+  combat: { icon: <Sword size={16} />, color: 'text-red-400', bgColor: 'bg-red-900/40', borderColor: 'border-red-500', emoji: '⚔️' },
+  elite: { icon: <Shield size={16} />, color: 'text-orange-400', bgColor: 'bg-orange-900/40', borderColor: 'border-orange-500', emoji: '🛡️' },
+  boss: { icon: <Skull size={16} />, color: 'text-purple-400', bgColor: 'bg-purple-900/50', borderColor: 'border-purple-500', emoji: '💀' },
+  rest: { icon: <Coffee size={16} />, color: 'text-cyan-400', bgColor: 'bg-cyan-900/40', borderColor: 'border-cyan-500', emoji: '🏕️' },
+  reward: { icon: <Gift size={16} />, color: 'text-yellow-400', bgColor: 'bg-yellow-900/40', borderColor: 'border-yellow-500', emoji: '💰' },
+  event: { icon: <HelpCircle size={16} />, color: 'text-pink-400', bgColor: 'bg-pink-900/40', borderColor: 'border-pink-500', emoji: '❓' },
+  empty: { icon: <Sparkles size={16} />, color: 'text-gray-400', bgColor: 'bg-gray-800/40', borderColor: 'border-gray-600', emoji: '🌫️' },
 };
 
 // Generate a Slay the Spire style map from dungeon nodes
@@ -143,6 +144,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
   open, dungeonId, onClose, activeCharacterId, character, companions, inventory,
   onApplyRewards, onApplyBuff, onStartCombat, showToast, onInventoryUpdate, onNeedsChange
 }) => {
+  const { t } = useLocalization();
   const dungeon = useMemo(() => (dungeonId ? getDungeonById(dungeonId) : null), [dungeonId]);
   const [state, setState] = useState<DungeonState | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -174,14 +176,14 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     // Check minimum level requirement
     const playerLevel = character?.level || 1;
     if (dungeon.minimumLevel && playerLevel < dungeon.minimumLevel) {
-      showToast?.(`You must be at least level ${dungeon.minimumLevel} to enter ${dungeon.name}. You are level ${playerLevel}.`, 'error');
+      showToast?.(t('dungeon.warnings.minLevel', { level: dungeon.minimumLevel }), 'error');
       onClose();
       return;
     }
 
     // Warn about recommended level (but don't block)
     if (playerLevel < dungeon.recommendedLevel) {
-      showToast?.(`Warning: ${dungeon.name} is recommended for level ${dungeon.recommendedLevel}+. You are level ${playerLevel}.`, 'warning');
+      showToast?.(t('dungeon.warnings.recLevel', { level: dungeon.recommendedLevel }), 'warning');
     }
 
     const startNode = dungeon.nodes.find(n => n.id === dungeon.startNodeId) || dungeon.nodes[0];
@@ -332,7 +334,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
         const playerLevel = character?.level || 1;
         const initializedCombat = initializeCombat(enemies, dungeon.location, false, true, false, companionsForCombat, playerLevel);
         setCombatState(initializedCombat);
-        
+
         // Switch to combat music
         updateMusicForContext({ inCombat: true, localeType: 'dungeon', mood: 'tense' });
         break;
@@ -489,7 +491,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             items: [...prev.collectedRewards.items, ...(rewards.items || [])]
           }
         } : prev);
-        showToast?.(`Combat won! +${rewards.gold || 0}g, +${rewards.xp || 0}XP accumulated`, 'info');
+        showToast?.(t('messages.goldGained', { amount: rewards.gold || 0 }), 'info');
       }
 
       completeCurrentNode();
@@ -505,7 +507,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
     if (result === 'defeat') {
       setState(prev => prev ? { ...prev, result: 'defeated', active: false } : prev);
-      showToast?.('Defeated in dungeon! Progress lost.', 'error');
+      showToast?.(t('combat.defeat'), 'error');
       onClose({ cleared: false });
     }
 
@@ -522,7 +524,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           }
         } : prev);
       }
-      showToast?.('Fled from combat!', 'warning');
+      showToast?.(t('combat.flee'), 'warning');
     }
 
     setCombatState(null);
@@ -539,6 +541,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
     const isAccessible = isNodeAccessible(mapNode.id);
     const isSelected = selectedNodeId === mapNode.id;
     const isRevealed = mapNode.revealed;
+    const label = t(`dungeon.nodes.${node.type}`) || node.type;
 
     // Hidden node (not revealed yet) - show as mysterious "?"
     if (!isRevealed && !isCompleted) {
@@ -573,24 +576,24 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             ${isAccessible && !isCompleted && !isCurrent ? 'hover:scale-110 hover:brightness-125 cursor-pointer' : ''}
             ${!isAccessible && !isCurrent ? 'opacity-30 cursor-not-allowed' : ''}
           `}
-          title={isRevealed ? `${node.name} (${style.label})` : 'Unknown'}
+          title={isRevealed ? `${node.name} (${label})` : 'Unknown'}
         >
           {isCompleted ? (
             <>
               <CheckCircle size={18} className="text-green-400" />
-              <span className="sr-only">{node.name || style.label}</span>
+              <span className="sr-only">{node.name || label}</span>
             </>
           ) : (
             <>
               <span className="text-lg">{style.emoji}</span>
-              <span className="sr-only">{node.name || style.label}</span>
+              <span className="sr-only">{node.name || label}</span>
             </>
           )}
         </button>
         {/* Show node name below for current/selected/accessible nodes */}
         {isRevealed && (isCurrent || isSelected || isAccessible) && (
           <span className={`text-[10px] mt-1 text-center max-w-[60px] truncate ${style.color}`}>
-            {node.name || style.label}
+            {node.name || label}
           </span>
         )}
       </div>
@@ -665,17 +668,18 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
 
   return (
     <ModalWrapper open={open} onClose={() => setShowExitConfirm(true)} preventOutsideClose>
-      <div className="w-[95vw] max-w-5xl h-[85vh] flex flex-col bg-skyrim-dark rounded-lg overflow-hidden">
+      <div className="w-[95vw] max-w-5xl h-[85vh] flex flex-col bg-zinc-950 text-zinc-200 font-sans rounded-lg overflow-hidden border border-zinc-800 shadow-2xl relative">
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.8),rgba(0,0,0,0.4))] pointer-events-none z-0" />
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-skyrim-border bg-skyrim-paper/10">
+        <div className="flex items-center justify-between p-4 glass-panel border-x-0 border-t-0 border-b border-zinc-800 z-10 shrink-0 relative">
           <div>
-            <h2 className="text-2xl font-serif text-skyrim-gold">{dungeon.name}</h2>
+            <h2 className="text-2xl font-cinzel font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">{dungeon.name}</h2>
             <p className="text-xs text-skyrim-text/70 mt-1">{dungeon.ambientDescription}</p>
             <div className="flex items-center gap-3 mt-1">
               <span className={`text-xs px-2 py-0.5 rounded ${dungeon.difficulty === 'easy' ? 'bg-green-900/50 text-green-300' :
-                  dungeon.difficulty === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
-                    dungeon.difficulty === 'hard' ? 'bg-orange-900/50 text-orange-300' :
-                      'bg-red-900/50 text-red-300'
+                dungeon.difficulty === 'medium' ? 'bg-yellow-900/50 text-yellow-300' :
+                  dungeon.difficulty === 'hard' ? 'bg-orange-900/50 text-orange-300' :
+                    'bg-red-900/50 text-red-300'
                 }`}>
                 {dungeon.difficulty.toUpperCase()}
               </span>
@@ -688,23 +692,23 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           <div className="flex items-center gap-4">
             {currentFloor > 1 && (
               <div className="text-sm px-2 py-1 rounded bg-purple-600/30 text-purple-300 border border-purple-600/50">
-                Floor {currentFloor} • {Math.round(floorScalingFactor * 100)}% Difficulty
+                {t('dungeon.stats.floor')} {currentFloor} • {Math.round(floorScalingFactor * 100)}%
               </div>
             )}
-            <div className="text-sm text-skyrim-gold">Gold: {state.collectedRewards.gold}</div>
-            <div className="text-sm text-blue-300">XP: {state.collectedRewards.xp}</div>
+            <div className="text-sm text-skyrim-gold">{t('dungeon.stats.gold')}: {state.collectedRewards.gold}</div>
+            <div className="text-sm text-blue-300">{t('dungeon.stats.xp')}: {state.collectedRewards.xp}</div>
             <button
               onClick={() => setDoomModeOpen(true)}
               className="px-3 py-1.5 bg-amber-600/30 text-amber-300 rounded hover:bg-amber-600/50 flex items-center gap-1 border border-amber-600/50 transition-all hover:scale-105"
               title="Enter Doom Mode - First-person dungeon crawler!"
             >
-              <Gamepad2 size={14} /> Doom Mode
+              <Gamepad2 size={14} /> {t('dungeon.actions.doom')}
             </button>
             <button
               onClick={() => setShowExitConfirm(true)}
               className="px-3 py-1.5 bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1"
             >
-              <X size={14} /> Exit
+              <X size={14} /> {t('dungeon.actions.exit')}
             </button>
           </div>
         </div>
@@ -744,10 +748,10 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
           </div>
 
           {/* Side Panel */}
-          <div className="w-80 border-l border-skyrim-border bg-skyrim-paper/5 p-4 flex flex-col">
+          <div className="w-80 glass-panel border-y-0 border-r-0 border-l border-zinc-800 p-4 flex flex-col z-10 relative">
             {/* Current Node Info */}
-            <div className="mb-4 p-3 rounded bg-skyrim-paper/10 border border-skyrim-border">
-              <div className="text-xs text-skyrim-text/70 mb-1">Current Location</div>
+            <div className="mb-4 p-3 rounded glass-panel-lighter border border-zinc-700/50">
+              <div className="text-xs text-skyrim-text/70 mb-1">{t('dungeon.currentLocation')}</div>
               <div className="font-semibold text-skyrim-gold flex items-center gap-2">
                 {NODE_STYLES[currentNode?.type || 'empty'].icon}
                 {currentNode?.name || 'Unknown'}
@@ -760,7 +764,7 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
             {/* Selected Node / Action Panel */}
             <div className="flex-1 overflow-y-auto">
               {selectedNode && selectedNode.id !== state.currentNodeId ? (
-                <div className="p-3 rounded bg-skyrim-paper/10 border border-amber-800/30">
+                <div className="p-3 rounded glass-panel-lighter border border-amber-500/30">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-amber-400 flex items-center gap-2">
                       {NODE_STYLES[selectedNode.type].icon}
@@ -780,13 +784,13 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                     }}
                     className="w-full px-3 py-2 bg-skyrim-gold text-black rounded font-medium hover:bg-amber-400"
                   >
-                    {selectedNode.type === 'combat' ? 'Fight' :
-                      selectedNode.type === 'elite' ? 'Challenge Elite' :
-                        selectedNode.type === 'boss' ? 'Engage Boss' :
-                          selectedNode.type === 'rest' ? 'Rest Here' :
-                            selectedNode.type === 'reward' ? 'Collect Treasure' :
-                              selectedNode.type === 'event' ? 'Investigate' :
-                                'Proceed'}
+                    {selectedNode.type === 'combat' ? t('dungeon.actions.fight') :
+                      selectedNode.type === 'elite' ? t('dungeon.actions.challengeElite') :
+                        selectedNode.type === 'boss' ? t('dungeon.actions.engageBoss') :
+                          selectedNode.type === 'rest' ? t('dungeon.actions.rest') :
+                            selectedNode.type === 'reward' ? t('dungeon.actions.loot') :
+                              selectedNode.type === 'event' ? t('dungeon.actions.investigate') :
+                                t('dungeon.actions.proceed')}
                   </button>
                 </div>
               ) : currentNode && !state.completedNodes.includes(currentNode.id) && currentNode.type !== 'start' ? (
@@ -875,8 +879,8 @@ export const DungeonModal: React.FC<DungeonModalProps> = ({
                   key={idx}
                   onClick={() => handleEventChoice(choice)}
                   className={`w-full px-4 py-2 rounded text-left ${choice.outcome === 'damage'
-                      ? 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
-                      : 'bg-skyrim-gold/20 text-skyrim-gold hover:bg-skyrim-gold/30'
+                    ? 'bg-red-600/20 text-red-300 hover:bg-red-600/30'
+                    : 'bg-skyrim-gold/20 text-skyrim-gold hover:bg-skyrim-gold/30'
                     }`}
                 >
                   {choice.label}

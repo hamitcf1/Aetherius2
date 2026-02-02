@@ -208,6 +208,9 @@ export interface InventoryItem {
   // Ephemeral items are temporary (e.g., Bound Weapons) and should be cleaned up automatically
   // when their duration expires or when combat ends. These should not be persisted to permanent storage.
   isEphemeral?: boolean;
+  // Localization keys
+  baseId?: string; // ID for the base item name (e.g., 'iron_sword')
+  enchantmentId?: string; // ID for the enchantment suffix/prefix (e.g., 'minor_fire')
 }
 
 export type LootRarity = 'common' | 'uncommon' | 'rare' | 'mythic' | 'epic' | 'legendary';
@@ -592,7 +595,7 @@ export interface CombatEnemy {
   abilities: CombatAbility[];
   weaknesses?: string[]; // e.g., 'fire', 'silver'
   resistances?: string[]; // e.g., 'frost', 'poison'
-  loot?: Array<{ name: string; type: string; description: string; quantity: number; dropChance: number }>; // kept simple for source data
+  loot?: Array<{ name: string; type: string; description: string; quantity: number; dropChance: number; baseId?: string; enchantmentId?: string }>; // kept simple for source data
   xpReward: number;
   goldReward?: number;
   isBoss?: boolean;
@@ -638,12 +641,13 @@ export interface CombatState {
     gold: number;
     items: Array<{ name: string; type: string; description?: string; quantity: number; enchantment?: any }>;
   };
+  removedItems?: Array<{ name: string; quantity: number }>;
 
   // Per-enemy loot snapshot (so defeated enemy state persists until looted)
   pendingLoot?: Array<{
     enemyId: string;
     enemyName: string;
-    loot: Array<{ name: string; type: string; description?: string; quantity: number; rarity?: string; enchantment?: any }>;
+    loot: Array<{ name: string; type: string; description?: string; quantity: number; rarity?: string; enchantment?: any; baseId?: string; enchantmentId?: string }>;
   }>;
   // Count player action types used during combat to drive skill progression
   playerActionCounts?: Record<string, number>;
@@ -666,7 +670,7 @@ export interface CombatState {
   rewards?: {
     xp: number;
     gold: number;
-    items: Array<{ name: string; type: string; description: string; quantity: number; enchantment?: any }>;
+    items: Array<{ name: string; type: string; description: string; quantity: number; enchantment?: any; baseId?: string; enchantmentId?: string }>;
     transactionId?: string;
     combatId?: string;
     companionXp?: Array<{ companionId: string; xp: number }>;
@@ -678,7 +682,7 @@ export interface CombatState {
     winner?: 'player' | 'enemy' | 'escaped' | 'unresolved';
     survivors: Array<{ id: string; name: string; currentHealth: number }>;
     playerStatus: { currentHealth: number; currentMagicka: number; currentStamina: number; isAlive: boolean };
-    rewards?: { xp: number; gold: number; items: Array<{ name: string; type?: string; description?: string; quantity: number; enchantment?: any }>; transactionId?: string; combatId?: string };
+    rewards?: { xp: number; gold: number; items: Array<{ name: string; type?: string; description?: string; quantity: number; enchantment?: any; baseId?: string; enchantmentId?: string }>; transactionId?: string; combatId?: string };
     timestamp: number;
   };
 }
@@ -692,6 +696,7 @@ export interface CombatLogEntry {
   damage?: number;
   healing?: number;
   effect?: string;
+  damageType?: string;
   isCrit?: boolean;
   hitLocation?: string;
   // Natural d20 roll for the action (1-20)

@@ -4,6 +4,7 @@ import { Spell, getAllSpells, getLearnedSpellIds, learnSpell, getSpellById, isSp
 import { Character } from '../types';
 import { Zap, Check, Lock, ChevronDown, ChevronRight, Sparkles, RefreshCcw, Flame, Snowflake, Wind, Heart, Eye, Star, Wand2 } from 'lucide-react';
 import EmpoweredBadge from './EmpoweredBadge';
+import { useLocalization } from '../services/localization';
 
 interface SpellsModalProps {
   character: Character;
@@ -22,6 +23,7 @@ const SPELL_SCHOOLS: Record<string, { label: string; icon: React.ReactNode; colo
 };
 
 export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, onLearn, onRefund }) => {
+  const { t } = useLocalization();
   const [all, setAll] = useState<Spell[]>([]);
   const [learned, setLearned] = useState<string[]>([]);
   const [selectedSpellId, setSelectedSpellId] = useState<string | null>(null);
@@ -44,10 +46,10 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
     const base = getAllSpells();
     const learnedIds = getLearnedSpellIds(character.id);
     const baseIds = new Set(base.map(s => s.id));
-    
+
     // Add any learned empowered spells that weren't in the base list
     const extras = learnedIds.filter(id => !baseIds.has(id)).map(id => getSpellById(id)).filter(Boolean) as Spell[];
-    
+
     // Also add empowered variants for base spells that can be learned
     // This shows them in the list so users can see and learn them
     const empoweredVariants: Spell[] = [];
@@ -60,7 +62,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
         empoweredVariants.push(empoweredSpell);
       }
     });
-    
+
     setAll([...base, ...extras, ...empoweredVariants]);
     setLearned(learnedIds);
   }, [character.id]);
@@ -113,20 +115,42 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
     return 'unavailable';
   };
 
+  // Helper for localized spell text
+  const getSpellText = (spell: Spell) => {
+    const parts = spell.id.split(/[:_]/);
+    const baseId = parts[0];
+    const isEmpowered = parts.length > 1 && (parts[1] === 'high' || parts[1] === 'empowered');
+
+    const localizedName = t(`spells.data.${baseId}.name`);
+    let localizedDesc = t(`spells.data.${baseId}.description`);
+
+    // For empowered spells, append the empowered note if not already handled by logic
+    if (isEmpowered) {
+      // In the original, empowered name was "Name (Empowered)" and desc had "(Empowered variant...)"
+      // We can reconstruct this if the name logic isn't sufficient
+      return {
+        name: `${localizedName} (Empowered)`, // Hardcoded suffix or define 'empowered' string
+        description: `${localizedDesc} (${t('spells.labels.empoweredAvailable')})` // Simplified
+      };
+    }
+
+    return { name: localizedName || spell.name, description: localizedDesc || spell.description };
+  };
+
   return (
     <ModalWrapper open={true} onClose={onClose} preventOutsideClose>
       <div className="w-full max-w-[900px] h-[min(85vh,700px)] flex flex-col bg-skyrim-paper rounded border border-skyrim-border overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-skyrim-border bg-skyrim-dark/30">
-          <h3 className="text-lg font-bold text-skyrim-gold flex items-center gap-2"><Zap size={18} /> Spell Tome</h3>
+          <h3 className="text-lg font-bold text-skyrim-gold flex items-center gap-2"><Zap size={18} /> {t('spells.title')}</h3>
           <div className="flex items-center gap-4">
             <div className="text-sm text-skyrim-text">
-              Points: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
-              {totalSpentOnSpells > 0 && <span className="ml-2 text-blue-300">({totalSpentOnSpells} in spells)</span>}
+              {t('spells.points')}: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
+              {totalSpentOnSpells > 0 && <span className="ml-2 text-blue-300">({totalSpentOnSpells} {t('spells.points').toLowerCase()})</span>}
             </div>
             {learned.length > 0 && (
               <button onClick={() => setShowRefundConfirm(true)} className="px-2 py-1 text-xs bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1">
-                <RefreshCcw size={12} /> Refund All
+                <RefreshCcw size={12} /> {t('spells.refund')}
               </button>
             )}
           </div>
@@ -142,11 +166,12 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
               const isExpanded = expandedSchools[schoolKey];
               const learnedCount = spells.filter(s => learned.includes(s.id)).length;
               const availableCount = spells.filter(s => getSpellStatus(s) === 'available').length;
+              const localizedSchool = t(`spells.schools.${schoolKey}`) || school.label;
 
               return (
                 <div key={schoolKey} className="mb-1">
                   <button onClick={() => toggleSchool(schoolKey)} className="w-full flex items-center justify-between p-2 rounded hover:bg-skyrim-gold/10">
-                    <span className={`font-medium flex items-center gap-2 ${school.color}`}>{school.icon}{school.label}</span>
+                    <span className={`font-medium flex items-center gap-2 ${school.color}`}>{school.icon}{localizedSchool}</span>
                     <div className="flex items-center gap-2">
                       {availableCount > 0 && <span className="text-xs px-1.5 py-0.5 bg-amber-600/30 text-amber-300 rounded">{availableCount}</span>}
                       {learnedCount > 0 && <span className="text-xs px-1.5 py-0.5 bg-green-600/30 text-green-300 rounded">{learnedCount}</span>}
@@ -160,6 +185,8 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                         const isSelected = selectedSpellId === spell.id;
                         const isEmpowered = spell.id.includes(':') || spell.id.includes('_high') || spell.id.includes('_empowered');
                         const cost = spell.perkCost || 1;
+                        const { name } = getSpellText(spell);
+
                         return (
                           <button key={spell.id} onClick={() => setSelectedSpellId(spell.id)}
                             className={`w-full flex items-center justify-between p-1.5 rounded text-left text-sm ${isSelected ? 'bg-skyrim-gold/20 ring-1 ring-skyrim-gold' : 'hover:bg-skyrim-paper/50'}`}>
@@ -167,7 +194,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                               <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] ${status === 'learned' ? 'bg-green-600/40 text-green-400' : status === 'available' ? 'bg-amber-600/40 text-amber-400' : 'bg-gray-600/40 text-gray-500'}`}>
                                 {status === 'learned' ? <Check size={10} /> : status === 'locked' || status === 'unavailable' ? <Lock size={10} /> : <Sparkles size={10} />}
                               </span>
-                              <span className={`truncate ${status === 'locked' ? 'text-skyrim-text/50' : ''}`}>{spell.name}</span>
+                              <span className={`truncate ${status === 'locked' ? 'text-skyrim-text/50' : ''}`}>{name}</span>
                               {isEmpowered && <EmpoweredBadge small />}
                             </div>
                             <span className={`text-xs ml-2 ${status === 'learned' ? 'text-green-400' : status === 'available' ? 'text-amber-400' : 'text-skyrim-text/50'}`}>{cost}pt</span>
@@ -194,25 +221,28 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
               const empoweredUnlocked = isSpellVariantUnlocked(character, empoweredId);
               const empoweredLearned = learned.includes(empoweredId) || learned.includes(`${baseId}_high`);
 
+              const { name, description } = getSpellText(selectedSpell);
+              const localizedSchool = t(`spells.schools.${getSpellSchool(selectedSpell)}`);
+
               return (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-lg font-bold text-skyrim-gold flex items-center gap-2">{selectedSpell.name}{isEmpowered && <EmpoweredBadge />}</h4>
-                    <span className={`text-xs px-2 py-1 rounded ${status === 'learned' ? 'bg-green-600/30 text-green-300' : status === 'available' ? 'bg-amber-600/30 text-amber-300' : 'bg-gray-600/30 text-gray-400'}`}>{status.toUpperCase()}</span>
+                    <h4 className="text-lg font-bold text-skyrim-gold flex items-center gap-2">{name}{isEmpowered && <EmpoweredBadge />}</h4>
+                    <span className={`text-xs px-2 py-1 rounded ${status === 'learned' ? 'bg-green-600/30 text-green-300' : status === 'available' ? 'bg-amber-600/30 text-amber-300' : 'bg-gray-600/30 text-gray-400'}`}>{(status === 'available' ? t('spells.learn') : status).toUpperCase()}</span>
                   </div>
-                  <div className="text-xs text-skyrim-text/70 flex items-center gap-2">{SPELL_SCHOOLS[getSpellSchool(selectedSpell)]?.icon}{getSpellSchool(selectedSpell)}</div>
-                  <p className="text-sm text-skyrim-text">{selectedSpell.description}</p>
+                  <div className="text-xs text-skyrim-text/70 flex items-center gap-2">{SPELL_SCHOOLS[getSpellSchool(selectedSpell)]?.icon}{localizedSchool}</div>
+                  <p className="text-sm text-skyrim-text">{description}</p>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">Magicka Cost</div><div className="text-blue-400 font-bold">{selectedSpell.cost}</div></div>
-                    <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">Perk Cost</div><div className="text-skyrim-gold font-bold">{cost} pt{cost > 1 ? 's' : ''}</div></div>
-                    {selectedSpell.damage && <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">Damage</div><div className="text-red-400 font-bold">{selectedSpell.damage}</div></div>}
-                    {selectedSpell.heal && <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">Healing</div><div className="text-green-400 font-bold">{selectedSpell.heal}</div></div>}
+                    <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">{t('spells.labels.magicka')}</div><div className="text-blue-400 font-bold">{selectedSpell.cost}</div></div>
+                    <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">{t('spells.labels.perkCost')}</div><div className="text-skyrim-gold font-bold">{cost} pt{cost > 1 ? 's' : ''}</div></div>
+                    {selectedSpell.damage && <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">{t('spells.labels.damage')}</div><div className="text-red-400 font-bold">{selectedSpell.damage}</div></div>}
+                    {selectedSpell.heal && <div className="p-2 bg-skyrim-paper/30 rounded"><div className="text-skyrim-text/70">{t('spells.labels.heal')}</div><div className="text-green-400 font-bold">{selectedSpell.heal}</div></div>}
                   </div>
 
                   {selectedSpell.effects && selectedSpell.effects.length > 0 && (
                     <div className="p-2 bg-skyrim-paper/20 rounded border border-skyrim-border">
-                      <div className="text-xs text-skyrim-text/70 mb-1">Effects:</div>
+                      <div className="text-xs text-skyrim-text/70 mb-1">{t('spells.labels.effects')}</div>
                       <div className="space-y-1">
                         {selectedSpell.effects.map((eff: any, i: number) => (
                           <div key={i} className="text-xs text-skyrim-gold">
@@ -229,7 +259,7 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
 
                   {status === 'locked' && selectedSpell.prerequisites && (
                     <div className="p-2 bg-red-900/20 rounded border border-red-800/30 text-xs">
-                      <div className="text-red-400 mb-1">Requires:</div>
+                      <div className="text-red-400 mb-1">{t('spells.labels.requires')}</div>
                       {selectedSpell.prerequisites.level && <span className="px-2 py-0.5 bg-red-900/30 text-red-300 rounded">Level {selectedSpell.prerequisites.level}</span>}
                     </div>
                   )}
@@ -237,15 +267,15 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
                   {hasEmpowered && !empoweredLearned && (
                     <div className={`p-2 rounded border text-xs ${empoweredUnlocked ? 'bg-amber-900/20 border-amber-800/30' : 'bg-gray-900/20 border-gray-700/30'}`}>
                       <div className={empoweredUnlocked ? 'text-amber-400' : 'text-gray-500'}>
-                        {empoweredUnlocked ? 'Empowered variant available!' : `Empowered variant locked (requires level ${(selectedSpell.prerequisites?.level || 1) + 5})`}
+                        {empoweredUnlocked ? t('spells.labels.empoweredAvailable') : `${t('spells.labels.empoweredLocked')} (requires level ${(selectedSpell.prerequisites?.level || 1) + 5})`}
                       </div>
                     </div>
                   )}
 
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {canLearn && <button onClick={() => handleLearn(selectedSpell.id)} className="px-3 py-1.5 bg-skyrim-gold text-black rounded font-medium text-sm hover:bg-amber-400">Learn ({cost} pt{cost > 1 ? 's' : ''})</button>}
-                    {status === 'unavailable' && !learned.includes(selectedSpell.id) && <span className="px-3 py-1.5 text-gray-500 text-sm">Need {cost - availablePoints} more point{cost - availablePoints > 1 ? 's' : ''}</span>}
-                    {hasEmpowered && empoweredUnlocked && !empoweredLearned && availablePoints >= 10 && <button onClick={() => handleLearn(empoweredId)} className="px-3 py-1.5 bg-amber-600 text-black rounded font-medium text-sm hover:bg-amber-500">Learn Empowered (10 pts)</button>}
+                    {canLearn && <button onClick={() => handleLearn(selectedSpell.id)} className="px-3 py-1.5 bg-skyrim-gold text-black rounded font-medium text-sm hover:bg-amber-400">{t('spells.learn')} ({cost} pt{cost > 1 ? 's' : ''})</button>}
+                    {status === 'unavailable' && !learned.includes(selectedSpell.id) && <span className="px-3 py-1.5 text-gray-500 text-sm">{t('spells.labels.needPoints')} ({cost - availablePoints})</span>}
+                    {hasEmpowered && empoweredUnlocked && !empoweredLearned && availablePoints >= 10 && <button onClick={() => handleLearn(empoweredId)} className="px-3 py-1.5 bg-amber-600 text-black rounded font-medium text-sm hover:bg-amber-500">{t('spells.labels.learnEmpowered')} (10 pts)</button>}
                   </div>
                 </div>
               );
@@ -268,12 +298,12 @@ export const SpellsModal: React.FC<SpellsModalProps> = ({ character, onClose, on
       {showRefundConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
           <div className="bg-skyrim-paper p-4 rounded border border-skyrim-border max-w-md">
-            <h4 className="font-semibold text-lg text-skyrim-gold">Refund All Spells?</h4>
+            <h4 className="font-semibold text-lg text-skyrim-gold">{t('spells.refund')}?</h4>
             <p className="text-sm text-skyrim-text mt-2">This will forget all <span className="text-red-400 font-bold">{learned.length}</span> learned spells and refund <span className="text-green-400 font-bold">{totalSpentOnSpells}</span> perk point{totalSpentOnSpells !== 1 ? 's' : ''}.</p>
             <p className="text-xs text-skyrim-text/70 mt-2">You can re-learn spells later by spending perk points again.</p>
             <div className="flex gap-2 mt-4">
-              <button onClick={handleRefundAll} className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-500">Refund All ({totalSpentOnSpells} pts)</button>
-              <button onClick={() => setShowRefundConfirm(false)} className="flex-1 px-3 py-2 border border-skyrim-border text-skyrim-text rounded hover:bg-skyrim-paper/30">Cancel</button>
+              <button onClick={handleRefundAll} className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-500">{t('spells.refund')} ({totalSpentOnSpells} pts)</button>
+              <button onClick={() => setShowRefundConfirm(false)} className="flex-1 px-3 py-2 border border-skyrim-border text-skyrim-text rounded hover:bg-skyrim-paper/30">{t('rest.actions.cancel')}</button>
             </div>
           </div>
         </div>
