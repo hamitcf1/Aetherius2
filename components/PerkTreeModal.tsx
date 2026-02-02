@@ -230,7 +230,7 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
               const description = t(`perks.data.${selectedDef.id}.description`) || selectedDef.description;
               const statusLabel = st => {
                 if (st === 'unlocked') return t('map.filter.unlocked');
-                if (st === 'available') return t('rest.spells.learn'); // "Learn" / "Available" equivalent? 
+                if (st === 'available') return t('spells.learn'); // "Learn" / "Available" equivalent? 
                 // Actually map.filter.unlocked is "Unlocked" (Açık).
                 // PerkTreeModal used Unlocked/Available/Locked.
                 // I'll stick to upper case English key lookups or use statusOf(selectedDef).toUpperCase().

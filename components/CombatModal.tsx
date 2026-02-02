@@ -932,7 +932,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     // Skip auto-selection if we're in targeting mode for allies (heals/buffs)
     if (pendingTargeting) return;
 
-    if (!selectedTarget) {
+    if (!selectedTarget && combatState?.enemies) {
       const firstAlive = combatState.enemies.find(e => e.currentHealth > 0);
       if (firstAlive) setSelectedTarget(firstAlive.id);
     }
