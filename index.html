@@ -1,203 +1,255 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SkyAetherius</title>
-    <link rel="icon" type="image/svg+xml" href="/skyrim-favicon.svg" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              serif: ['Cinzel', 'serif'],
-              sans: ['Lato', 'sans-serif'],
-            },
-            colors: {
-              skyrim: {
-                dark: 'var(--skyrim-dark)',
-                paper: 'var(--skyrim-paper)',
-                border: 'var(--skyrim-border)',
-                gold: 'var(--skyrim-gold)',
-                goldHover: 'var(--skyrim-gold-hover)',
-                text: 'var(--skyrim-text)',
-                accent: 'var(--skyrim-accent)'
-              }
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyAetherius</title>
+  <link rel="icon" type="image/svg+xml" href="/skyrim-favicon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['Cinzel', 'serif'],
+            sans: ['Lato', 'sans-serif'],
+          },
+          colors: {
+            skyrim: {
+              dark: 'var(--skyrim-dark)',
+              paper: 'var(--skyrim-paper)',
+              border: 'var(--skyrim-border)',
+              gold: 'var(--skyrim-gold)',
+              goldHover: 'var(--skyrim-gold-hover)',
+              text: 'var(--skyrim-text)',
+              accent: 'var(--skyrim-accent)'
             }
           }
         }
       }
-    </script>
-    <style>
-      :root {
-        /* Modern Dark Fantasy Palette */
-        --skyrim-dark: #09090b;   /* Deep Zinc */
-        --skyrim-paper: #18181b;  /* Lighter Zinc */
-        --skyrim-border: #3f3f46; /* Border Zinc */
-        --skyrim-gold: #fbbf24;   /* Amber-400 (Vibrant Gold) */
-        --skyrim-gold-hover: #f59e0b; /* Amber-500 */
-        --skyrim-text: #e4e4e7;   /* Zinc-200 */
-        --skyrim-accent: #27272a; /* Zinc-800 */
-        
-        /* Glassmorphism helpers */
-        --glass-bg: rgba(24, 24, 27, 0.7);
-        --glass-border: rgba(255, 255, 255, 0.1);
-        --glass-blur: 12px;
-      }
-      
-      /* Use native system cursors (prefer OS defaults instead of custom PNGs) */
-      /* Skyrim-style custom cursors - PNG must be 32x32 max */
-      *, *::before, *::after {
-        cursor: url('/cursor-default.png') 0 0, auto;
-      }
-      
-      a, button, [role="button"], 
-      input[type="submit"], input[type="button"], input[type="reset"],
-      select, .cursor-pointer, [onclick], label, summary,
-      [tabindex]:not([tabindex="-1"]) {
-        cursor: url('/cursor-pointer.png') 6 0, pointer !important;
-      }
-      
-      input[type="text"], input[type="password"], input[type="email"], 
-      input[type="number"], input[type="search"], input[type="tel"], 
-      input[type="url"], textarea, [contenteditable="true"] {
-        cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23c0a062' stroke-width='2'/%3E%3C/svg%3E") 16 16, text;
-      }
+    }
+  </script>
+  <style>
+    :root {
+      /* Modern Dark Fantasy Palette */
+      --skyrim-dark: #09090b;
+      /* Deep Zinc */
+      --skyrim-paper: #18181b;
+      /* Lighter Zinc */
+      --skyrim-border: #3f3f46;
+      /* Border Zinc */
+      --skyrim-gold: #fbbf24;
+      /* Amber-400 (Vibrant Gold) */
+      --skyrim-gold-hover: #f59e0b;
+      /* Amber-500 */
+      --skyrim-text: #e4e4e7;
+      /* Zinc-200 */
+      --skyrim-accent: #27272a;
+      /* Zinc-800 */
 
-      body {
-        background-color: var(--skyrim-dark);
-        background-image: url('https://www.transparenttextures.com/patterns/dark-leather.png');
-        color: var(--skyrim-text);
-        overflow-x: hidden;
-      }
-      html {
-        overflow-x: hidden;
-      }
-      /* Custom Scrollbar (theme-aware) */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 6px; /* Thinner horizontal scrollbars */
-      }
-      ::-webkit-scrollbar-track {
-        background: var(--skyrim-paper); 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: var(--skyrim-border); 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--skyrim-gold); 
-      }
-      /* Firefox scrollbar styling */
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: var(--skyrim-border) var(--skyrim-paper);
-      }
-      /* Utility class to hide scrollbars while keeping scroll functionality */
-      .scrollbar-hide {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      .scrollbar-hide::-webkit-scrollbar {
-        display: none;
-      }
-      /* Theme the browser focus outline and Tailwind ring color (with fallbacks) */
-      :root {
-        --tw-ring-color: color-mix(in srgb, var(--skyrim-gold, #c0a062) 50%, transparent);
-      }
-      :focus {
-        outline: 1px solid var(--skyrim-gold, #c0a062);
-        outline-offset: 2px;
-      }
-      :focus:not(:focus-visible) {
-        outline: none;
-      }
-      /* Strongly override Tailwind preflight pseudo-element border color which defaults to a light gray (#e5e7eb).
+      /* Glassmorphism helpers */
+      --glass-bg: rgba(24, 24, 27, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-blur: 12px;
+    }
+
+    /* Use native system cursors (prefer OS defaults instead of custom PNGs) */
+    /* Skyrim-style custom cursors - PNG must be 32x32 max */
+    *,
+    *::before,
+    *::after {
+      cursor: url('/cursor-default.png') 0 0, auto;
+    }
+
+    a,
+    button,
+    [role="button"],
+    input[type="submit"],
+    input[type="button"],
+    input[type="reset"],
+    select,
+    .cursor-pointer,
+    [onclick],
+    label,
+    summary,
+    [tabindex]:not([tabindex="-1"]) {
+      cursor: url('/cursor-pointer.png') 6 0, pointer !important;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    textarea,
+    [contenteditable="true"] {
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M10 6 L22 6 M16 6 L16 26 M10 26 L22 26' fill='none' stroke='%23c0a062' stroke-width='2'/%3E%3C/svg%3E") 16 16, text;
+    }
+
+    body {
+      background-color: var(--skyrim-dark);
+      background-image: url('https://www.transparenttextures.com/patterns/dark-leather.png');
+      color: var(--skyrim-text);
+      overflow-x: hidden;
+    }
+
+    html {
+      overflow-x: hidden;
+    }
+
+    /* Custom Scrollbar (theme-aware) */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 6px;
+      /* Thinner horizontal scrollbars */
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--skyrim-paper);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--skyrim-border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--skyrim-gold);
+    }
+
+    /* Firefox scrollbar styling */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--skyrim-border) var(--skyrim-paper);
+    }
+
+    /* Utility class to hide scrollbars while keeping scroll functionality */
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Theme the browser focus outline and Tailwind ring color (with fallbacks) */
+    :root {
+      --tw-ring-color: color-mix(in srgb, var(--skyrim-gold, #c0a062) 50%, transparent);
+    }
+
+    :focus {
+      outline: 1px solid var(--skyrim-gold, #c0a062);
+      outline-offset: 2px;
+    }
+
+    :focus:not(:focus-visible) {
+      outline: none;
+    }
+
+    /* Strongly override Tailwind preflight pseudo-element border color which defaults to a light gray (#e5e7eb).
          Use the theme variable with a fallback so undefined vars won't produce the bright color. */
-      *, *::before, *::after {
-        border-color: var(--skyrim-border, #4a4a4a) !important;
-      }
+    *,
+    *::before,
+    *::after {
+      border-color: var(--skyrim-border, #4a4a4a) !important;
+    }
 
-      /* Ensure form controls follow the project theme (fix white backgrounds) */
-      input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], textarea, select, [contenteditable="true"] {
-        background-color: var(--skyrim-paper) !important;
-        color: var(--skyrim-text) !important;
-        border-color: var(--skyrim-border) !important;
-        -webkit-text-fill-color: var(--skyrim-text) !important;
-      }
-      
-      /* Fix browser autofill styling - override the light yellow/white backgrounds */
-      input:-webkit-autofill,
-      input:-webkit-autofill:hover,
-      input:-webkit-autofill:focus,
-      input:-webkit-autofill:active,
-      textarea:-webkit-autofill,
-      select:-webkit-autofill {
-        -webkit-box-shadow: 0 0 0 1000px var(--skyrim-paper) inset !important;
-        -webkit-text-fill-color: var(--skyrim-text) !important;
-        background-color: var(--skyrim-paper) !important;
-        border-color: var(--skyrim-border) !important;
-        caret-color: var(--skyrim-text) !important;
-        transition: background-color 5000s ease-in-out 0s;
-      }
-      
-      /* Firefox autofill fix */
-      input:autofill,
-      textarea:autofill,
-      select:autofill {
-        background-color: var(--skyrim-paper) !important;
-        color: var(--skyrim-text) !important;
-        border-color: var(--skyrim-border) !important;
-      }
-      
-      input::placeholder, textarea::placeholder {
-        color: rgba(209,209,209,0.55) !important;
-      }
-      textarea { resize: vertical; }
-      input[disabled], textarea[disabled], [contenteditable="false"] { opacity: 0.6; }
+    /* Ensure form controls follow the project theme (fix white backgrounds) */
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    input[type="search"],
+    textarea,
+    select,
+    [contenteditable="true"] {
+      background-color: var(--skyrim-paper) !important;
+      color: var(--skyrim-text) !important;
+      border-color: var(--skyrim-border) !important;
+      -webkit-text-fill-color: var(--skyrim-text) !important;
+    }
 
-      /* Performance-first UI utilities: cheaper backdrop and shadow for low-end devices */
+    /* Fix browser autofill styling - override the light yellow/white backgrounds */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active,
+    textarea:-webkit-autofill,
+    select:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 1000px var(--skyrim-paper) inset !important;
+      -webkit-text-fill-color: var(--skyrim-text) !important;
+      background-color: var(--skyrim-paper) !important;
+      border-color: var(--skyrim-border) !important;
+      caret-color: var(--skyrim-text) !important;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    /* Firefox autofill fix */
+    input:autofill,
+    textarea:autofill,
+    select:autofill {
+      background-color: var(--skyrim-paper) !important;
+      color: var(--skyrim-text) !important;
+      border-color: var(--skyrim-border) !important;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: rgba(209, 209, 209, 0.55) !important;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    input[disabled],
+    textarea[disabled],
+    [contenteditable="false"] {
+      opacity: 0.6;
+    }
+
+    /* Performance-first UI utilities: cheaper backdrop and shadow for low-end devices */
+    .backdrop-lite {
+      background-color: rgba(10, 10, 10, 0.55);
+      /* tiny blur for a subtle depth effect; inexpensive compared to large blurs */
+      -webkit-backdrop-filter: blur(2px);
+      backdrop-filter: blur(2px);
+    }
+
+    .shadow-cheap {
+      /* smaller spread, lower alpha */
+      box-shadow: 0 6px 18px rgba(2, 6, 23, 0.12), 0 2px 6px rgba(2, 6, 23, 0.04) inset;
+    }
+
+    @media (prefers-reduced-motion: reduce),
+    (prefers-reduced-transparency: reduce) {
       .backdrop-lite {
-        background-color: rgba(10,10,10,0.55);
-        /* tiny blur for a subtle depth effect; inexpensive compared to large blurs */
-        -webkit-backdrop-filter: blur(2px);
-        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
       }
 
       .shadow-cheap {
-        /* smaller spread, lower alpha */
-        box-shadow: 0 6px 18px rgba(2,6,23,0.12), 0 2px 6px rgba(2,6,23,0.04) inset;
+        box-shadow: none !important;
       }
+    }
+  </style>
 
-      @media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
-        .backdrop-lite { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-        .shadow-cheap { box-shadow: none !important; }
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "uuid": "https://esm.sh/uuid@^13.0.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
-    "jspdf": "https://esm.sh/jspdf@2.5.1"
-  }
-}
-</script>
-    <link rel="stylesheet" href="/styles/modern.css">
-    <link rel="stylesheet" href="/styles/saas-2026.css">
-  </head>
-  <body>
-    <div id="root"></div>
+  <link rel="stylesheet" href="/styles/modern.css">
+  <link rel="stylesheet" href="/styles/saas-2026.css">
+</head>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
   <script type="module" src="/console-demo.js"></script>
 </body>
+
 </html>
