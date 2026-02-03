@@ -38,7 +38,7 @@ const VoiceStyleDropdown: React.FC<{
         <span className="flex-1 text-left truncate text-sm">{current?.label || 'Default (Auto)'}</span>
         <ChevronDown size={14} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      
+
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-full bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
           <button
@@ -94,10 +94,10 @@ const ActionBar: React.FC = () => {
     showQuantityControls,
     setShowQuantityControls,
   } = useAppContext();
-  
+
   // Localization
   const { language, setLanguage, t } = useLocalization();
-  
+
   const [open, setOpen] = useState(false);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -105,7 +105,7 @@ const ActionBar: React.FC = () => {
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const settingsHydrateRef = useRef<number | null>(null);
 
-  
+
   // ESC key handler for settings modal
   useEffect(() => {
     if (!showSettingsModal) return;
@@ -118,7 +118,7 @@ const ActionBar: React.FC = () => {
 
     // hydrate heavy settings sections during idle to avoid blocking the opening interaction
     if (settingsHydrateRef.current) {
-      try { clearTimeout(settingsHydrateRef.current); } catch {}
+      try { clearTimeout(settingsHydrateRef.current); } catch { }
     }
     if ((window as any).requestIdleCallback) {
       settingsHydrateRef.current = (window as any).requestIdleCallback(() => setSettingsHydrated(true));
@@ -133,20 +133,20 @@ const ActionBar: React.FC = () => {
         try {
           if ((window as any).cancelIdleCallback) (window as any).cancelIdleCallback(settingsHydrateRef.current);
           else clearTimeout(settingsHydrateRef.current as number);
-        } catch {}
+        } catch { }
         settingsHydrateRef.current = null;
       }
     };
   }, [showSettingsModal]);
-  
+
   // Music volume state
   const [musicVolume, setMusicVolume] = useState(() => audioService.getConfig().musicVolume);
   const [soundVolume, setSoundVolume] = useState(() => audioService.getConfig().soundEffectsVolume);
-  
+
   // Voice settings state - load from ttsService (which has localStorage fallback)
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => getVoiceSettings().gender || 'male');
   const [voiceName, setVoiceName] = useState<string>(() => getVoiceSettings().voiceName || '');
-  
+
   // Audio state - sync with audioService config
   const [soundEnabled, setSoundEnabled] = useState(() => audioService.getConfig().soundEffectsEnabled);
   const [musicEnabled, setMusicEnabled] = useState(() => audioService.getConfig().musicEnabled);
@@ -199,13 +199,13 @@ const ActionBar: React.FC = () => {
     audioService.setMusicEnabled(newState);
     updateUserSettings?.({ musicEnabled: newState });
   };
-  
+
   // Volume handlers
   const handleMusicVolumeChange = (volume: number) => {
     setMusicVolume(volume);
     audioService.setMusicVolume(volume);
   };
-  
+
   const handleSoundVolumeChange = (volume: number) => {
     setSoundVolume(volume);
     audioService.setSoundEffectsVolume(volume);
@@ -226,11 +226,11 @@ const ActionBar: React.FC = () => {
     setWeatherMouseInteractionEnabled(newState);
     updateUserSettings?.({ weatherMouseInteractionEnabled: newState });
   };
-  
+
   // Ref for the button to align dropdown
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{left: number, top: number, width: number}>({left: 0, top: 0, width: 220});
+  const [dropdownPos, setDropdownPos] = useState<{ left: number, top: number, width: number }>({ left: 0, top: 0, width: 220 });
   // debounce ref for weather intensity to avoid repeated heavy renders
   const intensityTimerRef = useRef<number | null>(null);
 
@@ -276,23 +276,23 @@ const ActionBar: React.FC = () => {
   // Close dropdown when clicking outside
   useEffect(() => {
     if (!open) return;
-    
+
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
       // Don't close if clicking the button or inside the dropdown
       if (buttonRef.current?.contains(target)) return;
       if (dropdownRef.current?.contains(target)) return;
-      
+
       setOpen(false);
       window.removeEventListener('scroll', updateDropdownPos);
       window.removeEventListener('resize', updateDropdownPos);
     };
-    
+
     // Delay adding listener to avoid immediate close
     const timer = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
     }, 0);
-    
+
     return () => {
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleClickOutside);
@@ -305,7 +305,7 @@ const ActionBar: React.FC = () => {
         ref={buttonRef}
         onClick={handleToggle}
         className="pop-in bg-skyrim-gold text-skyrim-dark px-3 py-2 rounded shadow-lg font-bold flex items-center gap-2 relative overflow-hidden shrink-0"
-        aria-label={open ? 'Close actions menu' : 'Open actions menu'}
+        aria-label={open ? t('common.close') : t('actions.label')}
       >
         <span style={{ position: 'relative', width: 20, height: 20, display: 'inline-block' }}>
           <Plus
@@ -336,7 +336,7 @@ const ActionBar: React.FC = () => {
             <rect x="5" y="11" width="14" height="2" rx="1" fill="currentColor" />
           </svg>
         </span>
-        Actions
+        {t('actions.label')}
       </button>
       {open && createPortal(
         <div
@@ -360,60 +360,59 @@ const ActionBar: React.FC = () => {
             data-sfx="button_click"
             className="w-full flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-skyrim-gold/20 to-skyrim-gold/10 border border-skyrim-gold rounded font-bold text-skyrim-gold hover:from-skyrim-gold/30 hover:to-skyrim-gold/20 transition-all"
           >
-            <SlidersHorizontal size={16} /> Settings
+            <SlidersHorizontal size={16} /> {t('common.settings')}
             <span className="ml-auto text-xs text-skyrim-text/60">{getLanguageFlag(language)}</span>
           </button>
-          
+
           {/* Theme Selector */}
           {colorTheme !== undefined && setColorTheme && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs text-gray-500 font-bold">Theme</div>
+              <div className="text-xs text-gray-500 font-bold">{t('settings.theme')}</div>
               <ThemeSelector currentTheme={colorTheme} onSelect={setColorTheme} />
             </div>
           )}
           <button onClick={handleManualSave} disabled={isSaving} className="w-full flex items-center gap-2 px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold disabled:opacity-50">
-            <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
+            <Save size={16} /> {isSaving ? t('status.saving') : t('common.save')}
           </button>
           <button onClick={() => setCurrentCharacterId(null)} className="w-full flex items-center gap-2 px-3 py-2 bg-skyrim-dark text-skyrim-gold rounded font-bold">
-            <Users size={16} /> Switch
+            <Users size={16} /> {t('actions.switch')}
           </button>
-          <button 
+          <button
             onClick={() => {
               if (isAnonymous) {
                 setShowLogoutWarning(true);
               } else {
                 handleLogout();
               }
-            }} 
+            }}
             className="w-full flex items-center gap-2 px-3 py-2 bg-red-700 text-white rounded font-bold"
           >
-            <LogOut size={16} /> {isAnonymous ? 'Exit (Guest)' : 'Exit'}
+            <LogOut size={16} /> {isAnonymous ? t('actions.exitGuest') : t('actions.exit')}
           </button>
           <button onClick={handleCreateImagePrompt} className="w-full flex items-center gap-2 px-3 py-2 bg-blue-700 text-white rounded font-bold">
-            <Sparkles size={16} /> Create Image Prompt
+            <Sparkles size={16} /> {t('actions.createImage')}
           </button>
-          
+
           {isFeatureEnabled('photoUpload') && (
             <div className="relative">
               <label className="w-full flex items-center gap-2 px-3 py-2 rounded font-bold bg-green-700 text-white cursor-pointer hover:bg-green-600">
-                <ImageIcon size={16} /> Upload Photo
+                <ImageIcon size={16} /> {t('actions.uploadPhoto')}
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} />
               </label>
             </div>
           )}
-          
+
           {/* Export PDF - show as disabled if feature not enabled */}
           <div className="relative group">
-            <button 
+            <button
               onClick={isFeatureEnabled('exportPDF') ? handleExportPDF : undefined}
               disabled={!isFeatureEnabled('exportPDF') || isExporting}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${
-                isFeatureEnabled('exportPDF')
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${isFeatureEnabled('exportPDF')
                   ? 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400 disabled:opacity-50'
                   : 'bg-gray-600 text-skyrim-text cursor-not-allowed opacity-60'
-              }`}
+                }`}
             >
-              <Download size={16} /> {isExporting ? 'Generating...' : 'Export Full Record'}
+              <Download size={16} /> {isExporting ? t('actions.generating') : t('actions.export')}
             </button>
             {!isFeatureEnabled('exportPDF') && (
               <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-lg">
@@ -424,19 +423,19 @@ const ActionBar: React.FC = () => {
 
           {/* Export/Import JSON - Character backup/restore */}
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={handleExportJSON}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded font-bold bg-green-700 text-white hover:bg-green-600"
               title="Export character as JSON backup"
             >
-              <FileJson size={16} /> Export JSON
+              <FileJson size={16} /> {t('actions.exportJson')}
             </button>
-            <button 
+            <button
               onClick={handleImportJSON}
               className="flex-1 flex items-center gap-2 px-3 py-2 rounded font-bold bg-blue-700 text-white hover:bg-blue-600"
               title="Import character from JSON backup"
             >
-              <Upload size={16} /> Import
+              <Upload size={16} /> {t('actions.import')}
             </button>
           </div>
 
@@ -446,15 +445,14 @@ const ActionBar: React.FC = () => {
           {/* AI Profile Image - hide entirely when feature is disabled */}
           {isFeatureEnabled('aiProfileImage') && (
             <div className="relative group">
-              <button 
+              <button
                 onClick={handleGenerateProfileImage}
                 disabled={isGeneratingProfileImage}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${
-                  isGeneratingProfileImage ? 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-70' : 'bg-skyrim-accent text-white hover:bg-purple-700'
-                }`}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded font-bold ${isGeneratingProfileImage ? 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-70' : 'bg-skyrim-accent text-white hover:bg-purple-700'
+                  }`}
               >
                 {isGeneratingProfileImage ? <Loader2 className="animate-spin" size={16} /> : <ImageIcon size={16} />}
-                {isGeneratingProfileImage ? 'Generating...' : 'Generate Profile Photo'}
+                {isGeneratingProfileImage ? t('actions.generating') : t('actions.generateProfile')}
               </button>
             </div>
           )}
@@ -462,8 +460,8 @@ const ActionBar: React.FC = () => {
           {/* Version and Credits */}
           <div className="border-t border-skyrim-border/60 pt-3 mt-2">
             <div className="text-center">
-              <div className="text-xs text-gray-500 font-sans">Version 1.0.8</div>
-              <div className="text-[10px] text-gray-600 font-sans mt-1">Made by Hamit Can Fındık</div>
+              <div className="text-xs text-gray-500 font-sans">{t('actions.version')} 1.0.8</div>
+              <div className="text-[10px] text-gray-600 font-sans mt-1">{t('actions.madeBy')} Hamit Can Fındık</div>
             </div>
           </div>
         </div>,
@@ -480,11 +478,11 @@ const ActionBar: React.FC = () => {
               </div>
               <h3 className="text-xl font-serif text-red-400">Warning: Guest Account</h3>
             </div>
-            
+
             <p className="text-skyrim-text mb-4">
               You are logged in as a <strong className="text-yellow-400">guest</strong>. If you exit now, you will <strong className="text-red-400">permanently lose all your data</strong> including:
             </p>
-            
+
             <ul className="text-skyrim-text text-sm mb-6 space-y-1 ml-4">
               <li>• All characters and their progress</li>
               <li>• Inventory, gold, and items</li>
@@ -495,7 +493,7 @@ const ActionBar: React.FC = () => {
             <p className="text-yellow-400 text-sm mb-6">
               💡 Tip: Create an account to save your progress permanently!
             </p>
-            
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLogoutWarning(false)}
@@ -545,11 +543,10 @@ const ActionBar: React.FC = () => {
                   <button
                     key={lang.code}
                     onClick={() => setLanguage(lang.code)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded border transition-colors ${
-                      language === lang.code
+                    className={`flex items-center gap-2 px-3 py-2 rounded border transition-colors ${language === lang.code
                         ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
                         : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
-                    }`}
+                      }`}
                   >
                     <span className="text-lg">{getLanguageFlag(lang.code)}</span>
                     <span>{lang.nativeName}</span>
@@ -584,7 +581,7 @@ const ActionBar: React.FC = () => {
                 <Music2 size={16} className="text-skyrim-gold" />
                 <span className="text-sm font-bold text-skyrim-gold uppercase">Audio</span>
               </div>
-              
+
               {/* Music Volume */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
@@ -612,7 +609,7 @@ const ActionBar: React.FC = () => {
                   />
                 </div>
               </div>
-              
+
               {/* Sound Effects Volume */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -657,27 +654,25 @@ const ActionBar: React.FC = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleVoiceGenderChange('male')}
-                        className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                          voiceGender === 'male'
+                        className={`flex-1 px-3 py-2 rounded border transition-colors ${voiceGender === 'male'
                             ? 'bg-blue-700 text-white border-blue-600'
                             : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-blue-600'
-                        }`}
+                          }`}
                       >
                         Male
                       </button>
                       <button
                         onClick={() => handleVoiceGenderChange('female')}
-                        className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                          voiceGender === 'female'
+                        className={`flex-1 px-3 py-2 rounded border transition-colors ${voiceGender === 'female'
                             ? 'bg-pink-700 text-white border-pink-600'
                             : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-pink-600'
-                        }`}
+                          }`}
                       >
                         Female
                       </button>
                     </div>
                   </div>
-                  
+
                   {/* Voice Style */}
                   <div className="mb-3">
                     <label className="text-xs text-skyrim-text block mb-2">Voice Style</label>
@@ -688,7 +683,7 @@ const ActionBar: React.FC = () => {
                       language={language}
                     />
                   </div>
-                  
+
                   <p className="text-[10px] text-gray-500 mt-2 italic">
                     Voice language will match your selected language ({AVAILABLE_LANGUAGES.find(l => l.code === language)?.nativeName})
                   </p>
@@ -735,11 +730,10 @@ const ActionBar: React.FC = () => {
                         <button
                           key={w.value}
                           onClick={() => startTransition(() => setWeatherEffect(w.value as WeatherEffectType))}
-                          className={`flex flex-col items-center gap-1 px-2 py-2 rounded border text-xs transition-colors ${
-                            weatherEffect === w.value
+                          className={`flex flex-col items-center gap-1 px-2 py-2 rounded border text-xs transition-colors ${weatherEffect === w.value
                               ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
                               : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
-                          }`}
+                            }`}
                         >
                           {w.icon}
                           <span>{w.label}</span>
@@ -762,11 +756,10 @@ const ActionBar: React.FC = () => {
                                   intensityTimerRef.current = null;
                                 }, 80) as any;
                               }}
-                              className={`px-2 py-1.5 text-xs rounded border transition-colors ${
-                                weatherIntensity === opt.value
+                              className={`px-2 py-1.5 text-xs rounded border transition-colors ${weatherIntensity === opt.value
                                   ? 'bg-skyrim-gold text-skyrim-dark border-skyrim-gold font-bold'
                                   : 'bg-skyrim-paper/40 text-skyrim-text border-skyrim-border hover:border-skyrim-gold'
-                              }`}
+                                }`}
                             >
                               {opt.label}
                             </button>
@@ -794,7 +787,7 @@ const ActionBar: React.FC = () => {
                               checked={Boolean(effectsEnabled)}
                               onChange={() => {
                                 const newState = !Boolean(effectsEnabled);
-                                try { localStorage.setItem('aetherius:effectsEnabled', newState ? 'true' : 'false'); } catch {}
+                                try { localStorage.setItem('aetherius:effectsEnabled', newState ? 'true' : 'false'); } catch { }
                                 setEffectsEnabled(newState);
                               }}
                               className="accent-skyrim-gold w-4 h-4"

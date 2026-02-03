@@ -8,7 +8,9 @@ export function getItemName(
     // Try to localize the base name
     let name = item.name;
     if (item.baseId) {
-        const key = `items.data.${item.baseId}`;
+        // Strip out the special suffix if it exists (e.g. "iron_sword_special_...")
+        const actualBaseId = item.baseId.split('_special_')[0];
+        const key = `items.data.${actualBaseId}`;
         const localized = t(key);
         // If translation differs from key, use it
         if (localized !== key) {

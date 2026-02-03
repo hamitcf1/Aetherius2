@@ -823,7 +823,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         <div className="px-4 py-3 border-b border-skyrim-border flex items-center justify-between gap-3 bg-skyrim-dark/50 rounded-t-lg flex-shrink-0">
           <div className="flex items-center gap-2">
             <ShoppingBag className="text-skyrim-gold" size={20} />
-            <h2 className="text-lg font-serif text-skyrim-gold">General Goods</h2>
+            <h2 className="text-lg font-serif text-skyrim-gold">{t('shop.title')}</h2>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-skyrim-paper/40 rounded border border-skyrim-border">
@@ -846,7 +846,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
               }`}
           >
             <ArrowDownToLine size={16} />
-            Buy
+            {t('shop.buy')}
           </button>
           <button
             onClick={() => { setMode('sell'); setSearch(''); setCategory('All'); }}
@@ -857,7 +857,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
               } ${!onSell ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <ArrowUpFromLine size={16} />
-            Sell
+            {t('shop.sell')}
           </button>
         </div>
 
@@ -867,7 +867,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
-              placeholder={mode === 'buy' ? 'Search shop...' : 'Search inventory...'}
+              placeholder={mode === 'buy' ? t('shop.searchShop') : t('shop.searchInventory')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-skyrim-paper/40 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:border-skyrim-gold focus:outline-none text-sm"
@@ -886,25 +886,25 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                       }`}
                   >
                     {categoryIcons[cat]}
-                    <span>{cat}</span>
+                    <span>{cat === 'All' ? t('category.all') : t(`category.${cat.toLowerCase()}` as any) || cat}</span>
                   </button>
                 ))}
               </div>
 
               <div className="mt-2 flex items-center gap-2">
-                <div className="text-xs text-skyrim-text">Sort:</div>
+                <div className="text-xs text-skyrim-text">{t('shop.sort')}:</div>
                 <SortSelector
                   currentSort={mode === 'buy' ? shopSort : sellSort}
                   onSelect={(s) => mode === 'buy' ? setShopSort(s) : setSellSort(s)}
                   allowDirection={true}
                   options={[
-                    { id: 'name', label: 'Name' },
-                    { id: 'price', label: 'Price' },
-                    { id: 'damage', label: 'Damage' },
-                    { id: 'armor', label: 'Armor' },
-                    { id: 'weight', label: 'Weight' }
+                    { id: 'name', label: t('sort.name') },
+                    { id: 'price', label: t('sort.value') },
+                    { id: 'damage', label: t('sort.damage') },
+                    { id: 'armor', label: t('perks.categories.armor') },
+                    { id: 'weight', label: t('inventory.weight') }
                   ]}
-                  label="Sort"
+                  label={t('shop.sort')}
                 />
               </div>
             </>
@@ -918,7 +918,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
 
 
               {filteredShopItems.length === 0 ? (
-                <div className="text-center text-gray-500 py-8 text-sm">No items found.</div>
+                <div className="text-center text-gray-500 py-8 text-sm">{t('shop.noItems')}</div>
               ) : (
                 <div className="divide-y divide-skyrim-border/30">
                   {filteredShopItems.map(item => {
@@ -959,7 +959,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                                 )}
                                 {anyEquipped && (
                                   <span className="ml-1 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
-                                    <Shield size={12} /> Equipped
+                                    <Shield size={12} /> {t('inventory.equipped')}
                                   </span>
                                 )}
 
@@ -1015,11 +1015,11 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                           </div>
                           <button onClick={(e) => handleBuy(item, e)} disabled={recentlyPurchased.has(item.id)} className={`px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] ${recentlyPurchased.has(item.id) ? 'bg-yellow-600 text-white scale-105' : insufficient.has(item.id) ? 'bg-red-600 text-white animate-pulse' : (gold < (item.price * getQuantity(item.id)) ? 'bg-red-600 text-white/90 hover:brightness-105' : 'bg-skyrim-gold text-skyrim-dark hover:scale-105')}`}>
                             {recentlyPurchased.has(item.id) ? (
-                              <span className="flex items-center gap-1 text-xs">✅ Bought!</span>
+                              <span className="flex items-center gap-1 text-xs">✅ {t('shop.bought')}</span>
                             ) : insufficient.has(item.id) ? (
-                              <span className="flex items-center gap-1 text-xs">Need {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
+                              <span className="flex items-center gap-1 text-xs">{t('shop.needGold')} {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
                             ) : (
-                              'Buy'
+                              t('shop.buy')
                             )}
                           </button>
                         </div>
@@ -1033,7 +1033,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
           {mode === 'sell' && (
             filteredInventoryItems.length === 0 ? (
               <div className="text-center text-gray-500 py-8 text-sm">
-                {search ? 'No matching items in your inventory.' : 'No items to sell.'}
+                {search ? t('shop.noMatchingInventory') : t('shop.noItemsSell')}
               </div>
             ) : (
               <div className="divide-y divide-skyrim-border/30">
@@ -1058,7 +1058,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                               )}
                               {group.anyEquipped && (
                                 <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
-                                  <Shield size={12} /> Equipped
+                                  <Shield size={12} /> Eqp
                                 </span>
                               )}
 
@@ -1115,13 +1115,13 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                             onClick={() => handleSellGroupOne(group)}
                             className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[80px] bg-skyrim-paper/30 text-skyrim-text hover:bg-skyrim-paper/40"
                           >
-                            {`Sell 1 +${unitPrice}g`}
+                            {`${t('shop.sellOne')} +${unitPrice}g`}
                           </button>
                           <button
                             onClick={() => handleSellGroupAll(group)}
                             className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] bg-green-700 text-white hover:bg-green-600"
                           >
-                            {`Sell All +${totalGold}g`}
+                            {`${t('shop.sellAll')} +${totalGold}g`}
                           </button>
                         </div>
                       </div>
@@ -1141,10 +1141,10 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         )}
         <div className="px-3 py-2 border-t border-skyrim-border/60 bg-skyrim-paper/20 flex-shrink-0">
           {mode === 'buy' ? (
-            <p className="text-gray-500 text-xs text-center">{`${filteredShopItems.length} items available`}</p>
+            <p className="text-gray-500 text-xs text-center">{`${filteredShopItems.length} ${t('shop.itemsAvailable')}`}</p>
           ) : (
             !onSell ? (
-              <p className="text-gray-500 text-xs text-center">This vendor is not buying items right now.</p>
+              <p className="text-gray-500 text-xs text-center">{t('shop.notBuying')}</p>
             ) : (
               <div className="flex flex-col gap-2">
 
@@ -1164,7 +1164,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                             disabled={!onSell}
                             className={`px-3 py-1 rounded text-xs font-bold transition-all ${!onSell ? 'bg-gray-700/60 text-gray-400 cursor-not-allowed' : 'bg-green-700 text-white hover:bg-green-600'}`}
                           >
-                            Sell all
+                            {t('shop.sellAll')}
                           </button>
                         </div>
                       </div>
