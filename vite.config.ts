@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   const geminiApiKey2 = env.VITE_GEMINI_API_KEY_2 || env.GEMINI_API_KEY_2 || '';
   const geminiApiKey3 = env.VITE_GEMINI_API_KEY_3 || env.GEMINI_API_KEY_3 || '';
   const gemmaApiKey = env.VITE_GEMMA_API_KEY || env.GEMMA_API_KEY || env.gemma_api_key || '';
-  
+
   return {
     base: '',
     plugins: [
@@ -37,19 +37,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            if (!id) return undefined;
-            if (id.includes('node_modules')) {
-              if (id.includes('jspdf')) return 'vendor-jspdf';
-              if (id.includes('html2canvas')) return 'vendor-html2canvas';
-              if (id.includes('purify.es') || id.includes('purify')) return 'vendor-purify';
-              if (id.includes('lucide-react')) return 'vendor-icons';
-              if (id.includes('/react/') || id.includes('/react-dom/')) return 'vendor-react';
-              if (id.includes('@google') || id.includes('gpt')) return 'vendor-ai';
-              // fallback vendor chunk
-              return 'vendor';
-            }
-          }
+          // Automatic chunking is more reliable for React 19 dependency resolution
         }
       }
       ,
