@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { audioService } from '../services/audioService';
 
 interface ModalWrapperProps {
@@ -75,7 +76,7 @@ export function ModalWrapper({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       data-sfx="button_click"
       className={`fixed inset-0 ${zIndex} bg-skyrim-dark/60 backdrop-lite flex items-center justify-center p-2 sm:p-4 overflow-y-auto ${className}`}
@@ -86,7 +87,8 @@ export function ModalWrapper({
       <div ref={contentRef} onClick={(e) => e.stopPropagation()} className="max-h-[95vh] overflow-y-auto my-auto">
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -18,6 +18,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Heart, Droplet, Zap, RotateCcw, Trophy, Skull, MousePointer, Move } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -197,9 +198,9 @@ function generateLevel(levelNum: number): Level {
   const width = size;
   const height = size;
   const map: number[][] = Array(height).fill(null).map(() => Array(width).fill(1));
-  
+
   const rooms: Array<{ x: number; y: number; w: number; h: number }> = [];
-  
+
   // Carve rooms
   const numRooms = 6 + levelNum * 2;
   for (let i = 0; i < numRooms * 3; i++) {
@@ -207,7 +208,7 @@ function generateLevel(levelNum: number): Level {
     const h = 5 + Math.floor(Math.random() * 5);
     const x = 2 + Math.floor(Math.random() * (width - w - 4));
     const y = 2 + Math.floor(Math.random() * (height - h - 4));
-    
+
     // Check overlap
     let overlaps = false;
     for (const room of rooms) {
@@ -216,7 +217,7 @@ function generateLevel(levelNum: number): Level {
         break;
       }
     }
-    
+
     if (!overlaps && rooms.length < numRooms) {
       // Carve room
       for (let ry = y; ry < y + h; ry++) {
@@ -227,7 +228,7 @@ function generateLevel(levelNum: number): Level {
       rooms.push({ x, y, w, h });
     }
   }
-  
+
   // Connect rooms with corridors
   for (let i = 1; i < rooms.length; i++) {
     const a = rooms[i - 1];
@@ -236,7 +237,7 @@ function generateLevel(levelNum: number): Level {
     const ay = Math.floor(a.y + a.h / 2);
     const bx = Math.floor(b.x + b.w / 2);
     const by = Math.floor(b.y + b.h / 2);
-    
+
     let x = ax, y = ay;
     while (x !== bx || y !== by) {
       if (y >= 0 && y < height && x >= 0 && x < width) {
@@ -253,7 +254,7 @@ function generateLevel(levelNum: number): Level {
       }
     }
   }
-  
+
   // Add wall texture variety
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -265,14 +266,14 @@ function generateLevel(levelNum: number): Level {
       }
     }
   }
-  
+
   // Player start
   const startRoom = rooms[0];
   const playerStart: Vec2 = {
     x: startRoom.x + startRoom.w / 2,
     y: startRoom.y + startRoom.h / 2,
   };
-  
+
   // Exit
   const endRoom = rooms[rooms.length - 1];
   const exit: Vec2 = {
@@ -280,7 +281,7 @@ function generateLevel(levelNum: number): Level {
     y: Math.floor(endRoom.y + endRoom.h / 2),
   };
   map[exit.y][exit.x] = 10;
-  
+
   return { width, height, map, playerStart, exit };
 }
 
@@ -291,25 +292,25 @@ function generateLevel(levelNum: number): Level {
 function castRay(map: number[][], width: number, height: number, ox: number, oy: number, angle: number): { dist: number; wall: number; side: number } {
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
-  
+
   let mapX = Math.floor(ox);
   let mapY = Math.floor(oy);
-  
+
   const ddx = Math.abs(1 / dx);
   const ddy = Math.abs(1 / dy);
-  
+
   let stepX: number, stepY: number;
   let sideDistX: number, sideDistY: number;
-  
+
   if (dx < 0) { stepX = -1; sideDistX = (ox - mapX) * ddx; }
   else { stepX = 1; sideDistX = (mapX + 1 - ox) * ddx; }
-  
+
   if (dy < 0) { stepY = -1; sideDistY = (oy - mapY) * ddy; }
   else { stepY = 1; sideDistY = (mapY + 1 - oy) * ddy; }
-  
+
   let side = 0;
   let wall = 1;
-  
+
   for (let i = 0; i < 64; i++) {
     if (sideDistX < sideDistY) {
       sideDistX += ddx;
@@ -320,18 +321,18 @@ function castRay(map: number[][], width: number, height: number, ox: number, oy:
       mapY += stepY;
       side = 1;
     }
-    
+
     if (mapX < 0 || mapX >= width || mapY < 0 || mapY >= height) break;
     if (map[mapY][mapX] > 0) {
       wall = map[mapY][mapX];
       break;
     }
   }
-  
+
   let dist: number;
   if (side === 0) dist = (mapX - ox + (1 - stepX) / 2) / dx;
   else dist = (mapY - oy + (1 - stepY) / 2) / dy;
-  
+
   return { dist: Math.max(0.1, dist), wall, side };
 }
 
@@ -350,12 +351,12 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Game status (only this causes re-renders)
   const [gameStatus, setGameStatus] = useState<'menu' | 'playing' | 'paused' | 'victory' | 'death'>('menu');
   const [finalStats, setFinalStats] = useState({ score: 0, kills: 0, time: 0 });
   const [isPointerLocked, setIsPointerLocked] = useState(false);
-  
+
   // All mutable game state stored in refs to avoid re-renders
   const gameRef = useRef({
     level: null as Level | null,
@@ -387,18 +388,18 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     mouseDown: false,
     lastAttackTime: 0,
   });
-  
+
   const animFrameRef = useRef<number>(0);
   const lastTimeRef = useRef(0);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // GAME INITIALIZATION
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const initLevel = useCallback((levelNum: number) => {
     const level = generateLevel(levelNum);
     const game = gameRef.current;
-    
+
     game.level = level;
     game.levelNum = levelNum;
     game.player.x = level.playerStart.x;
@@ -412,12 +413,12 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     game.player.attackTimer = 0;
     game.projectiles = [];
     game.messages = [];
-    
+
     // Spawn enemies
     const diffMult = difficulty === 'easy' ? 0.7 : difficulty === 'hard' ? 1.4 : difficulty === 'nightmare' ? 2 : 1;
     const numEnemies = Math.floor((4 + levelNum * 3) * diffMult);
     game.enemies = [];
-    
+
     for (let i = 0; i < numEnemies; i++) {
       let ex: number, ey: number;
       let tries = 0;
@@ -425,9 +426,9 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ex = 3 + Math.random() * (level.width - 6);
         ey = 3 + Math.random() * (level.height - 6);
         tries++;
-      } while ((level.map[Math.floor(ey)]?.[Math.floor(ex)] !== 0 || 
-                Math.hypot(ex - game.player.x, ey - game.player.y) < 5) && tries < 50);
-      
+      } while ((level.map[Math.floor(ey)]?.[Math.floor(ex)] !== 0 ||
+        Math.hypot(ex - game.player.x, ey - game.player.y) < 5) && tries < 50);
+
       if (level.map[Math.floor(ey)]?.[Math.floor(ex)] === 0) {
         const type = levelNum >= 3 && i === 0 ? 4 : Math.floor(Math.random() * 4);
         const def = ENEMY_TYPES[type];
@@ -446,7 +447,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         });
       }
     }
-    
+
     // Spawn pickups
     game.pickups = [];
     for (let y = 2; y < level.height - 2; y++) {
@@ -463,10 +464,10 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         }
       }
     }
-    
+
     addMessage(`Entering ${level.width > 40 ? 'Deep ' : ''}Nordic Crypt - Level ${levelNum + 1}`, '#ffd700');
   }, [difficulty]);
-  
+
   const startGame = useCallback(() => {
     const game = gameRef.current;
     game.score = 0;
@@ -478,38 +479,38 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     game.player.weapon = 1;
     initLevel(0);
     setGameStatus('playing');
-    
+
     // Request pointer lock
     if (containerRef.current) {
       containerRef.current.requestPointerLock?.();
     }
   }, [initLevel]);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // MESSAGE SYSTEM
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const addMessage = useCallback((text: string, color: string = '#ffffff') => {
     const game = gameRef.current;
     game.messages.push({ text, color, time: Date.now() });
     if (game.messages.length > 5) game.messages.shift();
   }, []);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // COMBAT
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const playerAttack = useCallback(() => {
     const game = gameRef.current;
     const player = game.player;
-    
+
     if (player.isAttacking || player.isDead) return;
-    
+
     const weapon = WEAPONS[player.weapon];
     const now = Date.now();
-    
+
     if (now - game.lastAttackTime < weapon.attackSpeed) return;
-    
+
     // Check resources
     if (weapon.staminaCost > 0 && player.stamina < weapon.staminaCost) {
       addMessage('Not enough stamina!', '#ff6666');
@@ -519,14 +520,14 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       addMessage('Not enough magicka!', '#6666ff');
       return;
     }
-    
+
     // Consume resources
     player.stamina -= weapon.staminaCost;
     player.magicka -= weapon.magickaCost;
     player.isAttacking = true;
     player.attackTimer = weapon.attackSpeed;
     game.lastAttackTime = now;
-    
+
     if (weapon.projectile) {
       // Spawn projectile
       game.projectiles.push({
@@ -542,25 +543,25 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       // Melee hit detection
       for (const enemy of game.enemies) {
         if (enemy.state === 'dead') continue;
-        
+
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const dist = Math.hypot(dx, dy);
-        
+
         if (dist > weapon.range) continue;
-        
+
         let angleDiff = Math.atan2(dy, dx) - player.angle;
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        
+
         if (Math.abs(angleDiff) < 0.6) {
           const damage = weapon.damage + Math.floor(Math.random() * 6);
           enemy.health -= damage;
           enemy.state = 'hurt';
           enemy.hurtTimer = 10;
-          
+
           addMessage(`Hit ${ENEMY_TYPES[enemy.type].name} for ${damage}!`, '#ffaa00');
-          
+
           if (enemy.health <= 0) {
             enemy.state = 'dead';
             const def = ENEMY_TYPES[enemy.type];
@@ -573,48 +574,48 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       }
     }
   }, [addMessage]);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // INPUT HANDLING
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   useEffect(() => {
     if (!isOpen) return;
-    
+
     const game = gameRef.current;
-    
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (gameStatus !== 'playing') return;
-      
+
       const key = e.key.toLowerCase();
       game.keys.add(key);
-      
+
       // Weapon switching with number keys
       if (key >= '1' && key <= '4') {
         game.player.weapon = parseInt(key) - 1;
       }
-      
+
       // Pause
       if (key === 'escape') {
         document.exitPointerLock?.();
         setGameStatus('paused');
       }
-      
+
       // Prevent default for game keys
       if (['w', 'a', 's', 'd', ' ', '1', '2', '3', '4'].includes(key)) {
         e.preventDefault();
       }
     };
-    
+
     const onKeyUp = (e: KeyboardEvent) => {
       game.keys.delete(e.key.toLowerCase());
     };
-    
+
     const onMouseMove = (e: MouseEvent) => {
       if (gameStatus !== 'playing' || !isPointerLocked) return;
       game.player.angle += e.movementX * MOUSE_SENSITIVITY;
     };
-    
+
     const onMouseDown = (e: MouseEvent) => {
       if (gameStatus !== 'playing') return;
       if (e.button === 0) {
@@ -622,24 +623,24 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         playerAttack();
       }
     };
-    
+
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) {
         game.mouseDown = false;
       }
     };
-    
+
     const onWheel = (e: WheelEvent) => {
       if (gameStatus !== 'playing') return;
       e.preventDefault();
       const dir = e.deltaY > 0 ? 1 : -1;
       game.player.weapon = (game.player.weapon + dir + 4) % 4;
     };
-    
+
     const onPointerLockChange = () => {
       setIsPointerLocked(document.pointerLockElement === containerRef.current);
     };
-    
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('mousemove', onMouseMove);
@@ -647,7 +648,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('pointerlockchange', onPointerLockChange);
-    
+
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -658,43 +659,43 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       document.removeEventListener('pointerlockchange', onPointerLockChange);
     };
   }, [isOpen, gameStatus, isPointerLocked, playerAttack]);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // GAME UPDATE
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const update = useCallback((dt: number) => {
     const game = gameRef.current;
     const player = game.player;
     const level = game.level;
-    
+
     if (!level || player.isDead) return;
-    
+
     const keys = game.keys;
-    
+
     // ─── Player Movement ───
     const cos = Math.cos(player.angle);
     const sin = Math.sin(player.angle);
     let moveX = 0, moveY = 0;
     let moving = false;
-    
+
     if (keys.has('w')) { moveX += cos; moveY += sin; moving = true; }
     if (keys.has('s')) { moveX -= cos; moveY -= sin; moving = true; }
     if (keys.has('a')) { moveX += sin; moveY -= cos; moving = true; }
     if (keys.has('d')) { moveX -= sin; moveY += cos; moving = true; }
-    
+
     // Normalize diagonal movement
     const len = Math.hypot(moveX, moveY);
     if (len > 0) {
       moveX = (moveX / len) * MOVE_SPEED * dt;
       moveY = (moveY / len) * MOVE_SPEED * dt;
     }
-    
+
     // Apply movement with collision
     const newX = player.x + moveX;
     const newY = player.y + moveY;
     const margin = 0.25;
-    
+
     // Check X movement
     if (level.map[Math.floor(player.y)]?.[Math.floor(newX + margin * Math.sign(moveX))] === 0) {
       player.x = newX;
@@ -703,16 +704,16 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     if (level.map[Math.floor(newY + margin * Math.sign(moveY))]?.[Math.floor(player.x)] === 0) {
       player.y = newY;
     }
-    
+
     // Bob animation
     if (moving) {
       player.bobPhase = (player.bobPhase + 0.12 * dt) % (Math.PI * 2);
     }
-    
+
     // Resource regeneration
     player.stamina = Math.min(player.maxStamina, player.stamina + 0.05 * dt);
     player.magicka = Math.min(player.maxMagicka, player.magicka + 0.03 * dt);
-    
+
     // Attack animation timer
     if (player.attackTimer > 0) {
       player.attackTimer -= dt * 16;
@@ -721,12 +722,12 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         player.attackTimer = 0;
       }
     }
-    
+
     // Continuous attack if mouse held (for rapid weapons)
     if (game.mouseDown && !player.isAttacking) {
       playerAttack();
     }
-    
+
     // ─── Check Exit ───
     const exitDist = Math.hypot(player.x - level.exit.x - 0.5, player.y - level.exit.y - 0.5);
     if (exitDist < 1.2) {
@@ -747,38 +748,38 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         addMessage(`Defeat all enemies first! (${alive.length} remaining)`, '#ff6666');
       }
     }
-    
+
     // ─── Update Enemies ───
     for (const enemy of game.enemies) {
       if (enemy.state === 'dead') continue;
-      
+
       const dx = player.x - enemy.x;
       const dy = player.y - enemy.y;
       const dist = Math.hypot(dx, dy);
       enemy.distance = dist;
-      
+
       const def = ENEMY_TYPES[enemy.type];
-      
+
       // Hurt stun
       if (enemy.hurtTimer > 0) {
         enemy.hurtTimer -= dt;
         if (enemy.hurtTimer <= 0) enemy.state = 'chase';
         continue;
       }
-      
+
       // State logic
       if (dist < def.aggroRange || enemy.state === 'chase') {
         if (dist <= def.attackRange) {
           enemy.state = 'attack';
           enemy.attackTimer -= dt * 16;
-          
+
           if (enemy.attackTimer <= 0) {
             // Attack player
             const dmg = Math.max(1, def.damage - player.armor);
             player.health -= dmg;
             addMessage(`${def.name} attacks for ${dmg}!`, '#ff4444');
             enemy.attackTimer = 60;
-            
+
             if (player.health <= 0) {
               player.health = 0;
               player.isDead = true;
@@ -796,7 +797,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           const speed = def.speed * dt;
           const nx = enemy.x + Math.cos(angle) * speed;
           const ny = enemy.y + Math.sin(angle) * speed;
-          
+
           if (level.map[Math.floor(ny)]?.[Math.floor(nx)] === 0) {
             enemy.x = nx;
             enemy.y = ny;
@@ -810,18 +811,18 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         enemy.state = 'idle';
       }
     }
-    
+
     // ─── Update Projectiles ───
     game.projectiles = game.projectiles.filter(proj => {
       proj.x += Math.cos(proj.angle) * proj.speed * dt;
       proj.y += Math.sin(proj.angle) * proj.speed * dt;
       proj.life -= dt;
-      
+
       // Wall collision
       if (level.map[Math.floor(proj.y)]?.[Math.floor(proj.x)] > 0) {
         return false;
       }
-      
+
       // Enemy collision
       for (const enemy of game.enemies) {
         if (enemy.state === 'dead') continue;
@@ -832,7 +833,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           enemy.state = 'hurt';
           enemy.hurtTimer = 8;
           addMessage(`${ENEMY_TYPES[enemy.type].name} hit for ${dmg}!`, '#ffaa00');
-          
+
           if (enemy.health <= 0) {
             enemy.state = 'dead';
             const def = ENEMY_TYPES[enemy.type];
@@ -843,10 +844,10 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           return false;
         }
       }
-      
+
       return proj.life > 0;
     });
-    
+
     // ─── Pickups ───
     for (const pickup of game.pickups) {
       if (pickup.collected) continue;
@@ -865,73 +866,73 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         }
       }
     }
-    
+
     // Clean old messages
     game.messages = game.messages.filter(m => Date.now() - m.time < 3000);
   }, [addMessage, initLevel, playerAttack]);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDERING
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     const game = gameRef.current;
     const player = game.player;
     const level = game.level;
-    
+
     if (!level) return;
-    
+
     const W = canvas.width;
     const H = canvas.height;
-    
+
     // Clear
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-    
+
     // Ceiling gradient
     const ceilGrad = ctx.createLinearGradient(0, 0, 0, H / 2);
     ceilGrad.addColorStop(0, '#0a0a15');
     ceilGrad.addColorStop(1, '#1a1a2a');
     ctx.fillStyle = ceilGrad;
     ctx.fillRect(0, 0, W, H / 2);
-    
+
     // Floor gradient
     const floorGrad = ctx.createLinearGradient(0, H / 2, 0, H);
     floorGrad.addColorStop(0, '#1a1510');
     floorGrad.addColorStop(1, '#0a0a05');
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0, H / 2, W, H / 2);
-    
+
     // ─── Raycasting ───
     const depthBuffer: number[] = [];
     const rayWidth = W / NUM_RAYS;
-    
+
     for (let i = 0; i < NUM_RAYS; i++) {
       const rayAngle = player.angle - HALF_FOV + (i / NUM_RAYS) * FOV;
       const ray = castRay(level.map, level.width, level.height, player.x, player.y, rayAngle);
-      
+
       const corrDist = ray.dist * Math.cos(rayAngle - player.angle);
       depthBuffer[i] = corrDist;
-      
+
       const wallH = Math.min(H * 2, (H / corrDist) * 1.3);
       const wallTop = (H - wallH) / 2;
-      
+
       const colors = WALL_COLORS[ray.wall] || WALL_COLORS[1];
       const baseColor = ray.side === 1 ? colors.dark : colors.light;
       const shade = Math.max(0.15, 1 - corrDist / MAX_DEPTH);
-      
+
       ctx.fillStyle = baseColor;
       ctx.globalAlpha = shade;
       ctx.fillRect(i * rayWidth, wallTop, rayWidth + 1, wallH);
       ctx.globalAlpha = 1;
     }
-    
+
     // ─── Sprites ───
     interface Sprite {
       x: number;
@@ -940,16 +941,16 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       type: 'enemy' | 'pickup' | 'projectile';
       data: Enemy | Pickup | Projectile;
     }
-    
+
     const sprites: Sprite[] = [];
-    
+
     // Enemies
     for (const e of game.enemies) {
       if (e.state !== 'dead') {
         sprites.push({ x: e.x, y: e.y, dist: e.distance, type: 'enemy', data: e });
       }
     }
-    
+
     // Pickups
     for (const p of game.pickups) {
       if (!p.collected) {
@@ -957,59 +958,59 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         sprites.push({ x: p.x, y: p.y, dist: d, type: 'pickup', data: p });
       }
     }
-    
+
     // Projectiles
     for (const p of game.projectiles) {
       const d = Math.hypot(p.x - player.x, p.y - player.y);
       sprites.push({ x: p.x, y: p.y, dist: d, type: 'projectile', data: p });
     }
-    
+
     // Sort far to near
     sprites.sort((a, b) => b.dist - a.dist);
-    
+
     // Draw sprites
     for (const sprite of sprites) {
       if (sprite.dist < 0.3 || sprite.dist > MAX_DEPTH) continue;
-      
+
       const dx = sprite.x - player.x;
       const dy = sprite.y - player.y;
-      
+
       let angle = Math.atan2(dy, dx) - player.angle;
       while (angle > Math.PI) angle -= Math.PI * 2;
       while (angle < -Math.PI) angle += Math.PI * 2;
-      
+
       if (Math.abs(angle) > HALF_FOV + 0.3) continue;
-      
+
       const screenX = W / 2 + (angle / HALF_FOV) * (W / 2);
       const spriteH = (H / sprite.dist) * 0.85;
       const spriteW = spriteH * 0.65;
       const spriteTop = (H - spriteH) / 2;
-      
+
       // Depth check
       const rayIdx = Math.floor((screenX / W) * NUM_RAYS);
       if (rayIdx >= 0 && rayIdx < NUM_RAYS && depthBuffer[rayIdx] < sprite.dist) continue;
-      
+
       const shade = Math.max(0.25, 1 - sprite.dist / MAX_DEPTH);
       ctx.globalAlpha = shade;
-      
+
       if (sprite.type === 'enemy') {
         const enemy = sprite.data as Enemy;
         const def = ENEMY_TYPES[enemy.type];
         const x = screenX - spriteW / 2;
         const y = spriteTop;
-        
+
         // Hurt flash
         const color = enemy.state === 'hurt' ? '#ff0000' : def.color;
-        
+
         // Body
         ctx.fillStyle = color;
         ctx.fillRect(x, y + spriteH * 0.2, spriteW, spriteH * 0.6);
-        
+
         // Head
         ctx.beginPath();
         ctx.arc(screenX, y + spriteH * 0.15, spriteW * 0.3, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Eyes (red when aggressive)
         if (enemy.state === 'chase' || enemy.state === 'attack') {
           ctx.fillStyle = '#ff0000';
@@ -1018,7 +1019,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           ctx.arc(screenX + spriteW * 0.1, y + spriteH * 0.13, spriteW * 0.08, 0, Math.PI * 2);
           ctx.fill();
         }
-        
+
         // Health bar
         ctx.globalAlpha = 1;
         const hpPct = enemy.health / enemy.maxHealth;
@@ -1031,12 +1032,12 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         const pickup = sprite.data as Pickup;
         const bob = Math.sin(Date.now() / 200) * 6;
         const color = pickup.type === 'health' ? '#ff4444' : pickup.type === 'magicka' ? '#4444ff' : '#ffd700';
-        
+
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(screenX, spriteTop + spriteH / 2 + bob, spriteW * 0.25, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Glow
         ctx.globalAlpha = shade * 0.3;
         ctx.beginPath();
@@ -1048,7 +1049,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.beginPath();
         ctx.arc(screenX, spriteTop + spriteH / 2, spriteW * 0.12, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Glow for fireball
         if (proj.type === 'fireball') {
           ctx.globalAlpha = shade * 0.4;
@@ -1058,17 +1059,17 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           ctx.fill();
         }
       }
-      
+
       ctx.globalAlpha = 1;
     }
-    
+
     // ─── Draw Weapon ───
     const weapon = WEAPONS[player.weapon];
     const bob = player.isAttacking ? 0 : Math.sin(player.bobPhase) * 4;
     const atkOff = player.isAttacking ? -25 : 0;
     const cx = W / 2;
     const cy = H - 100 + bob + atkOff;
-    
+
     if (player.weapon === 0) {
       // Fists
       ctx.fillStyle = '#deb887';
@@ -1083,34 +1084,34 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       ctx.save();
       ctx.translate(cx, cy + 20);
       ctx.rotate(player.isAttacking ? -0.6 : 0.25);
-      
+
       // Blade
       ctx.fillStyle = '#c8c8c8';
       ctx.fillRect(-6, -95, 12, 75);
       ctx.fillStyle = '#e8e8e8';
       ctx.fillRect(-3, -95, 6, 75);
-      
+
       // Guard
       ctx.fillStyle = '#8b6914';
       ctx.fillRect(-22, -22, 44, 10);
-      
+
       // Handle
       ctx.fillStyle = '#5a3510';
       ctx.fillRect(-5, -12, 10, 45);
-      
+
       ctx.restore();
     } else if (player.weapon === 2) {
       // Bow
       ctx.save();
       ctx.translate(cx - 25, cy);
-      
+
       // Bow body
       ctx.strokeStyle = '#8b4513';
       ctx.lineWidth = 10;
       ctx.beginPath();
       ctx.arc(0, 0, 70, -Math.PI / 2.5, Math.PI / 2.5);
       ctx.stroke();
-      
+
       // String
       ctx.strokeStyle = '#deb887';
       ctx.lineWidth = 2;
@@ -1119,7 +1120,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       ctx.lineTo(player.isAttacking ? -25 : 0, 0);
       ctx.lineTo(0, 58);
       ctx.stroke();
-      
+
       // Arrow (if not attacking)
       if (!player.isAttacking) {
         ctx.fillStyle = '#8b4513';
@@ -1131,20 +1132,20 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.lineTo(62, 6);
         ctx.fill();
       }
-      
+
       ctx.restore();
     } else if (player.weapon === 3) {
       // Magic/Fireball
       ctx.save();
       ctx.translate(cx, cy + 10);
-      
+
       // Hands
       ctx.fillStyle = '#deb887';
       ctx.beginPath();
       ctx.arc(-45, 30, 22, 0, Math.PI * 2);
       ctx.arc(45, 30, 22, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Magic orb
       if (!player.isAttacking) {
         const pulse = 18 + Math.sin(Date.now() / 80) * 6;
@@ -1153,7 +1154,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.beginPath();
         ctx.arc(0, -5, pulse, 0, Math.PI * 2);
         ctx.fill();
-        
+
         ctx.globalAlpha = 0.4;
         ctx.fillStyle = '#ff8800';
         ctx.beginPath();
@@ -1161,10 +1162,10 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.fill();
         ctx.globalAlpha = 1;
       }
-      
+
       ctx.restore();
     }
-    
+
     // ─── Crosshair ───
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
@@ -1178,22 +1179,22 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     ctx.moveTo(W / 2, H / 2 + 4);
     ctx.lineTo(W / 2, H / 2 + 12);
     ctx.stroke();
-    
+
     // Center dot
     ctx.fillStyle = '#ff0000';
     ctx.beginPath();
     ctx.arc(W / 2, H / 2, 2, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // ─── Minimap ───
     const mmScale = 3;
     const mmSize = Math.min(level.width, level.height) * mmScale;
     const mmX = W - mmSize - 12;
     const mmY = 12;
-    
+
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(mmX - 4, mmY - 4, mmSize + 8, mmSize + 8);
-    
+
     // Draw map tiles
     for (let y = 0; y < level.height; y++) {
       for (let x = 0; x < level.width; x++) {
@@ -1203,7 +1204,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.fillRect(mmX + x * mmScale, mmY + y * mmScale, mmScale, mmScale);
       }
     }
-    
+
     // Enemies on minimap
     ctx.fillStyle = '#ff0000';
     for (const e of game.enemies) {
@@ -1213,13 +1214,13 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
         ctx.fill();
       }
     }
-    
+
     // Player on minimap
     ctx.fillStyle = '#00ff00';
     ctx.beginPath();
     ctx.arc(mmX + player.x * mmScale, mmY + player.y * mmScale, 3, 0, Math.PI * 2);
     ctx.fill();
-    
+
     // Player direction
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 2;
@@ -1231,11 +1232,11 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     );
     ctx.stroke();
   }, []);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // GAME LOOP
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   useEffect(() => {
     if (!isOpen || gameStatus !== 'playing') {
       if (animFrameRef.current) {
@@ -1244,23 +1245,23 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       }
       return;
     }
-    
+
     let running = true;
-    
+
     const loop = (time: number) => {
       if (!running) return;
-      
+
       const dt = lastTimeRef.current ? Math.min((time - lastTimeRef.current) / 16.67, 3) : 1;
       lastTimeRef.current = time;
-      
+
       update(dt);
       render();
-      
+
       animFrameRef.current = requestAnimationFrame(loop);
     };
-    
+
     animFrameRef.current = requestAnimationFrame(loop);
-    
+
     return () => {
       running = false;
       if (animFrameRef.current) {
@@ -1268,11 +1269,11 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       }
     };
   }, [isOpen, gameStatus, update, render]);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // CLOSE HANDLER
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   const handleClose = useCallback((completed: boolean = false, victory: boolean = false) => {
     document.exitPointerLock?.();
     const result: DoomGameResult = {
@@ -1290,32 +1291,32 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
     };
     onClose(result);
   }, [finalStats, onClose]);
-  
+
   // Request pointer lock when clicking canvas
   const handleCanvasClick = useCallback(() => {
     if (gameStatus === 'playing' && containerRef.current && !isPointerLocked) {
       containerRef.current.requestPointerLock?.();
     }
   }, [gameStatus, isPointerLocked]);
-  
+
   const resumeGame = useCallback(() => {
     setGameStatus('playing');
     if (containerRef.current) {
       containerRef.current.requestPointerLock?.();
     }
   }, []);
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER UI
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   if (!isOpen) return null;
-  
+
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const game = gameRef.current;
   const player = game.player;
-  
-  return (
+
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black" ref={containerRef}>
       {/* Close button */}
       <button
@@ -1324,7 +1325,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
       >
         <X size={24} />
       </button>
-      
+
       {/* Main Menu */}
       {gameStatus === 'menu' && (
         <div className="flex flex-col items-center justify-center gap-6 text-center">
@@ -1334,7 +1335,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           <p className="text-gray-400 text-lg max-w-md">
             Explore the ancient Nordic crypts. Slay the draugr. Claim your rewards.
           </p>
-          
+
           <div className="bg-black/60 rounded-lg p-4 text-gray-400 text-sm space-y-1">
             <div className="flex items-center gap-2"><MousePointer size={16} className="text-amber-400" /> <span className="text-white">Mouse</span> - Look around & Aim</div>
             <div className="flex items-center gap-2"><span className="text-amber-400 font-bold">LMB</span> <span className="text-white">Left Click</span> - Attack</div>
@@ -1342,7 +1343,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
             <div className="flex items-center gap-2"><span className="text-amber-400 font-bold">1-4</span> <span className="text-white">or Scroll</span> - Switch Weapons</div>
             <div className="flex items-center gap-2"><span className="text-amber-400 font-bold">ESC</span> - Pause</div>
           </div>
-          
+
           <button
             onClick={startGame}
             className="px-8 py-4 bg-amber-600 hover:bg-amber-500 text-black font-bold text-2xl rounded-lg transition-all transform hover:scale-105"
@@ -1354,7 +1355,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           </div>
         </div>
       )}
-      
+
       {/* Game View */}
       {(gameStatus === 'playing' || gameStatus === 'paused') && (
         <div className="relative w-full h-full flex items-center justify-center">
@@ -1366,7 +1367,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
             style={{ imageRendering: 'pixelated' }}
             onClick={handleCanvasClick}
           />
-          
+
           {/* HUD Overlay */}
           <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4">
             {/* Top HUD */}
@@ -1377,13 +1378,13 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                   Enemies: {game.enemies.filter(e => e.state === 'dead').length}/{game.enemies.length}
                 </div>
               </div>
-              
+
               <div className="bg-black/70 rounded px-3 py-2 text-right">
                 <div className="text-amber-400 font-bold">Score: {game.score}</div>
                 <div className="text-gray-400 text-sm">Kills: {game.kills}</div>
               </div>
             </div>
-            
+
             {/* Messages */}
             <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 text-center">
               {game.messages.map((msg, i) => (
@@ -1400,7 +1401,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                 </div>
               ))}
             </div>
-            
+
             {/* Click to lock pointer message */}
             {!isPointerLocked && gameStatus === 'playing' && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-auto cursor-pointer" onClick={handleCanvasClick}>
@@ -1411,7 +1412,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                 </div>
               </div>
             )}
-            
+
             {/* Bottom HUD */}
             <div className="bg-gradient-to-t from-black/90 to-transparent pt-8 -mx-4 -mb-4 px-4 pb-4">
               {/* Resource bars */}
@@ -1423,7 +1424,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                   </div>
                   <span className="text-red-400 text-sm w-14">{Math.floor(player.health)}/{player.maxHealth}</span>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <Droplet className="text-blue-500" size={20} />
                   <div className="w-28 h-4 bg-gray-800 rounded-full overflow-hidden">
@@ -1431,7 +1432,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                   </div>
                   <span className="text-blue-400 text-sm w-14">{Math.floor(player.magicka)}/{player.maxMagicka}</span>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <Zap className="text-green-500" size={20} />
                   <div className="w-28 h-4 bg-gray-800 rounded-full overflow-hidden">
@@ -1440,15 +1441,14 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
                   <span className="text-green-400 text-sm w-14">{Math.floor(player.stamina)}/{player.maxStamina}</span>
                 </div>
               </div>
-              
+
               {/* Weapon bar */}
               <div className="flex justify-center gap-2">
                 {WEAPONS.map((wpn, i) => (
                   <div
                     key={wpn.id}
-                    className={`flex flex-col items-center p-2 rounded border-2 transition-all ${
-                      player.weapon === i ? 'border-amber-500 bg-amber-500/20' : 'border-gray-600 bg-gray-800/50'
-                    }`}
+                    className={`flex flex-col items-center p-2 rounded border-2 transition-all ${player.weapon === i ? 'border-amber-500 bg-amber-500/20' : 'border-gray-600 bg-gray-800/50'
+                      }`}
                   >
                     <span className="text-xs text-gray-400">{i + 1}</span>
                     <div className="text-2xl">{wpn.icon}</div>
@@ -1458,7 +1458,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
               </div>
             </div>
           </div>
-          
+
           {/* Pause overlay */}
           {gameStatus === 'paused' && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/80">
@@ -1483,14 +1483,14 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           )}
         </div>
       )}
-      
+
       {/* Victory Screen */}
       {gameStatus === 'victory' && (
         <div className="flex flex-col items-center justify-center gap-6 text-center p-8">
           <Trophy className="text-amber-500 w-24 h-24 animate-bounce" />
           <h1 className="text-5xl font-bold text-amber-500">VICTORY!</h1>
           <p className="text-gray-300 text-lg">You have conquered the crypt!</p>
-          
+
           <div className="bg-gray-900/80 rounded-lg p-6 min-w-[300px]">
             <div className="grid grid-cols-2 gap-4 text-left">
               <div className="text-gray-400">Score:</div>
@@ -1505,7 +1505,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
               <div className="text-green-400 font-bold">{finalStats.kills * 30 + 150}</div>
             </div>
           </div>
-          
+
           <button
             onClick={() => handleClose(true, true)}
             className="px-8 py-4 bg-amber-600 hover:bg-amber-500 text-black font-bold text-xl rounded-lg"
@@ -1514,14 +1514,14 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           </button>
         </div>
       )}
-      
+
       {/* Death Screen */}
       {gameStatus === 'death' && (
         <div className="flex flex-col items-center justify-center gap-6 text-center p-8">
           <Skull className="text-red-500 w-24 h-24" />
           <h1 className="text-5xl font-bold text-red-500">YOU DIED</h1>
           <p className="text-gray-400 text-lg">The draugr have claimed another soul...</p>
-          
+
           <div className="bg-gray-900/80 rounded-lg p-6 min-w-[300px]">
             <div className="grid grid-cols-2 gap-4 text-left">
               <div className="text-gray-400">Final Score:</div>
@@ -1532,7 +1532,7 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
               <div className="text-cyan-400 font-bold">{formatTime(finalStats.time)}</div>
             </div>
           </div>
-          
+
           <div className="flex gap-4">
             <button
               onClick={startGame}
@@ -1549,7 +1549,8 @@ export const DoomMinigame: React.FC<DoomMinigameProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
 

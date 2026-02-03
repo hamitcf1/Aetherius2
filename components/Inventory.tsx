@@ -101,7 +101,7 @@ const InventoryItemCard: React.FC<{
   return (
     <AnimatedCard
       data-testid={`inventory-item-${item.id}`}
-      className={`p-4 flex items-center gap-4 transition-all duration-300 ${isEquipped
+      className={`p-4 flex items-center gap-4 ${isEquipped
         ? 'border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] bg-amber-950/20'
         : ''
         } ${item.enchantments && item.enchantments.length > 0 ? 'ring-1 ring-purple-500/30 bg-gradient-to-r from-purple-900/10 to-transparent shadow-[0_0_10px_rgba(168,85,247,0.1)]' : ''}`}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Lock, Key, AlertTriangle } from 'lucide-react';
+import ModalWrapper from './ModalWrapper';
 
 export type LockDifficulty = 'novice' | 'apprentice' | 'adept' | 'expert' | 'master';
 
@@ -16,7 +17,7 @@ interface LockpickingMinigameProps {
 }
 
 // Difficulty settings
-const DIFFICULTY_CONFIG: Record<LockDifficulty, { 
+const DIFFICULTY_CONFIG: Record<LockDifficulty, {
   sweetSpotSize: number; // degrees
   turnSpeed: number;
   breakChance: number;
@@ -50,12 +51,12 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
   const [currentLockpicks, setCurrentLockpicks] = useState(lockpickCount);
   const [gameState, setGameState] = useState<'playing' | 'success' | 'broken' | 'no-picks'>('playing');
   const [message, setMessage] = useState('');
-  
+
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
-  
+
   const config = DIFFICULTY_CONFIG[difficulty];
-  
+
   // Skill bonus: higher skill = larger effective sweet spot
   const skillBonus = Math.floor((lockpickingSkill - 15) / 10); // 0-8 bonus degrees
   const effectiveSweetSpot = config.sweetSpotSize + skillBonus;
@@ -73,7 +74,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
         }, 2000);
         return;
       }
-      
+
       // Random sweet spot position (10-170 degrees to avoid edges)
       setSweetSpotAngle(Math.floor(Math.random() * 160) + 10);
       setPickAngle(90); // Start in middle
@@ -90,7 +91,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
   const getProximity = useCallback(() => {
     const distance = Math.abs(pickAngle - sweetSpotAngle);
     const halfSweet = effectiveSweetSpot / 2;
-    
+
     if (distance <= halfSweet) {
       return 1; // Perfect
     } else if (distance <= halfSweet * 2) {
@@ -110,7 +111,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
         onClose();
         return;
       }
-      
+
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         setPickAngle(prev => Math.max(0, prev - 3));
       }
@@ -147,7 +148,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
     const gameLoop = () => {
       if (isAttempting) {
         const proximity = getProximity();
-        
+
         if (proximity === 1) {
           // In sweet spot - tension increases smoothly
           setTension(prev => {
@@ -177,7 +178,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
           // Way off - lockpick breaks!
           const breakRoll = Math.random();
           const adjustedBreakChance = config.breakChance * (1 - lockpickingSkill / 200);
-          
+
           if (breakRoll < adjustedBreakChance) {
             setLockpicksUsed(prev => prev + 1);
             setCurrentLockpicks(prev => {
@@ -209,7 +210,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
           setTension(prev => Math.max(0, prev - 5));
         }
       }
-      
+
       animationRef.current = requestAnimationFrame(gameLoop);
     };
 
@@ -229,8 +230,8 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
   } : {};
 
   return (
-    <div className="fixed inset-0 bg-skyrim-dark/90 backdrop-lite flex items-center justify-center z-50">
-      <div 
+    <ModalWrapper open={isOpen} onClose={onClose} zIndex="z-50">
+      <div
         ref={containerRef}
         className="bg-skyrim-paper border-2 border-skyrim-gold/50 rounded-lg p-6 max-w-lg w-full mx-4"
         style={shakeStyle}
@@ -269,18 +270,18 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-16 bg-black rounded-t-full">
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-8 bg-black rounded-sm"></div>
             </div>
-            
+
             {/* Sweet spot indicator (hidden, but affects gameplay) */}
             {/* Debug: uncomment to see sweet spot */}
             {/* <div 
               className="absolute top-1/2 left-1/2 w-1 h-24 bg-green-500/30 origin-bottom"
               style={{ transform: `translate(-50%, -100%) rotate(${sweetSpotAngle - 90}deg)` }}
             /> */}
-            
+
             {/* Lockpick */}
-            <div 
+            <div
               className="absolute top-1/2 left-1/2 w-1 h-28 origin-bottom transition-transform duration-75"
-              style={{ 
+              style={{
                 transform: `translate(-50%, -100%) rotate(${pickAngle - 90}deg)`,
               }}
             >
@@ -291,9 +292,9 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
             </div>
 
             {/* Tension wrench */}
-            <div 
+            <div
               className="absolute top-1/2 left-1/2 w-2 h-20 bg-gray-600 origin-top rounded-b transition-transform duration-100"
-              style={{ 
+              style={{
                 transform: `translate(-50%, 0) rotate(${tension * 0.9}deg)`,
               }}
             >
@@ -325,12 +326,11 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
         </div>
 
         {/* Message */}
-        <div className={`text-center mb-4 h-8 ${
-          gameState === 'success' ? 'text-green-400' :
-          gameState === 'broken' ? 'text-red-400' :
-          gameState === 'no-picks' ? 'text-orange-400' :
-          'text-skyrim-text'
-        }`}>
+        <div className={`text-center mb-4 h-8 ${gameState === 'success' ? 'text-green-400' :
+            gameState === 'broken' ? 'text-red-400' :
+              gameState === 'no-picks' ? 'text-orange-400' :
+                'text-skyrim-text'
+          }`}>
           {message}
         </div>
 
@@ -350,7 +350,7 @@ export const LockpickingMinigame: React.FC<LockpickingMinigameProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </ModalWrapper>
   );
 };
 

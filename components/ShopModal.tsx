@@ -11,6 +11,7 @@ import { SortSelector } from './GameFeatures';
 import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
 import { getShopSpecials } from '../services/shopService';
 import { ParticleEffect } from './SpellEffects';
+import ModalWrapper from './ModalWrapper';
 
 
 export interface ShopItem {
@@ -435,33 +436,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     ingredient: 'Ingredients'
   };
 
-  // Handle ESC key to close
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  }, [onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener('keydown', handleKeyDown);
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [open, handleKeyDown]);
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (open) {
-      setQuantities({});
-      setSearch('');
-      setRecentlyPurchased(new Set());
-      setRecentlySold(new Set());
-    }
-  }, [open]);
 
   const specials = useMemo(() => {
     try {
@@ -838,18 +813,11 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     }, 1600);
   };
 
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-[70] bg-skyrim-dark/70 backdrop-lite flex items-center justify-center p-4 sm:p-6"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <ModalWrapper open={open} onClose={onClose} zIndex="z-[70]">
       <div
         className="w-full max-w-2xl bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl flex flex-col"
         style={{ maxHeight: 'min(550px, 80vh)', margin: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-skyrim-border flex items-center justify-between gap-3 bg-skyrim-dark/50 rounded-t-lg flex-shrink-0">
@@ -1209,6 +1177,6 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
           )}
         </div>
       </div>
-    </div>
+    </ModalWrapper>
   );
 }
