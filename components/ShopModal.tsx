@@ -1,12 +1,17 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { X, ShoppingBag, Coins, Search, Package, Sword, Shield, FlaskConical, Tent, Apple, Droplets, ArrowDownToLine, ArrowUpFromLine, Check, Gem } from 'lucide-react';
+import { X, ShoppingBag, Coins, Search, Package, Sword, Shield, FlaskConical, Tent, Apple, Droplets, ArrowDownToLine, ArrowUpFromLine, Check, Gem, Star } from 'lucide-react';
 import RarityBadge from './RarityBadge';
 import { useAppContext } from '../AppContext';
 import type { InventoryItem } from '../types';
+import { useLocalization } from '../services/localization';
+import { getItemName } from '../services/itemLocalization';
 import { playSoundEffect } from '../services/audioService';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 import { SortSelector } from './GameFeatures';
 import { getFoodNutritionDisplay, getDrinkNutritionDisplay } from '../services/nutritionData';
+import { getShopSpecials } from '../services/shopService';
+import { ParticleEffect } from './SpellEffects';
+import ModalWrapper from './ModalWrapper';
 
 
 export interface ShopItem {
@@ -22,7 +27,7 @@ export interface ShopItem {
 }
 
 // Comprehensive Skyrim-themed shop inventory
-const SHOP_INVENTORY: ShopItem[] = [
+export const SHOP_INVENTORY: ShopItem[] = [
   // === FOOD ===
   { id: 'bread', name: 'Bread', type: 'food', description: 'A fresh loaf of bread. Restores hunger.', price: 2, category: 'Food' },
   { id: 'apple', name: 'Apple', type: 'food', description: 'A crisp red apple from the orchards.', price: 1, category: 'Food' },
@@ -55,14 +60,10 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'health_potion_major', name: 'Plentiful Health Potion', type: 'potion', subtype: 'health', description: 'Restores 100 health.', price: 75, category: 'Potions' },
   { id: 'magicka_potion_minor', name: 'Minor Magicka Potion', type: 'potion', description: 'Restores 25 magicka.', price: 15, category: 'Potions' },
   { id: 'magicka_potion', name: 'Magicka Potion', type: 'potion', subtype: 'magicka', description: 'Restores 50 magicka.', price: 35, category: 'Potions' },
+  { id: 'magicka_potion_major', name: 'Plentiful Magicka Potion', type: 'potion', subtype: 'magicka', description: 'Restores 100 magicka.', price: 75, category: 'Potions' },
   { id: 'stamina_potion_minor', name: 'Minor Stamina Potion', type: 'potion', description: 'Restores 25 stamina.', price: 15, category: 'Potions' },
   { id: 'stamina_potion', name: 'Stamina Potion', type: 'potion', subtype: 'stamina', description: 'Restores 50 stamina.', price: 35, category: 'Potions' },
-  { id: 'cure_disease', name: 'Cure Disease Potion', type: 'potion', description: 'Cures all diseases.', price: 50, category: 'Potions' },
-  { id: 'cure_poison', name: 'Cure Poison', type: 'potion', description: 'Removes poison effects.', price: 40, category: 'Potions' },
-  { id: 'invisibility_potion', name: 'Invisibility Potion', type: 'potion', description: 'Become invisible for 30 seconds.', price: 120, category: 'Potions' },
-  { id: 'resist_fire', name: 'Resist Fire Potion', type: 'potion', description: 'Resist 50% fire damage for 60 seconds.', price: 60, category: 'Potions' },
-  { id: 'resist_frost', name: 'Resist Frost Potion', type: 'potion', description: 'Resist 50% frost damage for 60 seconds.', price: 60, category: 'Potions' },
-  { id: 'resist_shock', name: 'Resist Shock Potion', type: 'potion', description: 'Resist 50% shock damage for 60 seconds.', price: 60, category: 'Potions' },
+  { id: 'stamina_potion_major', name: 'Plentiful Stamina Potion', type: 'potion', subtype: 'stamina', description: 'Restores 100 stamina.', price: 75, category: 'Potions' },
 
   // === CAMPING / SURVIVAL ===
   { id: 'bedroll', name: 'Bedroll', type: 'camping', description: 'A simple bedroll for sleeping outdoors. Basic rest.', price: 25, category: 'Camping' },
@@ -85,14 +86,14 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'iron_warhammer', name: 'Iron Warhammer', type: 'weapon', description: 'A massive crushing weapon. Very heavy.', price: 85, category: 'Weapons' },
   { id: 'hunting_bow', name: 'Hunting Bow', type: 'weapon', description: 'A simple wooden bow for hunting.', price: 50, category: 'Weapons' },
   { id: 'iron_arrows', name: 'Iron Arrows (20)', type: 'weapon', description: 'A bundle of iron-tipped arrows.', price: 10, category: 'Weapons' },
-  
+
   // Basic Staves (Level 1+) - For new mage characters
   { id: 'novice_staff', name: 'Novice Staff', type: 'weapon', description: 'A simple wooden staff for apprentice mages. Channels basic magical energy.', price: 35, category: 'Weapons' },
   { id: 'basic_staff_sparks', name: 'Basic Staff of Sparks', type: 'weapon', description: 'A crude staff that channels weak shock magic. Good for beginners.', price: 55, category: 'Weapons' },
   { id: 'basic_staff_flames', name: 'Basic Staff of Flames', type: 'weapon', description: 'A worn staff that shoots small fireballs. Entry-level destruction.', price: 55, category: 'Weapons' },
   { id: 'basic_staff_frost', name: 'Basic Staff of Frostbite', type: 'weapon', description: 'An old staff that emits frost. Chills enemies slightly.', price: 55, category: 'Weapons' },
   { id: 'apprentice_staff', name: 'Apprentice Staff', type: 'weapon', description: 'A better crafted staff for developing mages. Improved magical channeling.', price: 80, category: 'Weapons', requiredLevel: 3 },
-  
+
   // Tier 2: Steel Weapons (Level 5+)
   { id: 'steel_dagger', name: 'Steel Dagger', type: 'weapon', description: 'Sharp steel dagger. Fast attacks.', price: 45, category: 'Weapons', requiredLevel: 5 },
   { id: 'steel_sword', name: 'Steel Sword', type: 'weapon', description: 'A well-crafted steel blade.', price: 90, category: 'Weapons', requiredLevel: 5 },
@@ -130,7 +131,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'orcish_warhammer', name: 'Orcish Warhammer', type: 'weapon', description: 'Huge Orcish hammer. Crushes anything.', price: 400, category: 'Weapons', requiredLevel: 10 },
   { id: 'orcish_bow', name: 'Orcish Bow', type: 'weapon', description: 'Strong Orcish bow. High damage.', price: 200, category: 'Weapons', requiredLevel: 10 },
   { id: 'orcish_arrows', name: 'Orcish Arrows (20)', type: 'weapon', description: 'Heavy Orcish arrows. Extra damage.', price: 40, category: 'Weapons', requiredLevel: 10 },
-  
+
   // Tier 4: Dwarven Weapons (Level 15+)
   { id: 'dwarven_dagger', name: 'Dwarven Dagger', type: 'weapon', description: 'Ancient Dwarven craftwork. Razor sharp.', price: 200, category: 'Weapons', requiredLevel: 15 },
   { id: 'dwarven_sword', name: 'Dwarven Sword', type: 'weapon', description: 'Dwarven metal blade. Excellent balance.', price: 375, category: 'Weapons', requiredLevel: 15 },
@@ -141,7 +142,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'dwarven_warhammer', name: 'Dwarven Warhammer', type: 'weapon', description: 'Ancient Dwarven hammer. Unstoppable.', price: 700, category: 'Weapons', requiredLevel: 15 },
   { id: 'dwarven_bow', name: 'Dwarven Bow', type: 'weapon', description: 'Dwarven mechanical bow. Precise.', price: 350, category: 'Weapons', requiredLevel: 15 },
   { id: 'dwarven_arrows', name: 'Dwarven Arrows (20)', type: 'weapon', description: 'Precision Dwarven arrows.', price: 60, category: 'Weapons', requiredLevel: 15 },
-  
+
   // Tier 5: Elven Weapons (Level 20+)
   { id: 'elven_dagger', name: 'Elven Dagger', type: 'weapon', description: 'Elegant Elven blade. Graceful and deadly.', price: 300, category: 'Weapons', requiredLevel: 20 },
   { id: 'elven_sword', name: 'Elven Sword', type: 'weapon', description: 'Beautiful Elven sword. Swift strikes.', price: 550, category: 'Weapons', requiredLevel: 20 },
@@ -152,7 +153,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'elven_warhammer', name: 'Elven Warhammer', type: 'weapon', description: 'Rare Elven warhammer. Incredibly strong.', price: 1000, category: 'Weapons', requiredLevel: 20 },
   { id: 'elven_bow', name: 'Elven Bow', type: 'weapon', description: 'Exquisite Elven bow. Superior range.', price: 500, category: 'Weapons', requiredLevel: 20 },
   { id: 'elven_arrows', name: 'Elven Arrows (20)', type: 'weapon', description: 'Fine Elven arrows. Very accurate.', price: 80, category: 'Weapons', requiredLevel: 20 },
-  
+
   // Tier 6: Glass Weapons (Level 25+)
   { id: 'glass_dagger', name: 'Glass Dagger', type: 'weapon', description: 'Malachite glass blade. Incredibly sharp.', price: 500, category: 'Weapons', requiredLevel: 25 },
   { id: 'glass_sword', name: 'Glass Sword', type: 'weapon', description: 'Green glass sword. Cuts through armor.', price: 900, category: 'Weapons', requiredLevel: 25 },
@@ -163,7 +164,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'glass_warhammer', name: 'Glass Warhammer', type: 'weapon', description: 'Glass warhammer. Breaks everything.', price: 1700, category: 'Weapons', requiredLevel: 25 },
   { id: 'glass_bow', name: 'Glass Bow', type: 'weapon', description: 'Beautiful glass bow. Incredible power.', price: 850, category: 'Weapons', requiredLevel: 25 },
   { id: 'glass_arrows', name: 'Glass Arrows (20)', type: 'weapon', description: 'Glass-tipped arrows. Maximum damage.', price: 120, category: 'Weapons', requiredLevel: 25 },
-  
+
   // Tier 7: Ebony Weapons (Level 30+)
   { id: 'ebony_dagger', name: 'Ebony Dagger', type: 'weapon', description: 'Black ebony dagger. Legendary craftsmanship.', price: 800, category: 'Weapons', requiredLevel: 30 },
   { id: 'ebony_sword', name: 'Ebony Sword', type: 'weapon', description: 'Dark ebony sword. Extremely powerful.', price: 1500, category: 'Weapons', requiredLevel: 30 },
@@ -174,7 +175,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'ebony_warhammer', name: 'Ebony Warhammer', type: 'weapon', description: 'Ebony warhammer. Crushes all.', price: 2900, category: 'Weapons', requiredLevel: 30 },
   { id: 'ebony_bow', name: 'Ebony Bow', type: 'weapon', description: 'Black ebony bow. Supreme power.', price: 1400, category: 'Weapons', requiredLevel: 30 },
   { id: 'ebony_arrows', name: 'Ebony Arrows (20)', type: 'weapon', description: 'Ebony arrows. Devastating impact.', price: 200, category: 'Weapons', requiredLevel: 30 },
-  
+
   // Tier 8: Daedric Weapons (Level 40+)
   { id: 'daedric_dagger', name: 'Daedric Dagger', type: 'weapon', description: 'Daedric artifact. Cursed power.', price: 1500, category: 'Weapons', requiredLevel: 40 },
   { id: 'daedric_sword', name: 'Daedric Sword', type: 'weapon', description: 'Legendary Daedric blade. Unrivaled.', price: 3000, category: 'Weapons', requiredLevel: 40 },
@@ -185,11 +186,19 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'daedric_warhammer', name: 'Daedric Warhammer', type: 'weapon', description: 'Daedric warhammer. Divine wrath.', price: 6000, category: 'Weapons', requiredLevel: 40 },
   { id: 'daedric_bow', name: 'Daedric Bow', type: 'weapon', description: 'Daedric bow. Soul-stealing arrows.', price: 2500, category: 'Weapons', requiredLevel: 40 },
   { id: 'daedric_arrows', name: 'Daedric Arrows (20)', type: 'weapon', description: 'Daedric arrows. Obliterate targets.', price: 400, category: 'Weapons', requiredLevel: 40 },
-  
+
   // Enchanted & Special Weapons (Various Levels)
   { id: 'staff_flames', name: 'Staff of Flames', type: 'weapon', description: 'A staff that shoots fire. Limited charges.', price: 250, category: 'Weapons', requiredLevel: 8 },
   { id: 'staff_frost', name: 'Staff of Frost', type: 'weapon', description: 'Freezing staff. Slows enemies.', price: 280, category: 'Weapons', requiredLevel: 10 },
   { id: 'staff_lightning', name: 'Staff of Lightning', type: 'weapon', description: 'Electric staff. Chain lightning.', price: 320, category: 'Weapons', requiredLevel: 12 },
+
+  // Additional pre-enchanted items to increase enchanted inventory frequency
+  { id: 'elven_dagger_of_flame', name: 'Elven Dagger of Flames', type: 'weapon', description: 'Elven dagger imbued with fiery runes. Adds fire damage.', price: 420, category: 'Weapons', requiredLevel: 8, rarity: 'uncommon' },
+  { id: 'steel_sword_of_frost', name: 'Steel Sword of Frost', type: 'weapon', description: 'A steel sword etched with frost runes. Slows enemies on hit.', price: 480, category: 'Weapons', requiredLevel: 10, rarity: 'uncommon' },
+  { id: 'glass_bow_of_lightning', name: 'Glass Bow of Lightning', type: 'weapon', description: 'A glass bow that shocks targets on hit.', price: 850, category: 'Weapons', requiredLevel: 20, rarity: 'rare' },
+  { id: 'dwarven_dagger_of_shock', name: 'Dwarven Dagger of Shock', type: 'weapon', description: 'A dwarven dagger crackling with electricity.', price: 500, category: 'Weapons', requiredLevel: 12, rarity: 'rare' },
+  { id: 'elven_gauntlets_of_power', name: 'Elven Gauntlets of Power', type: 'apparel', description: 'Gauntlets that increase one-handed damage.', price: 320, category: 'Armor', requiredLevel: 10, rarity: 'uncommon' },
+  { id: 'orcish_mace_of_bleeding', name: 'Orcish Mace of Bleeding', type: 'weapon', description: 'Orcish mace that causes bleeding damage over time.', price: 540, category: 'Weapons', requiredLevel: 14, rarity: 'rare' },
   { id: 'enchanted_bow', name: 'Enchanted Hunting Bow', type: 'weapon', description: 'Bow with minor fire enchantment.', price: 180, category: 'Weapons', requiredLevel: 10 },
   { id: 'silver_sword', name: 'Silver Sword', type: 'weapon', description: 'Effective against undead and werewolves.', price: 200, category: 'Weapons', requiredLevel: 12 },
   { id: 'silver_greatsword', name: 'Silver Greatsword', type: 'weapon', description: 'Large silver blade. Anti-undead.', price: 350, category: 'Weapons', requiredLevel: 15 },
@@ -209,14 +218,14 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'common_clothes', name: 'Common Clothes', type: 'apparel', description: 'Simple peasant attire.', price: 10, category: 'Armor' },
   { id: 'fine_clothes', name: 'Fine Clothes', type: 'apparel', description: 'Elegant clothing for nobles.', price: 100, category: 'Armor' },
   { id: 'fur_cloak', name: 'Fur Cloak', type: 'apparel', description: 'A warm fur cloak for cold climates.', price: 75, category: 'Armor' },
-  
+
   // Tier 2: Iron Armor (Level 1+)
   { id: 'iron_armor', name: 'Iron Armor', type: 'apparel', description: 'Heavy iron plate armor.', price: 150, category: 'Armor' },
   { id: 'iron_boots', name: 'Iron Boots', type: 'apparel', description: 'Heavy iron boots. Good protection.', price: 45, category: 'Armor' },
   { id: 'iron_helmet', name: 'Iron Helmet', type: 'apparel', description: 'A sturdy iron helm.', price: 60, category: 'Armor' },
   { id: 'iron_gauntlets', name: 'Iron Gauntlets', type: 'apparel', description: 'Iron plated gloves.', price: 45, category: 'Armor' },
   { id: 'iron_shield', name: 'Iron Shield', type: 'apparel', description: 'A heavy iron shield.', price: 65, category: 'Armor' },
-  
+
   // Tier 3: Steel Armor (Level 5+)
   { id: 'steel_armor', name: 'Steel Armor', type: 'apparel', description: 'Strong steel plate armor.', price: 275, category: 'Armor', requiredLevel: 5 },
   { id: 'steel_boots', name: 'Steel Boots', type: 'apparel', description: 'Solid steel boots.', price: 85, category: 'Armor', requiredLevel: 5 },
@@ -224,68 +233,68 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'steel_gauntlets', name: 'Steel Gauntlets', type: 'apparel', description: 'Steel plated gauntlets.', price: 85, category: 'Armor', requiredLevel: 5 },
   { id: 'steel_shield', name: 'Steel Shield', type: 'apparel', description: 'Sturdy steel shield.', price: 120, category: 'Armor', requiredLevel: 5 },
   { id: 'steel_plate_armor', name: 'Steel Plate Armor', type: 'apparel', description: 'Full steel plate. Heavy but strong.', price: 400, category: 'Armor', requiredLevel: 8 },
-  
+
   // Tier 4: Elven Light Armor (Level 12+)
   { id: 'elven_light_armor', name: 'Elven Light Armor', type: 'apparel', description: 'Elegant Elven light armor. Agile protection.', price: 350, category: 'Armor', requiredLevel: 12 },
   { id: 'elven_boots', name: 'Elven Boots', type: 'apparel', description: 'Light Elven boots. Swift movement.', price: 100, category: 'Armor', requiredLevel: 12 },
   { id: 'elven_helmet', name: 'Elven Helmet', type: 'apparel', description: 'Graceful Elven helm.', price: 130, category: 'Armor', requiredLevel: 12 },
   { id: 'elven_gauntlets', name: 'Elven Gauntlets', type: 'apparel', description: 'Fine Elven gloves.', price: 100, category: 'Armor', requiredLevel: 12 },
   { id: 'elven_shield', name: 'Elven Shield', type: 'apparel', description: 'Beautiful Elven shield.', price: 180, category: 'Armor', requiredLevel: 12 },
-  
+
   // Tier 5: Scaled Armor (Level 15+)
   { id: 'scaled_armor', name: 'Scaled Armor', type: 'apparel', description: 'Layered scale armor. Excellent protection.', price: 450, category: 'Armor', requiredLevel: 15 },
   { id: 'scaled_boots', name: 'Scaled Boots', type: 'apparel', description: 'Scale-covered boots.', price: 130, category: 'Armor', requiredLevel: 15 },
   { id: 'scaled_helmet', name: 'Scaled Helmet', type: 'apparel', description: 'Scaled helm. Intimidating.', price: 160, category: 'Armor', requiredLevel: 15 },
   { id: 'scaled_gauntlets', name: 'Scaled Gauntlets', type: 'apparel', description: 'Scaled gloves with grip.', price: 130, category: 'Armor', requiredLevel: 15 },
-  
+
   // Tier 6: Orcish Armor (Level 18+)
   { id: 'orcish_armor', name: 'Orcish Armor', type: 'apparel', description: 'Heavy Orcish plate. Brutal design.', price: 600, category: 'Armor', requiredLevel: 18 },
   { id: 'orcish_boots', name: 'Orcish Boots', type: 'apparel', description: 'Thick Orcish boots.', price: 180, category: 'Armor', requiredLevel: 18 },
   { id: 'orcish_helmet', name: 'Orcish Helmet', type: 'apparel', description: 'Fierce Orcish helm.', price: 220, category: 'Armor', requiredLevel: 18 },
   { id: 'orcish_gauntlets', name: 'Orcish Gauntlets', type: 'apparel', description: 'Heavy Orcish gauntlets.', price: 180, category: 'Armor', requiredLevel: 18 },
   { id: 'orcish_shield', name: 'Orcish Shield', type: 'apparel', description: 'Strong Orcish shield.', price: 300, category: 'Armor', requiredLevel: 18 },
-  
+
   // Tier 7: Dwarven Armor (Level 22+)
   { id: 'dwarven_armor', name: 'Dwarven Armor', type: 'apparel', description: 'Ancient Dwarven plate. Excellent craftsmanship.', price: 900, category: 'Armor', requiredLevel: 22 },
   { id: 'dwarven_boots', name: 'Dwarven Boots', type: 'apparel', description: 'Dwarven metal boots. Heavy duty.', price: 270, category: 'Armor', requiredLevel: 22 },
   { id: 'dwarven_helmet', name: 'Dwarven Helmet', type: 'apparel', description: 'Intricate Dwarven helm.', price: 330, category: 'Armor', requiredLevel: 22 },
   { id: 'dwarven_gauntlets', name: 'Dwarven Gauntlets', type: 'apparel', description: 'Precision Dwarven gloves.', price: 270, category: 'Armor', requiredLevel: 22 },
   { id: 'dwarven_shield', name: 'Dwarven Shield', type: 'apparel', description: 'Dwarven-crafted shield. Superior.', price: 450, category: 'Armor', requiredLevel: 22 },
-  
+
   // Tier 8: Elven Gilded Armor (Level 25+)
   { id: 'elven_gilded_armor', name: 'Elven Gilded Armor', type: 'apparel', description: 'Golden-trimmed Elven armor. Majestic.', price: 1200, category: 'Armor', requiredLevel: 25 },
   { id: 'elven_gilded_boots', name: 'Elven Gilded Boots', type: 'apparel', description: 'Gilded Elven boots. Beautiful.', price: 350, category: 'Armor', requiredLevel: 25 },
   { id: 'elven_gilded_helmet', name: 'Elven Gilded Helmet', type: 'apparel', description: 'Golden Elven helm. Stunning.', price: 430, category: 'Armor', requiredLevel: 25 },
   { id: 'elven_gilded_gauntlets', name: 'Elven Gilded Gauntlets', type: 'apparel', description: 'Golden Elven gloves. Refined.', price: 350, category: 'Armor', requiredLevel: 25 },
-  
+
   // Tier 9: Glass Armor (Level 28+)
   { id: 'glass_armor', name: 'Glass Armor', type: 'apparel', description: 'Green glass armor. Light but very strong.', price: 1600, category: 'Armor', requiredLevel: 28 },
   { id: 'glass_boots', name: 'Glass Boots', type: 'apparel', description: 'Glass boots. Surprisingly light.', price: 480, category: 'Armor', requiredLevel: 28 },
   { id: 'glass_helmet', name: 'Glass Helmet', type: 'apparel', description: 'Glass helm. Crystal clear.', price: 580, category: 'Armor', requiredLevel: 28 },
   { id: 'glass_gauntlets', name: 'Glass Gauntlets', type: 'apparel', description: 'Glass gloves. Perfect fit.', price: 480, category: 'Armor', requiredLevel: 28 },
   { id: 'glass_shield', name: 'Glass Shield', type: 'apparel', description: 'Malachite glass shield. Elegant defense.', price: 800, category: 'Armor', requiredLevel: 28 },
-  
+
   // Tier 10: Dragonscale Armor (Level 32+)
   { id: 'dragonscale_armor', name: 'Dragonscale Armor', type: 'apparel', description: 'Armor made from dragon scales. Legendary.', price: 2500, category: 'Armor', requiredLevel: 32 },
   { id: 'dragonscale_boots', name: 'Dragonscale Boots', type: 'apparel', description: 'Boots from dragon scales.', price: 750, category: 'Armor', requiredLevel: 32 },
   { id: 'dragonscale_helmet', name: 'Dragonscale Helmet', type: 'apparel', description: 'Dragon scale helm. Fearsome.', price: 900, category: 'Armor', requiredLevel: 32 },
   { id: 'dragonscale_gauntlets', name: 'Dragonscale Gauntlets', type: 'apparel', description: 'Dragon scale gloves. Powerful.', price: 750, category: 'Armor', requiredLevel: 32 },
   { id: 'dragonscale_shield', name: 'Dragonscale Shield', type: 'apparel', description: 'Shield made from dragon scales.', price: 1200, category: 'Armor', requiredLevel: 32 },
-  
+
   // Tier 11: Ebony Armor (Level 35+)
   { id: 'ebony_armor', name: 'Ebony Armor', type: 'apparel', description: 'Dark ebony plate. Near-legendary protection.', price: 3500, category: 'Armor', requiredLevel: 35 },
   { id: 'ebony_boots', name: 'Ebony Boots', type: 'apparel', description: 'Ebony boots. Extremely strong.', price: 1050, category: 'Armor', requiredLevel: 35 },
   { id: 'ebony_helmet', name: 'Ebony Helmet', type: 'apparel', description: 'Ebony helm. Intimidating presence.', price: 1260, category: 'Armor', requiredLevel: 35 },
   { id: 'ebony_gauntlets', name: 'Ebony Gauntlets', type: 'apparel', description: 'Ebony gauntlets. Unyielding.', price: 1050, category: 'Armor', requiredLevel: 35 },
   { id: 'ebony_shield', name: 'Ebony Shield', type: 'apparel', description: 'Ebony shield. Unbreakable.', price: 1700, category: 'Armor', requiredLevel: 35 },
-  
+
   // Tier 12: Dragonplate Armor (Level 40+)
   { id: 'dragonplate_armor', name: 'Dragonplate Armor', type: 'apparel', description: 'Dragon bone plate armor. Ultimate protection.', price: 5000, category: 'Armor', requiredLevel: 40 },
   { id: 'dragonplate_boots', name: 'Dragonplate Boots', type: 'apparel', description: 'Dragon bone boots. Impenetrable.', price: 1500, category: 'Armor', requiredLevel: 40 },
   { id: 'dragonplate_helmet', name: 'Dragonplate Helmet', type: 'apparel', description: 'Dragon bone helm. Godlike.', price: 1800, category: 'Armor', requiredLevel: 40 },
   { id: 'dragonplate_gauntlets', name: 'Dragonplate Gauntlets', type: 'apparel', description: 'Dragon bone gauntlets. Unstoppable.', price: 1500, category: 'Armor', requiredLevel: 40 },
   { id: 'dragonplate_shield', name: 'Dragonplate Shield', type: 'apparel', description: 'Dragon bone shield. Absolute defense.', price: 2400, category: 'Armor', requiredLevel: 40 },
-  
+
   // Tier 13: Daedric Armor (Level 45+)
   { id: 'daedric_armor', name: 'Daedric Armor', type: 'apparel', description: 'Daedric plate. Forged in Oblivion itself.', price: 8000, category: 'Armor', requiredLevel: 45 },
   { id: 'daedric_boots', name: 'Daedric Boots', type: 'apparel', description: 'Daedric boots. Walk through hell.', price: 2400, category: 'Armor', requiredLevel: 45 },
@@ -326,7 +335,7 @@ const SHOP_INVENTORY: ShopItem[] = [
   { id: 'daedric_core', name: 'Daedric Core', type: 'misc', description: 'A pulsating heart of Daedric energy. Used for legendary forging.', price: 400, category: 'Ingredients' },
   { id: 'leather_strip', name: 'Leather Strip', type: 'misc', description: 'Strips of leather used for joining armor pieces.', price: 2, category: 'Ingredients' },
   { id: 'metal_scrap', name: 'Metal Scrap', type: 'misc', description: 'Bits of salvaged metal. Can be used for basic repairs.', price: 1, category: 'Ingredients' },
-  
+
   // === JEWELRY ===
   { id: 'gold_ring', name: 'Gold Ring', type: 'apparel', description: 'A simple gold ring. Elegant and valuable.', price: 75, category: 'Jewelry' },
   { id: 'silver_ring', name: 'Silver Ring', type: 'apparel', description: 'A silver ring with a subtle shine.', price: 40, category: 'Jewelry' },
@@ -373,7 +382,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
 // Calculate sell price (50% of base value, minimum 1 gold)
 const getSellPrice = (item: InventoryItem): number => {
   // Try to find matching shop item for base price
-  const shopItem = SHOP_INVENTORY.find(si => 
+  const shopItem = SHOP_INVENTORY.find(si =>
     si.name.toLowerCase() === item.name.toLowerCase()
   );
   if (shopItem) {
@@ -398,19 +407,22 @@ interface ShopModalProps {
   onPurchase: (item: ShopItem, quantity: number) => void;
   inventory?: InventoryItem[];
   onSell?: (item: InventoryItem, quantity: number, totalGold: number) => void;
-  characterLevel?: number; // Character level to filter shop items
+  characterLevel?: number;
 }
 
 export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onSell, characterLevel = 1 }: ShopModalProps) {
+  const { t } = useLocalization();
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [recentlyPurchased, setRecentlyPurchased] = useState<Set<string>>(new Set());
   const [recentlySold, setRecentlySold] = useState<Set<string>>(new Set());
+  const [insufficient, setInsufficient] = useState<Set<string>>(new Set());
   const [shopSort, setShopSort] = useState<string>('name:asc');
+  const [purchaseEffect, setPurchaseEffect] = useState<{ x: number; y: number; id: string } | null>(null);
   const [sellSort, setSellSort] = useState<string>('name:asc');
-  const { showQuantityControls } = useAppContext();
+  const { showQuantityControls, showToast } = useAppContext();
 
   // Map inventory item types to shop categories for the Sell tab
   const TYPE_TO_CATEGORY: Record<string, string> = {
@@ -424,42 +436,41 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     ingredient: 'Ingredients'
   };
 
-  // Handle ESC key to close
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  }, [onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener('keydown', handleKeyDown);
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [open, handleKeyDown]);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (open) {
-      setQuantities({});
-      setSearch('');
-      setRecentlyPurchased(new Set());
-      setRecentlySold(new Set());
-    }
-  }, [open]);
+  const specials = useMemo(() => {
+    try {
+      return getShopSpecials(characterLevel || 1).filter(s => !s.expiresAt || s.expiresAt > Date.now());
+    } catch (e) { return []; }
+  }, [characterLevel]);
 
   const filteredShopItems = useMemo(() => {
-    const base = SHOP_INVENTORY.filter(item => {
+    // Merge regular inventory with temporary specials so enchanted/limited items are listed inline
+    const mergedSource = [
+      ...SHOP_INVENTORY,
+      ...specials.map(s => ({
+        id: s.id,
+        name: s.name,
+        type: s.type as ShopItem['type'],
+        description: s.description,
+        price: s.price,
+        category: s.category || 'Misc',
+        requiredLevel: s.requiredLevel,
+        rarity: s.rarity,
+        // Preserve special metadata so UI can render badges
+        enchantment: (s as any).enchantment || undefined,
+        limited: (s as any).limited || false,
+        _isSpecial: true
+      }))
+    ];
+
+    const base = mergedSource.filter(item => {
       // Filter by character level - only show items the character can access
       if (item.requiredLevel && characterLevel < item.requiredLevel) {
         return false;
       }
       const matchesCategory = category === 'All' || item.category === category;
-      const matchesSearch = !search || 
+      const matchesSearch = !search ||
         item.name.toLowerCase().includes(search.toLowerCase()) ||
         item.description.toLowerCase().includes(search.toLowerCase());
       return matchesCategory && matchesSearch;
@@ -528,7 +539,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
       if ((item.quantity || 0) <= 0) return false;
       // Don't allow selling equipped items
       if (item.equipped) return false;
-      const matchesSearch = !search || 
+      const matchesSearch = !search ||
         item.name.toLowerCase().includes(search.toLowerCase()) ||
         item.description.toLowerCase().includes(search.toLowerCase());
       return matchesSearch;
@@ -568,23 +579,133 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     return sorted;
   }, [inventory, search, category, sellSort]);
 
+  // Group identical inventory entries by normalized name so the sell list shows stacked rows
+  const groupedInventoryItems = useMemo(() => {
+    const m = new Map<string, {
+      key: string;
+      name: string;
+      description?: string;
+      rarity?: string;
+      type?: string;
+      items: InventoryItem[];
+      totalQty: number;
+      anyFavorite: boolean;
+      anyEquipped: boolean;
+    }>();
+
+    filteredInventoryItems.forEach(it => {
+      const key = (it.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const existing = m.get(key);
+      if (!existing) {
+        m.set(key, {
+          key,
+          name: it.name || key,
+          description: it.description,
+          rarity: (it.rarity || '') as string,
+          type: it.type,
+          items: [it],
+          totalQty: it.quantity || 1,
+          anyFavorite: !!it.isFavorite,
+          anyEquipped: !!it.equipped,
+        });
+      } else {
+        existing.items.push(it);
+        existing.totalQty += (it.quantity || 1);
+        existing.anyFavorite = existing.anyFavorite || !!it.isFavorite;
+        existing.anyEquipped = existing.anyEquipped || !!it.equipped;
+      }
+    });
+
+    return Array.from(m.values());
+  }, [filteredInventoryItems]);
+
+  // Sell all items in a grouped entry (iterate underlying stacks)
+  const handleSellGroupAll = (group: { items: InventoryItem[] }) => {
+    if (!onSell) return;
+    let grandTotal = 0;
+    group.items.forEach(it => {
+      const qty = it.quantity || 1;
+      const unit = getSellPrice(it);
+      const total = unit * qty;
+      grandTotal += total;
+      onSell(it, qty, total);
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+      setRecentlySold(prev => new Set(prev).add(it.id));
+    });
+
+    playSoundEffect('sell');
+    showToast && showToast(`Sold ${group.items.length} item${group.items.length !== 1 ? 's' : ''} for ${grandTotal}g`, 'success');
+    setTimeout(() => {
+      setRecentlySold(prev => {
+        const newSet = new Set(prev);
+        group.items.forEach(it => newSet.delete(it.id));
+        return newSet;
+      });
+    }, 1600);
+  };
+
+  // Sell a single unit from the grouped entry (find first stack with qty > 0)
+  const handleSellGroupOne = (group: { items: InventoryItem[] }) => {
+    if (!onSell) return;
+    for (const it of group.items) {
+      const qtyAvailable = it.quantity || 1;
+      if (qtyAvailable <= 0) continue;
+      const unit = getSellPrice(it);
+      onSell(it, 1, unit);
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+      setRecentlySold(prev => new Set(prev).add(it.id));
+      playSoundEffect('sell');
+      showToast && showToast(`Sold 1x ${getItemName(it, t)} for ${unit}g`, 'success');
+      setTimeout(() => {
+        setRecentlySold(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(it.id);
+          return newSet;
+        });
+      }, 1600);
+      break;
+    }
+  };
+
+  // Items in the currently selected category (ignores search)
+  const itemsInSelectedCategory = useMemo(() => {
+    const base = inventory.filter(item => {
+      if (item.type === 'key') return false;
+      if ((item.quantity || 0) <= 0) return false;
+      if (item.equipped) return false;
+      return true;
+    });
+
+    const categoryFiltered = category === 'All' ? base : base.filter(item => {
+      if (category === 'Jewelry') {
+        const n = item.name.toLowerCase();
+        return n.includes('ring') || n.includes('necklace') || n.includes('circlet');
+      }
+      const mapped = TYPE_TO_CATEGORY[item.type] || 'Misc';
+      return mapped === category;
+    });
+
+    return categoryFiltered;
+  }, [inventory, category]);
+
   const getQuantity = (id: string) => quantities[id] || 1;
   const setQuantity = (id: string, qty: number, max?: number) => {
     const newQty = Math.max(1, max ? Math.min(qty, max) : qty);
     setQuantities(prev => ({ ...prev, [id]: newQty }));
   };
 
-  const handleBuy = (item: ShopItem) => {
+  const handleBuy = (item: ShopItem, e?: React.MouseEvent<HTMLButtonElement>) => {
     const qty = getQuantity(item.id);
     const total = item.price * qty;
     if (gold >= total) {
       onPurchase(item, qty);
       setQuantities(prev => ({ ...prev, [item.id]: 1 }));
-      
+
       // Play purchase sound effect
       playSoundEffect('purchase');
-      
-      // Show purchase feedback
+      playSoundEffect('gold_spend');
+
+      // Show purchase feedback (button state)
       setRecentlyPurchased(prev => new Set(prev).add(item.id));
       setTimeout(() => {
         setRecentlyPurchased(prev => {
@@ -593,6 +714,29 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
           return newSet;
         });
       }, 1500);
+
+      // Spawn a small particle effect anchored to the clicked button
+      try {
+        const rect = e?.currentTarget?.getBoundingClientRect?.();
+        if (rect) {
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const id = `purchase_${item.id}_${Date.now()}`;
+          setPurchaseEffect({ x, y, id });
+          setTimeout(() => setPurchaseEffect(null), 700);
+        }
+      } catch (err) { /* best-effort UI, ignore */ }
+    } else {
+      // Not enough gold — give clear feedback
+      setInsufficient(prev => new Set(prev).add(item.id));
+      // play error sound and show toast
+      playSoundEffect('error');
+      showToast && showToast(`Need ${Math.max(1, total - gold)}g to buy ${getItemName({ ...item, baseId: item.id }, t)}`, 'error');
+      setTimeout(() => setInsufficient(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        return newSet;
+      }), 1600);
     }
   };
 
@@ -603,10 +747,10 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     const total = unitPrice * qty;
     onSell(item, qty, total);
     setQuantities(prev => ({ ...prev, [item.id]: 1 }));
-    
+
     // Play sell sound effect
     playSoundEffect('sell');
-    
+
     // Show sell feedback
     setRecentlySold(prev => new Set(prev).add(item.id));
     setTimeout(() => {
@@ -636,24 +780,50 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
     }, 1500);
   };
 
-  if (!open) return null;
+  // Sell all items in the currently selected category
+  const handleSellCategory = () => {
+    if (!onSell) return;
+    const toSell = itemsInSelectedCategory.filter(it => (it.quantity || 0) > 0);
+    if (toSell.length === 0) {
+      showToast && showToast('No items in this category to sell', 'info');
+      return;
+    }
+
+    // Execute sell for each item (preserves existing onSell behavior)
+    let grandTotal = 0;
+    toSell.forEach(it => {
+      const qty = it.quantity || 1;
+      const unit = getSellPrice(it);
+      const total = unit * qty;
+      grandTotal += total;
+      onSell(it, qty, total);
+      setRecentlySold(prev => new Set(prev).add(it.id));
+      setQuantities(prev => ({ ...prev, [it.id]: 1 }));
+    });
+
+    playSoundEffect('sell');
+    showToast && showToast(`Sold ${toSell.length} items for ${grandTotal}g`, 'success');
+    // clear recentlySold flags after a short time so UI feedback works
+    setTimeout(() => {
+      setRecentlySold(prev => {
+        const newSet = new Set(prev);
+        toSell.forEach(it => newSet.delete(it.id));
+        return newSet;
+      });
+    }, 1600);
+  };
 
   return (
-    <div 
-      className="fixed inset-0 z-[70] bg-skyrim-dark/70 backdrop-lite flex items-center justify-center p-4 sm:p-6"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div 
+    <ModalWrapper open={open} onClose={onClose} zIndex="z-[70]">
+      <div
         className="w-full max-w-2xl bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-2xl flex flex-col"
         style={{ maxHeight: 'min(550px, 80vh)', margin: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-skyrim-border flex items-center justify-between gap-3 bg-skyrim-dark/50 rounded-t-lg flex-shrink-0">
           <div className="flex items-center gap-2">
             <ShoppingBag className="text-skyrim-gold" size={20} />
-            <h2 className="text-lg font-serif text-skyrim-gold">General Goods</h2>
+            <h2 className="text-lg font-serif text-skyrim-gold">{t('shop.title')}</h2>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-skyrim-paper/40 rounded border border-skyrim-border">
@@ -670,26 +840,24 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         <div className="flex border-b border-skyrim-border/60 bg-skyrim-paper/20 flex-shrink-0">
           <button
             onClick={() => { setMode('buy'); setSearch(''); setCategory('All'); }}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors ${
-              mode === 'buy'
-                ? 'bg-skyrim-gold/20 text-skyrim-gold border-b-2 border-skyrim-gold'
-                : 'text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/20'
-            }`}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors ${mode === 'buy'
+              ? 'bg-skyrim-gold/20 text-skyrim-gold border-b-2 border-skyrim-gold'
+              : 'text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/20'
+              }`}
           >
             <ArrowDownToLine size={16} />
-            Buy
+            {t('shop.buy')}
           </button>
           <button
             onClick={() => { setMode('sell'); setSearch(''); setCategory('All'); }}
             disabled={!onSell}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors ${
-              mode === 'sell'
-                ? 'bg-green-900/30 text-green-400 border-b-2 border-green-500'
-                : 'text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/20'
-            } ${!onSell ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors ${mode === 'sell'
+              ? 'bg-green-900/30 text-green-400 border-b-2 border-green-500'
+              : 'text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/20'
+              } ${!onSell ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <ArrowUpFromLine size={16} />
-            Sell
+            {t('shop.sell')}
           </button>
         </div>
 
@@ -699,7 +867,7 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
-              placeholder={mode === 'buy' ? 'Search shop...' : 'Search inventory...'}
+              placeholder={mode === 'buy' ? t('shop.searchShop') : t('shop.searchInventory')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-skyrim-paper/40 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:border-skyrim-gold focus:outline-none text-sm"
@@ -712,32 +880,31 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
                   <button
                     key={cat}
                     onClick={() => setCategory(cat)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                      category === cat
-                        ? (mode === 'buy' ? 'bg-skyrim-gold text-skyrim-dark font-bold' : 'bg-green-700 text-white font-bold')
-                        : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/50'
-                    }`}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${category === cat
+                      ? (mode === 'buy' ? 'bg-skyrim-gold text-skyrim-dark font-bold' : 'bg-green-700 text-white font-bold')
+                      : 'bg-skyrim-paper/30 text-skyrim-text hover:text-skyrim-text/80 hover:bg-skyrim-paper/50'
+                      }`}
                   >
                     {categoryIcons[cat]}
-                    <span>{cat}</span>
+                    <span>{cat === 'All' ? t('category.all') : t(`category.${cat.toLowerCase()}` as any) || cat}</span>
                   </button>
                 ))}
               </div>
 
               <div className="mt-2 flex items-center gap-2">
-                <div className="text-xs text-skyrim-text">Sort:</div>
+                <div className="text-xs text-skyrim-text">{t('shop.sort')}:</div>
                 <SortSelector
                   currentSort={mode === 'buy' ? shopSort : sellSort}
                   onSelect={(s) => mode === 'buy' ? setShopSort(s) : setSellSort(s)}
                   allowDirection={true}
                   options={[
-                    { id: 'name', label: 'Name' },
-                    { id: 'price', label: 'Price' },
-                    { id: 'damage', label: 'Damage' },
-                    { id: 'armor', label: 'Armor' },
-                    { id: 'weight', label: 'Weight' }
+                    { id: 'name', label: t('sort.name') },
+                    { id: 'price', label: t('sort.value') },
+                    { id: 'damage', label: t('sort.damage') },
+                    { id: 'armor', label: t('perks.categories.armor') },
+                    { id: 'weight', label: t('inventory.weight') }
                   ]}
-                  label="Sort"
+                  label={t('shop.sort')}
                 />
               </div>
             </>
@@ -746,236 +913,217 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
 
         {/* Items List */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {mode === 'buy' ? (
-            // BUY MODE
-            filteredShopItems.length === 0 ? (
-              <div className="text-center text-gray-500 py-8 text-sm">No items found.</div>
-            ) : (
-              <div className="divide-y divide-skyrim-border/30">
-                {filteredShopItems.map(item => {
-                  const qty = showQuantityControls ? getQuantity(item.id) : 1;
-                  const total = item.price * qty;
-                  const canAfford = gold >= total;
+          {mode === 'buy' && (
+            <div className="p-3 space-y-3">
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={`px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors ${
-                        !canAfford ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
-                          {(item as any).rarity && <span className="ml-2"><RarityBadge rarity={String((item as any).rarity)} /></span>}
-                          <span className="text-skyrim-text text-xs">({item.category})</span>
-                          {/* Show stats for weapons and armor */}
-                          {shouldHaveStats(item.type) && (() => {
-                            const stats = getItemStats(item.name, item.type);
-                            return (
-                              <span className="flex items-center gap-2 text-xs">
-                                {stats.damage && (
-                                  <span className="flex items-center gap-0.5 text-red-400">
-                                    <Sword size={10} /> {stats.damage}
+
+              {filteredShopItems.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">{t('shop.noItems')}</div>
+              ) : (
+                <div className="divide-y divide-skyrim-border/30">
+                  {filteredShopItems.map(item => {
+                    // Match against player's inventory to show ownership/favorite/equipped indicators
+                    const matches = inventory.filter(inv => inv.name.toLowerCase() === item.name.toLowerCase());
+                    const ownedQty = matches.reduce((s, it) => s + (it.quantity || 1), 0);
+                    const anyFavorite = matches.some(it => !!it.isFavorite);
+                    const anyEquipped = matches.some(it => !!it.equipped);
+
+                    return (
+                      <div key={item.id} className="px-3 py-2.5 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="text-xl text-gray-300">{categoryIcons[item.category || 'All']}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate text-sm flex items-center gap-2">
+                                <span className="truncate">{getItemName({ ...item, baseId: item.id }, t)}</span>
+                                {ownedQty > 0 && (
+                                  <span className="ml-1 px-2 py-0.5 rounded bg-skyrim-paper/30 text-gray-300 text-xs flex items-center gap-1" title={`${ownedQty} owned`}>
+                                    <Package size={12} />
+                                    <span className="text-xs">x{ownedQty}</span>
                                   </span>
                                 )}
-                                {stats.armor && (
-                                  <span className="flex items-center gap-0.5 text-blue-400">
-                                    <Shield size={10} /> {stats.armor}
+                                {(item as any).limited && <span className="px-2 py-0.5 rounded text-[10px] bg-yellow-700 text-yellow-100">Limited</span>}
+                                {((item as any).enchantment || /\bof\b/i.test(item.name)) && (
+                                  <span className="ml-1 px-2 py-0.5 rounded bg-purple-700 text-purple-100 text-xs flex items-center gap-1">
+                                    <Gem className="w-3 h-3" />
+                                    Enchanted
                                   </span>
                                 )}
-                              </span>
-                            );
-                          })()}
-                          {/* Show nutrition/effects for food/drink/potions */}
-                          {item.type === 'food' && (
-                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
-                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'drink' && (
-                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
-                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'potion' && (
-                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
-                              <FlaskConical size={10} />
-                              {item.subtype === 'health' ? 'Restores Health' : 
-                               item.subtype === 'magicka' ? 'Restores Magicka' : 
-                               item.subtype === 'stamina' ? 'Restores Stamina' : 
-                               item.description.includes('Restores') ? 'Restorative' : 
-                               'Potion Effect'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold">
-                          <Coins size={12} />
-                          {item.price}
-                        </div>
-                        {showQuantityControls && (
-                          <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
-                            <button
-                              onClick={() => setQuantity(item.id, qty - 1)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              -
-                            </button>
-                            <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
-                            <button
-                              onClick={() => setQuantity(item.id, qty + 1)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              +
-                            </button>
+                                {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
+
+                                {/* Favorite / Equipped indicators (match to player's inventory) */}
+                                {anyFavorite && (
+                                  <span className="ml-1 px-2 py-0.5 rounded text-[10px] bg-yellow-500 text-black flex items-center gap-1" title="Favorited">
+                                    <Star size={12} /> Fav
+                                  </span>
+                                )}
+                                {anyEquipped && (
+                                  <span className="ml-1 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
+                                    <Shield size={12} /> {t('inventory.equipped')}
+                                  </span>
+                                )}
+
+                                {/* Show stats for weapons and armor */}
+                                {(() => {
+                                  const stats = getItemStats(item.name, item.type as any);
+                                  return (stats && (stats.damage || stats.armor)) ? (
+                                    <span className="flex items-center gap-2 text-xs">
+                                      {stats.damage && (
+                                        <span className="flex items-center gap-0.5 text-red-400">
+                                          <Sword size={10} /> {stats.damage}
+                                        </span>
+                                      )}
+                                      {stats.armor && (
+                                        <span className="flex items-center gap-0.5 text-blue-400">
+                                          <Shield size={10} /> {stats.armor}
+                                        </span>
+                                      )}
+                                    </span>
+                                  ) : null;
+                                })()}
+
+                                {/* nutrition / potion hints */}
+                                {item.type === 'food' && (
+                                  <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                                    <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
+                                  </span>
+                                )}
+                                {item.type === 'drink' && (
+                                  <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                                    <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
+                                  </span>
+                                )}
+                                {item.type === 'potion' && (
+                                  <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                                    <FlaskConical size={10} />
+                                    {item.subtype === 'health' ? 'Restores Health' :
+                                      item.subtype === 'magicka' ? 'Restores Magicka' :
+                                        item.subtype === 'stamina' ? 'Restores Stamina' :
+                                          item.description.includes('Restores') ? 'Restorative' :
+                                            'Potion Effect'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-400 mt-1 truncate">{item.description}</div>
+                            </div>
                           </div>
-                        )}
-                        <button
-                          onClick={() => handleBuy(item)}
-                          disabled={!canAfford || recentlyPurchased.has(item.id)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlyPurchased.has(item.id)
-                              ? 'bg-green-600 text-white scale-105'
-                              : canAfford
-                                ? 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400'
-                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                          }`}
-                        >
-                          {recentlyPurchased.has(item.id) ? (
-                            <span className="flex items-center justify-center gap-1">
-                              <Check size={12} />
-                              Bought!
-                            </span>
-                          ) : (
-                            `Buy ${total}g`
-                          )}
-                        </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 text-yellow-400 font-bold">
+                            <Coins size={12} />
+                            <span className={`${gold < (item.price * getQuantity(item.id)) ? 'text-red-400' : ''}`}>{item.price}g</span>
+                          </div>
+                          <button onClick={(e) => handleBuy(item, e)} disabled={recentlyPurchased.has(item.id)} className={`px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] ${recentlyPurchased.has(item.id) ? 'bg-yellow-600 text-white scale-105' : insufficient.has(item.id) ? 'bg-red-600 text-white animate-pulse' : (gold < (item.price * getQuantity(item.id)) ? 'bg-red-600 text-white/90 hover:brightness-105' : 'bg-skyrim-gold text-skyrim-dark hover:scale-105')}`}>
+                            {recentlyPurchased.has(item.id) ? (
+                              <span className="flex items-center gap-1 text-xs">✅ {t('shop.bought')}</span>
+                            ) : insufficient.has(item.id) ? (
+                              <span className="flex items-center gap-1 text-xs">{t('shop.needGold')} {Math.max(1, item.price * getQuantity(item.id) - gold)}g</span>
+                            ) : (
+                              t('shop.buy')
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          ) : (
-            // SELL MODE
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {mode === 'sell' && (
             filteredInventoryItems.length === 0 ? (
               <div className="text-center text-gray-500 py-8 text-sm">
-                {search ? 'No matching items in your inventory.' : 'No items to sell.'}
+                {search ? t('shop.noMatchingInventory') : t('shop.noItemsSell')}
               </div>
             ) : (
               <div className="divide-y divide-skyrim-border/30">
-                {filteredInventoryItems.map(item => {
-                  const maxQty = item.quantity || 1;
-                  const qty = Math.min(getQuantity(item.id), maxQty);
-                  const unitPrice = getSellPrice(item);
-                  const total = unitPrice * qty;
+                {groupedInventoryItems.map(group => {
+                  const unitPrice = group.items.length ? getSellPrice(group.items[0]) : 0;
+                  const totalGold = group.items.reduce((s, it) => s + getSellPrice(it) * (it.quantity || 1), 0);
 
                   return (
-                    <div
-                      key={item.id}
-                      className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors"
-                    >
+                    <div key={group.key} className="px-3 py-2.5 flex items-center gap-3 hover:bg-skyrim-paper/20 transition-colors">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-skyrim-text font-medium text-sm truncate">{item.name}</span>
-                          <span className="text-gray-500 text-xs">×{item.quantity}</span>
-                          {item.rarity && <span className="ml-2"><RarityBadge rarity={String(item.rarity)} /></span>}
-                          {/* Show stats for weapons and armor */}
-                          {(item.damage || item.armor) && (
-                            <span className="flex items-center gap-2 text-xs">
-                              {item.damage && (
-                                <span className="flex items-center gap-0.5 text-red-400">
-                                  <Sword size={10} /> {item.damage}
+                          <div className="text-xl text-gray-300">{categoryIcons[TYPE_TO_CATEGORY[group.type || 'misc'] || 'Misc']}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate text-sm flex items-center gap-2">
+                              <span className="truncate">{group.items[0] ? getItemName(group.items[0], t) : group.name}</span>
+                              <span className="text-gray-500 text-xs">×{group.totalQty}</span>
+                              {group.rarity && <span className="ml-2"><RarityBadge rarity={String(group.rarity)} /></span>}
+                              {group.anyFavorite && (
+                                <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-yellow-500 text-black flex items-center gap-1" title="Favorited">
+                                  <Star size={12} /> Fav
                                 </span>
                               )}
-                              {item.armor && (
-                                <span className="flex items-center gap-0.5 text-blue-400">
-                                  <Shield size={10} /> {item.armor}
+                              {group.anyEquipped && (
+                                <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-blue-700 text-white flex items-center gap-1" title="Equipped">
+                                  <Shield size={12} /> Eqp
                                 </span>
                               )}
-                            </span>
-                          )}
-                          {/* Show nutrition/effects for food/drink/potions */}
-                          {item.type === 'food' && (
-                            <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
-                              <Apple size={10} /> {getFoodNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'drink' && (
-                            <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
-                              <Droplets size={10} /> {getDrinkNutritionDisplay(item.name)}
-                            </span>
-                          )}
-                          {item.type === 'potion' && (
-                            <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
-                              <FlaskConical size={10} />
-                              {item.subtype === 'health' ? 'Restores Health' : 
-                               item.subtype === 'magicka' ? 'Restores Magicka' : 
-                               item.subtype === 'stamina' ? 'Restores Stamina' : 
-                               item.description.includes('Restores') ? 'Restorative' : 
-                               'Potion Effect'}
-                            </span>
-                          )}
-                          {item.equipped && (
-                            <span className="text-xs bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">Equipped</span>
-                          )}
+
+                              {/* Show stats for weapons and armor using first stack as sample */}
+                              {group.items[0] && ((group.items[0].damage || group.items[0].armor)) && (
+                                <span className="flex items-center gap-2 text-xs">
+                                  {group.items[0].damage && (
+                                    <span className="flex items-center gap-0.5 text-red-400">
+                                      <Sword size={10} /> {group.items[0].damage}
+                                    </span>
+                                  )}
+                                  {group.items[0].armor && (
+                                    <span className="flex items-center gap-0.5 text-blue-400">
+                                      <Shield size={10} /> {group.items[0].armor}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+
+                              {/* nutrition / potion hints */}
+                              {group.items[0] && group.items[0].type === 'food' && (
+                                <span className="text-green-400 text-xs flex items-center gap-1 ml-2">
+                                  <Apple size={10} /> {getFoodNutritionDisplay(group.items[0].name)}
+                                </span>
+                              )}
+                              {group.items[0] && group.items[0].type === 'drink' && (
+                                <span className="text-blue-400 text-xs flex items-center gap-1 ml-2">
+                                  <Droplets size={10} /> {getDrinkNutritionDisplay(group.items[0].name)}
+                                </span>
+                              )}
+                              {group.items[0] && group.items[0].type === 'potion' && (
+                                <span className="text-purple-300 text-xs flex items-center gap-1 ml-2">
+                                  <FlaskConical size={10} />
+                                  {group.items[0].subtype === 'health' ? 'Restores Health' :
+                                    group.items[0].subtype === 'magicka' ? 'Restores Magicka' :
+                                      group.items[0].subtype === 'stamina' ? 'Restores Stamina' :
+                                        group.items[0].description?.includes('Restores') ? 'Restorative' :
+                                          'Potion Effect'}
+                                </span>
+                              )}
+
+                            </div>
+                            <p className="text-gray-500 text-xs truncate">{group.description}</p>
+                          </div>
                         </div>
-                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div className="flex items-center gap-1 text-green-400 text-xs font-bold">
                           <Coins size={12} />
                           {unitPrice}/ea
                         </div>
-                        {showQuantityControls && maxQty > 1 && (
-                          <div className="flex items-center bg-skyrim-paper/40 rounded border border-skyrim-border/50">
-                            <button
-                              onClick={() => setQuantity(item.id, qty - 1, maxQty)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              -
-                            </button>
-                            <span className="w-6 text-center text-skyrim-text text-xs">{qty}</span>
-                            <button
-                              onClick={() => setQuantity(item.id, qty + 1, maxQty)}
-                              className="px-1.5 py-0.5 text-skyrim-text hover:text-white text-xs"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => handleSell(item)}
-                          disabled={recentlySold.has(item.id)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlySold.has(item.id)
-                              ? 'bg-yellow-600 text-white scale-105'
-                              : 'bg-green-700 text-white hover:bg-green-600'
-                          }`}
-                        >
-                          {recentlySold.has(item.id) ? (
-                            <span className="flex items-center justify-center gap-1">
-                              <Check size={12} />
-                              Sold!
-                            </span>
-                          ) : (
-                            `Sell +${total}g`
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleSellAll(item)}
-                          disabled={recentlySold.has(item.id) || (item.quantity || 0) <= 1}
-                          className={`ml-2 px-2.5 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[70px] ${
-                            recentlySold.has(item.id)
-                              ? 'bg-yellow-600 text-white scale-105'
-                              : 'bg-gray-700 text-white hover:bg-gray-600'
-                          }`}
-                        >
-                          Sell All
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSellGroupOne(group)}
+                            className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[80px] bg-skyrim-paper/30 text-skyrim-text hover:bg-skyrim-paper/40"
+                          >
+                            {`${t('shop.sellOne')} +${unitPrice}g`}
+                          </button>
+                          <button
+                            onClick={() => handleSellGroupAll(group)}
+                            className="px-3 py-1 rounded text-xs font-bold transition-all duration-300 min-w-[90px] bg-green-700 text-white hover:bg-green-600"
+                          >
+                            {`${t('shop.sellAll')} +${totalGold}g`}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -986,17 +1134,49 @@ export function ShopModal({ open, onClose, gold, onPurchase, inventory = [], onS
         </div>
 
         {/* Footer */}
+        {purchaseEffect && (
+          <div className="pointer-events-none fixed z-[80] left-0 top-0" style={{ left: 0, top: 0 }}>
+            <ParticleEffect x={purchaseEffect.x} y={purchaseEffect.y} effectType="conjuration" count={14} />
+          </div>
+        )}
         <div className="px-3 py-2 border-t border-skyrim-border/60 bg-skyrim-paper/20 flex-shrink-0">
-          <p className="text-gray-500 text-xs text-center">
-            {mode === 'buy' 
-              ? `${filteredShopItems.length} items available` 
-              : `${filteredInventoryItems.length} items to sell (50% value)`
-            }
-          </p>
+          {mode === 'buy' ? (
+            <p className="text-gray-500 text-xs text-center">{`${filteredShopItems.length} ${t('shop.itemsAvailable')}`}</p>
+          ) : (
+            !onSell ? (
+              <p className="text-gray-500 text-xs text-center">{t('shop.notBuying')}</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+
+                {/* Category sell summary & action */}
+                {itemsInSelectedCategory.length > 0 && (
+                  (() => {
+                    const totalQty = itemsInSelectedCategory.reduce((s, it) => s + (it.quantity || 0), 0);
+                    const totalGold = itemsInSelectedCategory.reduce((s, it) => s + getSellPrice(it) * (it.quantity || 0), 0);
+                    const breakdown = itemsInSelectedCategory.map(it => `${it.quantity}x ${getItemName(it, t)}`).join(', ');
+                    return (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-gray-400 truncate">{`${category}: ${totalQty} item${totalQty !== 1 ? 's' : ''} — ${breakdown}`}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs text-green-400 font-bold">{totalGold}g</div>
+                          <button
+                            onClick={handleSellCategory}
+                            disabled={!onSell}
+                            className={`px-3 py-1 rounded text-xs font-bold transition-all ${!onSell ? 'bg-gray-700/60 text-gray-400 cursor-not-allowed' : 'bg-green-700 text-white hover:bg-green-600'}`}
+                          >
+                            {t('shop.sellAll')}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+              </div>
+            )
+          )}
         </div>
       </div>
-    </div>
+    </ModalWrapper>
   );
 }
-
-export { SHOP_INVENTORY };

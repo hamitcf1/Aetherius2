@@ -18,10 +18,13 @@ import { getFoodNutrition } from './nutritionData';
 import { isSmallWeapon } from './equipment';
 import { modifyPlayerCombatStat } from './vitals';
 import { resolvePotionEffect } from './potionResolver';
-import { getLearnedSpellIds, createAbilityFromSpell } from './spells';
+import { getLearnedSpellIds, createAbilityFromSpell, getSpellById } from './spells';
 import { PERK_DEFINITIONS } from '../data/perkDefinitions';
 import { audioService } from './audioService';
 import { applyArrowEffects } from './arrowEffects';
+import { normalizeStatusEffect } from '../utils/statusHelpers';
+import { getRegenBonus } from './standingStonesService';
+import { isFeatureEnabled } from '../featureFlags';
 
 // ============================================================================
 // COMBAT PERK SYSTEM - Perk effects in combat
@@ -126,7 +129,7 @@ const shuffleArray = <T>(arr: T[]): T[] => {
 const looksLikeAnimal = (name?: string) => /wolf|hound|dog|bear|sabre|saber|horse|fox|warg|sabrecat|cat/i.test((name || '').toLowerCase());
 
 // Helper: push a combat log entry only if it's not a duplicate of the immediate previous entry
-const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
+export const pushCombatLogUnique = (state: CombatState, entry: CombatLogEntry) => {
   state.combatLog = state.combatLog || [];
   const last = state.combatLog[state.combatLog.length - 1];
   // Debug: surface when nat/roll entries are pushed (helps trace races in tests)
@@ -609,9 +612,9 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
   const staminaRegenPerk = perks.find(p => p.id === 'stamina_regen' || p.id === 'recovery' || p.name === 'Stamina Regeneration' || p.name === 'Recovery');
   
   // Base regen rates (per second, applied per turn which is ~4s)
-  const BASE_HEALTH_REGEN = 0.5;   // ~2 health per turn
-  const BASE_MAGICKA_REGEN = 0.75; // ~3 magicka per turn
-  const BASE_STAMINA_REGEN = 0.5;  // ~2 stamina per turn
+  const BASE_HEALTH_REGEN = 1.5;   // ~6 health per turn (was 2)
+  const BASE_MAGICKA_REGEN = 2.0;  // ~8 magicka per turn (was 3)
+  const BASE_STAMINA_REGEN = 1.5;  // ~6 stamina per turn (was 2)
   
   // Under level 10: free passive regen
   if (level < 10) {
@@ -623,20 +626,86 @@ const calculateRegenRates = (character: Character): { regenHealthPerSec: number;
   }
   
   // Level 10+: regen only from perks, with scaling per rank
-  const perkMultiplier = 1.25; // Each perk rank increases regen by 25%
+  const perkMultiplier = 1.5; // Each perk rank increases regen by 50% (was 25%)
+  
+  let regenHealthPerSec = hasHealthRegen ? BASE_HEALTH_REGEN * (1 + ((healthRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  let regenMagickaPerSec = hasMagickaRegen ? BASE_MAGICKA_REGEN * (1 + ((magickaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  let regenStaminaPerSec = hasStaminaRegen ? BASE_STAMINA_REGEN * (1 + ((staminaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0;
+  
+  // Apply percentage bonuses from combat perks
+  const magickaRegenBonus = getCombatPerkBonus(character, 'magickaRegenBonus');
+  if (magickaRegenBonus > 0) {
+    regenMagickaPerSec *= (1 + magickaRegenBonus / 100);
+  }
+  
+  // Apply standing stone regen bonuses
+  const standingStoneState = character.standingStoneState as any; // Type assertion since it's unknown in types
+  if (standingStoneState) {
+    const healthStoneBonus = getRegenBonus(standingStoneState, 'health');
+    const magickaStoneBonus = getRegenBonus(standingStoneState, 'magicka');
+    const staminaStoneBonus = getRegenBonus(standingStoneState, 'stamina');
+    
+    if (healthStoneBonus > 0) {
+      regenHealthPerSec *= (1 + healthStoneBonus / 100);
+    }
+    if (magickaStoneBonus > 0) {
+      regenMagickaPerSec *= (1 + magickaStoneBonus / 100);
+    }
+    if (staminaStoneBonus > 0) {
+      regenStaminaPerSec *= (1 + staminaStoneBonus / 100);
+    }
+  }
   
   return {
-    regenHealthPerSec: hasHealthRegen ? BASE_HEALTH_REGEN * (1 + ((healthRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
-    regenMagickaPerSec: hasMagickaRegen ? BASE_MAGICKA_REGEN * (1 + ((magickaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0,
-    regenStaminaPerSec: hasStaminaRegen ? BASE_STAMINA_REGEN * (1 + ((staminaRegenPerk?.rank || 1) - 1) * (perkMultiplier - 1)) : 0
+    regenHealthPerSec,
+    regenMagickaPerSec,
+    regenStaminaPerSec
   };
 };
 
 // ============================================================================
-// PLAYER ABILITIES GENERATION
+// EFFECT APPLICATION SYSTEM
 // ============================================================================
 
-import { isFeatureEnabled } from '../featureFlags';
+/**
+ * Apply active effects to modify combat stats
+ */
+const applyActiveEffectsToStats = (
+  baseStats: { armor?: number; damage?: number; dodgeChance?: number; accuracy?: number },
+  activeEffects: Array<{ effect: CombatEffect; turnsRemaining: number }>
+): { armor: number; damage: number; dodgeChance: number; accuracy: number } => {
+  let armor = baseStats.armor || 0;
+  let damage = baseStats.damage || 0;
+  let dodgeChance = baseStats.dodgeChance || 0;
+  let accuracy = baseStats.accuracy || 0;
+
+  for (const ae of activeEffects) {
+    if (ae.turnsRemaining <= 0) continue;
+
+    const effect = ae.effect;
+    if (effect.type === 'buff' || effect.type === 'debuff') {
+      const multiplier = effect.type === 'debuff' ? -1 : 1;
+      const value = effect.value * multiplier;
+
+      switch (effect.stat) {
+        case 'armor':
+          armor += value;
+          break;
+        case 'damage':
+          damage += value;
+          break;
+        case 'dodge':
+          dodgeChance += value;
+          break;
+        case 'accuracy':
+          accuracy += value;
+          break;
+      }
+    }
+  }
+
+  return { armor: Math.max(0, armor), damage: Math.max(0, damage), dodgeChance: Math.max(0, dodgeChance), accuracy: Math.max(0, accuracy) };
+};
 
 const UNARMED_SKILL_MODIFIER = 0.5; // tuning constant for unarmed damage scaling
 
@@ -647,6 +716,12 @@ export const generatePlayerAbilities = (
   const abilities: CombatAbility[] = [];
   const getSkillLevel = (name: string) => 
     (character.skills || []).find(s => s.name === name)?.level || 0;
+  const hasPerkInSkill = (skillName: string) =>
+    (character.perks || []).some(p => p.skill === skillName && (p.rank || 0) > 0);
+  const learnedSpellIds = new Set<string>([
+    ...((character.learnedSpells || []) as string[]),
+    ...(character.id ? getLearnedSpellIds(character.id) : [])
+  ]);
 
   // Always available: Basic Attack (no cooldown - can be spammed)
   const weapon = equipment.find(i => i.equipped && i.slot === 'weapon');
@@ -694,9 +769,9 @@ export const generatePlayerAbilities = (
     });
   }
 
-  // Power Attack (if stamina > 25 and weapon skill > 20)
+  // Power Attack (if stamina > 25 and weapon skill > 20) - requires a main weapon equipped
   const weaponSkill = Math.max(getSkillLevel('One-Handed'), getSkillLevel('Two-Handed'));
-  if (weaponSkill >= 20) {
+  if (weapon && weaponSkill >= 20) {
     abilities.push({
       id: 'power_attack',
       name: 'Power Attack',
@@ -715,7 +790,7 @@ export const generatePlayerAbilities = (
   const oneHandedSkillVal = getSkillLevel('One-Handed');
   // Allow Whirlwind Attack if skill thresholds met OR if the character has a unlock perk
   const hasWhirlwindPerk = hasPerk(character, 'whirlwind_mastery');
-  if (twoHandedSkill >= 35 || oneHandedSkillVal >= 40 || hasWhirlwindPerk) {
+  if (weapon && (twoHandedSkill >= 35 || oneHandedSkillVal >= 40 || hasWhirlwindPerk)) {
     const baseDamage = Math.floor((weapon?.damage || 10) * 1.2);
     abilities.push({
       id: 'whirlwind_attack',
@@ -732,7 +807,7 @@ export const generatePlayerAbilities = (
   // Cleaving Strike - AoE physical for Two-Handed specialists
   // Cleaving Strike: available via Two-Handed skill OR perk unlock
   const hasCleavingPerk = hasPerk(character, 'cleaving_mastery');
-  if (twoHandedSkill >= 50 || hasCleavingPerk) {
+  if (weapon && (twoHandedSkill >= 50 || hasCleavingPerk)) {
     const cleaveDamage = Math.floor((weapon?.damage || 10) * 1.4);
     abilities.push({
       id: 'cleaving_strike',
@@ -772,7 +847,7 @@ export const generatePlayerAbilities = (
       cost: 15,
       cooldown: 0, // Basic spell - no cooldown
       description: 'A stream of fire that damages enemies.',
-      effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30 }]
+      effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
     });
   }
   if (destructionSkill >= 35) {
@@ -811,7 +886,7 @@ export const generatePlayerAbilities = (
       cost: 20,
       cooldown: 1,
       description: 'A bolt of concentrated fire damage.',
-      effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 40 }]
+      effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 40, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
     });
   }
   // FROST SPELLS
@@ -852,7 +927,7 @@ export const generatePlayerAbilities = (
       description: 'A powerful fire spell that burns all nearby enemies.',
       effects: [
         { type: 'aoe_damage', value: 28 + Math.floor(destructionSkill * 0.42), aoeTarget: 'all_enemies' },
-        { type: 'dot', stat: 'health', value: 4, duration: 3, chance: 60 }
+        { type: 'dot', stat: 'health', value: 4, duration: 3, chance: 60, name: 'Burning', description: 'Targets take X fire damage at the start of each turn.' }
       ]
     });
   }
@@ -895,7 +970,7 @@ export const generatePlayerAbilities = (
       description: 'A massive ball of fire that explodes on impact, burning all enemies.',
       effects: [
         { type: 'aoe_damage', value: 40 + Math.floor(destructionSkill * 0.5), aoeTarget: 'all_enemies' },
-        { type: 'dot', stat: 'health', value: 5, duration: 3, chance: 50 }
+        { type: 'dot', stat: 'health', value: 5, duration: 3, chance: 50, name: 'Burning', description: 'Targets take X fire damage at the start of each turn.' }
       ]
     });
   }
@@ -1308,8 +1383,12 @@ export const generatePlayerAbilities = (
 
   // === ONE-HANDED WEAPON ABILITIES ===
   const oneHandedSkill = getSkillLevel('One-Handed');
+  // Require explicit unlock perks for these impactful one-handed abilities so they appear in the Perk tree
+  const hasRipostePerk = hasPerk(character, 'riposte_mastery');
+  const hasSlashPerk = hasPerk(character, 'slash_mastery');
+  const hasMortalStrikePerk = hasPerk(character, 'mortal_strike_mastery');
   
-  if (oneHandedSkill >= 25) {
+  if (weapon && oneHandedSkill >= 25 && hasRipostePerk) {
     abilities.push({
       id: 'riposte',
       name: 'Riposte',
@@ -1322,7 +1401,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 40) {
+  if (weapon && oneHandedSkill >= 40 && hasSlashPerk) {
     abilities.push({
       id: 'slash',
       name: 'Slash',
@@ -1335,7 +1414,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (oneHandedSkill >= 60) {
+  if (weapon && oneHandedSkill >= 60 && hasMortalStrikePerk) {
     abilities.push({
       id: 'mortal_strike',
       name: 'Mortal Strike',
@@ -1412,8 +1491,9 @@ export const generatePlayerAbilities = (
 
   // === SNEAK ABILITIES (NON-CONJURATION) ===
   const sneakSkill = getSkillLevel('Sneak');
+  const hasSneakPerk = hasPerkInSkill('Sneak');
   
-  if (sneakSkill >= 20) {
+  if (sneakSkill >= 20 && hasSneakPerk) {
     abilities.push({
       id: 'evasion',
       name: 'Evasion',
@@ -1426,7 +1506,7 @@ export const generatePlayerAbilities = (
     });
   }
   
-  if (sneakSkill >= 40) {
+  if (sneakSkill >= 40 && hasSneakPerk) {
     abilities.push({
       id: 'shadow_clone',
       name: 'Shadow Clone',
@@ -1441,21 +1521,28 @@ export const generatePlayerAbilities = (
 
   // Learned spells (from spells registry) -> turn into abilities
   try {
-    // Only load learned spells when we have a canonical character id
-    const learned = character && character.id ? getLearnedSpellIds(character.id) : [];
-    learned.forEach(spellId => {
+    // Only load learned spells when we have a canonical character id or server-provided list
+    for (const spellId of learnedSpellIds) {
       // Ensure empowered/variant spells are actually unlocked by character level/perks
       try {
-        if (!isSpellVariantUnlocked(character, spellId)) return;
+        if (!isSpellVariantUnlocked(character, spellId)) continue;
       } catch (e) {}
       const ab = createAbilityFromSpell(spellId);
       if (ab) abilities.push(ab as any);
-    });
+    }
   } catch (e) {
     // If anything goes wrong reading spells, ignore — spells are optional
   }
 
-  return abilities;
+  const deduped = new Map<string, CombatAbility>();
+  for (const ability of abilities) {
+    const isSpell = !!getSpellById(ability.id);
+    if (isSpell && !learnedSpellIds.has(ability.id)) continue;
+    if (deduped.has(ability.id)) deduped.delete(ability.id);
+    deduped.set(ability.id, ability);
+  }
+
+  return Array.from(deduped.values());
 };
 
 // Grant a new ability to the player's combat stats (idempotent)
@@ -1678,7 +1765,7 @@ export const initializeCombat = (
         damage: Math.floor(baseDamage * 0.8),
         cost: 5,
         description: `${c.name} swipes with sharp claws.`,
-        effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30 }]
+        effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }]
       });
       abilities.push({
         id: `comp_pounce_${c.id}`,
@@ -1924,15 +2011,32 @@ export const executePlayerAction = (
       const hasSummonEffectEarly = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
       if (hasSummonEffectEarly) {
         consumedAction = 'bonus';
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'player', damage: 0, narrative: msg, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative: msg, aoeSummary, consumedAction: 'none' };
         }
+      }
+
+      // By convention, all magical abilities are bonus actions so players may cast spells and still make
+      // a physical main action on the same turn. This includes damage spells, AoE spells, and buffs.
+      if (ability.type === 'magic') {
+        consumedAction = 'bonus';
+      }
+
+      // Shield Bash is a defensive physical move and consumes the Bonus Action by design
+      if (ability.id === 'shield_bash') {
+        consumedAction = 'bonus';
       }
 
       // Check cost and handle stamina-shortage by scaling damage instead of blocking
@@ -1980,17 +2084,29 @@ export const executePlayerAction = (
       const explicitTargetProvided = !!targetId;
 
       // Detect ability categories to branch logic (healing, summon, buffs, etc.)
-      const isHealingAbility = !!(ability.heal || (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal')));
+      // Note: include `restore` in healing-like effects so magicka restorations are recognized as heals rather than attacks
+      const isHealingAbility = !!(
+        ability.heal ||
+        (ability.effects && ability.effects.some((ef: any) => ef.type === 'heal' || ef.type === 'restore'))
+      );
       const hasSummonEffect = !!(ability.effects && ability.effects.some((ef: any) => ef.type === 'summon'));
-      const isUtilityOrBuff = !!(ability.type === 'utility' || (ability.effects && ability.effects.some((ef: any) => ['buff', 'debuff', 'slow', 'stun', 'drain', 'dot'].includes(ef.type))));
+      const isUtilityOrBuff = !!(
+        ability.type === 'utility' ||
+        (ability.effects && ability.effects.some((ef: any) => ['buff', 'debuff', 'slow', 'stun', 'drain', 'dot', 'restore'].includes(ef.type)))
+      );
 
       // Defensive engine guard: if ability summons but a summon is already active, block the action
       // here (no roll, no resource spend, do not advance/consume the player's turn). This prevents
       // UI races from accidentally letting a conjure attempt consume the turn. Support multiple summons via perk.
       if (hasSummonEffect) {
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           const msg = 'You already have an active summon.';
@@ -2039,13 +2155,20 @@ export const executePlayerAction = (
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: 'self', damage: 0, narrative, timestamp: Date.now() });
         }
 
-        // Compute heal amount
+        // Compute heal amount and restore amounts (supports `heal` and `restore` effects)
         let healAmount = ability.heal || 0;
+        let restoreAmounts: Array<{ stat: 'health' | 'magicka' | 'stamina'; amount: number }> = [];
         if (ability.effects) {
           for (const ef of ability.effects) {
             if (ef.type === 'heal') healAmount += ef.value || 0;
+            if (ef.type === 'restore') {
+              const stat = ef.stat || 'magicka';
+              const amt = ef.value || ef.amount || 0;
+              if (amt > 0) restoreAmounts.push({ stat, amount: amt });
+            }
           }
         }
+
         // Scale heal slightly with Restoration skill if present
         const restorationLevel = (character?.skills || []).find((s: any) => s.name === 'Restoration')?.level || 0;
         if (restorationLevel > 0) healAmount += Math.floor(restorationLevel * 0.2);
@@ -2057,16 +2180,49 @@ export const executePlayerAction = (
         }
 
         // Apply heal
-        if (targetIsAlly) {
-          const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
-          if (allyIndex >= 0) {
-            newState.allies = [ ...(newState.allies || []) ];
-            const updated = { ...newState.allies[allyIndex] } as any;
-            updated.currentHealth = Math.min(updated.maxHealth, (updated.currentHealth || 0) + healAmount);
-            newState.allies[allyIndex] = updated;
+        if (healAmount > 0) {
+          if (targetIsAlly) {
+            const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+            if (allyIndex >= 0) {
+              newState.allies = [ ...(newState.allies || []) ];
+              const updated = { ...newState.allies[allyIndex] } as any;
+              updated.currentHealth = Math.min(updated.maxHealth, (updated.currentHealth || 0) + healAmount);
+              newState.allies[allyIndex] = updated;
+            }
+          } else if (target.id === 'player') {
+            newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, (newPlayerStats.currentHealth || 0) + healAmount);
           }
-        } else if (target.id === 'player') {
-          newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, (newPlayerStats.currentHealth || 0) + healAmount);
+        }
+
+        // Apply any restore effects specified (single-target restores)
+        if (restoreAmounts.length > 0) {
+          for (const r of restoreAmounts) {
+            if (r.stat === 'magicka') {
+              if (target.id === 'player') {
+                newPlayerStats.currentMagicka = Math.min(newPlayerStats.maxMagicka || 0, (newPlayerStats.currentMagicka || 0) + r.amount);
+              } else if (targetIsAlly) {
+                const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+                if (allyIndex >= 0) {
+                  newState.allies = [ ...(newState.allies || []) ];
+                  const updated = { ...newState.allies[allyIndex] } as any;
+                  updated.currentMagicka = Math.min(updated.maxMagicka || 0, (updated.currentMagicka || 0) + r.amount);
+                  newState.allies[allyIndex] = updated;
+                }
+              }
+            } else if (r.stat === 'stamina') {
+              if (target.id === 'player') {
+                newPlayerStats.currentStamina = Math.min(newPlayerStats.maxStamina || 0, (newPlayerStats.currentStamina || 0) + r.amount);
+              } else if (targetIsAlly) {
+                const allyIndex = (newState.allies || []).findIndex(a => a.id === target.id);
+                if (allyIndex >= 0) {
+                  newState.allies = [ ...(newState.allies || []) ];
+                  const updated = { ...newState.allies[allyIndex] } as any;
+                  updated.currentStamina = Math.min(updated.maxStamina || 0, (updated.currentStamina || 0) + r.amount);
+                  newState.allies[allyIndex] = updated;
+                }
+              }
+            }
+          }
         }
 
         // Healing consumes the BONUS action
@@ -2077,17 +2233,22 @@ export const executePlayerAction = (
           newState.abilityCooldowns[ability.id] = ability.cooldown;
         }
 
-        narrative = `You use ${ability.name} on ${target.name} and restore ${healAmount} health.`;
-        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: -healAmount, narrative, timestamp: Date.now() });
+        narrative = `You use ${ability.name} on ${target.name} and restore ${healAmount} health${restoreAmounts.length > 0 ? ' and restore magicka.' : ''}`;
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: -(healAmount || 0), narrative, timestamp: Date.now() });
         break;
       }
 
       // Summon abilities: create companion/summon without attack resolution (D20-influenced)
       if (hasSummonEffect) {
         // Enforce allowed number of conjurations per combat (supports conjuration perks)
-        const aliveSummons = ((newState.allies || []).concat(newState.enemies || [])).filter(a => !!a.companionMeta?.isSummon && (a.currentHealth || 0) > 0).length;
-        const pending = (newState.pendingSummons || []).length;
-        const activeSummonCount = aliveSummons + pending;
+        // CLEANUP: Ensure dead summons are removed before checking counts
+        const aliveSummonsList = ((newState.allies || []).concat(newState.enemies || [])).filter(a => (a as any).companionMeta?.isSummon && (a.currentHealth || 0) > 0);
+        const aliveSummonIds = aliveSummonsList.map(s => s.id);
+        
+        // Filter out pending summons that are no longer in the alive list (engine cleanup)
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => aliveSummonIds.includes(ps.companionId));
+        
+        const activeSummonCount = aliveSummonsList.length;
         const allowedSummons = 1 + getPerkRank(character, 'twin_souls');
         if (activeSummonCount >= allowedSummons) {
           narrative += ' The conjuration fizzles — another summoned ally is already present.';
@@ -2100,12 +2261,82 @@ export const executePlayerAction = (
         const conjOutcome = getConjurationOutcome(conjureNat);
 
         const summonEffects = (ability.effects || []).filter((ef: any) => ef.type === 'summon');
+        let summoningBlocked = false;
         for (const ef of summonEffects) {
           const summonName = ef.name || 'Summoned Ally';
+
+          // Bound Weapon validation: only allow when player's main hand is empty
+          if (ef.summonType === 'weapon') {
+            const hasMainWeapon = !!(inventory || []).find(it => it && it.equipped && it.slot === 'weapon' && (it.equippedBy === 'player' || it.equippedBy === (character && character.id)));
+            if (hasMainWeapon) {
+              const msg = 'Your main hand is occupied — you must be unarmed to conjure a Bound Weapon.';
+              narrative += ` ${msg}`;
+              pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, narrative: msg, timestamp: Date.now() });
+              summoningBlocked = true;
+              break;
+            }
+          }
 
           if (conjOutcome.outcome === 'fail') {
             narrative += ` You attempt to conjure ${summonName} but roll ${conjureNat} — the conjuration fails.`;
             pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, nat: conjureNat, narrative, timestamp: Date.now() });
+            continue;
+          }
+
+          // Conjured weapon: materialize an ephemeral InventoryItem and track it with a playerActiveEffect
+          if (ef.summonType === 'weapon') {
+            const weaponTemplate = ef.weapon || {};
+            const conjWeaponName = weaponTemplate.name || summonName;
+            const baseWeaponDamage = weaponTemplate.damage || Math.max(8, Math.floor((ability.damage || 10)));
+            // Scale weapon by caster level and conjuration outcome multiplier
+            const scaledDamage = Math.max(1, Math.floor(baseWeaponDamage * (conjOutcome.multiplier || 1)));
+
+            // Create a unique ephemeral inventory item representing the conjured weapon
+            const itemId = `bound_${conjWeaponName.replace(/\s+/g, '_').toLowerCase()}_${Math.random().toString(36).slice(2,8)}`;
+            const conjItem: any = {
+              id: itemId,
+              name: conjWeaponName,
+              characterId: character && character.id ? character.id : 'player',
+              type: 'weapon',
+              description: `Bound weapon conjured by ${ability.name}`,
+              quantity: 1,
+              equipped: true,
+              equippedBy: character && character.id ? character.id : 'player',
+              slot: 'weapon',
+              damage: scaledDamage,
+              baseDamage: scaledDamage,
+              isEphemeral: true,
+              // Force creation as a unique entity so it doesn't merge with existing items
+              __forceCreate: true
+            } as any;
+
+            // Inform callers/UI that a new item was created during the action
+            (newState as any).newItems = [...((newState as any).newItems || []), conjItem];
+
+            const duration = ef.playerTurns || ef.duration || 3;
+            const weaponEffect: any = {
+              type: 'conjured_weapon',
+              name: conjWeaponName,
+              itemId,
+              duration
+            };
+
+            // Attach to playerActiveEffects so UI and other systems can see the temporary weapon
+            newState.playerActiveEffects = [...(newState.playerActiveEffects || []), { effect: weaponEffect, turnsRemaining: duration }];
+
+            // Immediately update newPlayerStats.weaponDamage so subsequent attack resolution uses it
+            newPlayerStats = { ...newPlayerStats, weaponDamage: Math.max(newPlayerStats.weaponDamage || 0, scaledDamage) } as any;
+
+            narrative += ` ${conjWeaponName} materializes and is bound to you for ${duration} turns! (roll ${conjureNat} — ${conjOutcome.outcome})`;
+
+            // Set cooldown and push log
+            if (ability.cooldown) {
+              newState.abilityCooldowns[ability.id] = ability.cooldown;
+            }
+
+            // Expose the added item on the returned object so the UI can optimistically apply it
+            (newState as any).__lastAddedItem = conjItem;
+            pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: (target ? target.name : 'self'), damage: 0, nat: conjureNat, rollTier: (conjOutcome && conjOutcome.outcome) || undefined, narrative: `You cast ${ability.name}.${narrative}`, timestamp: Date.now() });
             continue;
           }
 
@@ -2189,9 +2420,41 @@ export const executePlayerAction = (
 
       // Utility/buff abilities: apply effects directly without going through attack resolution
       if (isUtilityOrBuff && (!ability.damage || ability.damage === 0)) {
-        // Apply each effect immediately to the target
+        // Apply each effect immediately to the target (supports aoeTarget for buffs/restores)
         if (ability.effects) {
           ability.effects.forEach((effect: any) => {
+            // AoE buff/restore targeting (apply to all allies)
+            if (effect.aoeTarget === 'all_allies' && (effect.type === 'buff' || effect.type === 'restore' || effect.type === 'heal')) {
+              // Apply to player
+              if (effect.type === 'heal') {
+                newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + (effect.value || 0));
+              }
+              if (effect.type === 'restore') {
+                const stat = effect.stat || 'magicka';
+                if (stat === 'magicka') newPlayerStats.currentMagicka = Math.min(newPlayerStats.maxMagicka || 0, (newPlayerStats.currentMagicka || 0) + (effect.value || 0));
+                if (stat === 'stamina') newPlayerStats.currentStamina = Math.min(newPlayerStats.maxStamina || 0, (newPlayerStats.currentStamina || 0) + (effect.value || 0));
+              }
+
+              if (newState.allies && newState.allies.length > 0) {
+                newState.allies = newState.allies.map(ally => {
+                  if (effect.type === 'buff') {
+                    return { ...ally, activeEffects: [...((ally.activeEffects) || []), { effect, turnsRemaining: effect.duration || 1 }] } as any;
+                  }
+                  if (effect.type === 'heal') {
+                    return { ...ally, currentHealth: Math.min(ally.maxHealth, ally.currentHealth + (effect.value || 0)) } as any;
+                  }
+                  if (effect.type === 'restore') {
+                    const stat = effect.stat || 'magicka';
+                    if (stat === 'magicka') return { ...ally, currentMagicka: Math.min(ally.maxMagicka || 0, (ally.currentMagicka || 0) + (effect.value || 0)) } as any;
+                    if (stat === 'stamina') return { ...ally, currentStamina: Math.min(ally.maxStamina || 0, (ally.currentStamina || 0) + (effect.value || 0)) } as any;
+                  }
+                  return ally;
+                });
+              }
+              narrative += ` ${ability.name} affects all allies.`;
+              return; // skip normal per-target handling
+            }
+
             if (effect.type === 'buff' || effect.type === 'debuff' || effect.type === 'slow' || effect.type === 'stun' || effect.type === 'drain' || effect.type === 'dot') {
               // Attach status effect to the target
               if (targetIsAlly) {
@@ -2213,7 +2476,10 @@ export const executePlayerAction = (
                   } as any;
                 }
               }
-              narrative += ` ${target.name} is affected by ${effect.type}!`;
+              {
+                const nse = normalizeStatusEffect(effect, effect.name || (effect as any).id || 'effect');
+                narrative += ` ${target.name} is affected by ${nse.name}!`;
+              }
             }
           });
         }
@@ -2223,8 +2489,8 @@ export const executePlayerAction = (
           newState.abilityCooldowns[ability.id] = ability.cooldown;
         }
 
-        // Utility/buff abilities that are 'buff' in nature consume the bonus action by convention
-        if (ability.effects && ability.effects.some((ef: any) => ef.type === 'buff' || ef.type === 'heal')) {
+        // Utility/buff abilities that are 'buff' or 'restore' in nature consume the bonus action by convention
+        if (ability.effects && ability.effects.some((ef: any) => ef.type === 'buff' || ef.type === 'heal' || ef.type === 'restore')) {
           consumedAction = 'bonus';
         }
 
@@ -2236,7 +2502,13 @@ export const executePlayerAction = (
       // Resolve attack (d20 + bonuses vs armor/dodge) then roll damage dice
       const attackBonus = Math.floor((playerStats.weaponDamage || 0) / 10);
       const attackerLvl = character?.level || playerStats.maxHealth ? Math.max(1, Math.floor((character?.level || 10))) : 10;
-      let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance, natRoll });
+      
+      // Apply active effects to target stats
+      const targetBaseStats = { armor: target.armor, dodgeChance: (target as any).dodgeChance || 0 };
+      const targetEffects = target.activeEffects || [];
+      const targetModifiedStats = applyActiveEffectsToStats(targetBaseStats, targetEffects);
+      
+      let attackResolved = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: targetModifiedStats.armor, targetDodge: targetModifiedStats.dodgeChance, critChance: playerStats.critChance, natRoll });
 
       // If nat indicates miss/fail, check for reroll perk (one-time auto-reroll on failure or miss)
       if (!attackResolved.hit && (attackResolved.rollTier === 'fail' || attackResolved.rollTier === 'miss')) {
@@ -2245,7 +2517,7 @@ export const executePlayerAction = (
         const rollText = attackResolved.rollTier === 'fail' ? 'critical failure' : (wasDodged ? 'dodged' : 'miss');
         if (hasRerollPerk && !wasDodged) {
           // Reroll once automatically (but not if dodged, since dodge is an ability check)
-          const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: target.armor, targetDodge: (target as any).dodgeChance || 0, critChance: playerStats.critChance });
+          const second = resolveAttack({ attackerLevel: attackerLvl, attackBonus, targetArmor: targetModifiedStats.armor, targetDodge: targetModifiedStats.dodgeChance, critChance: playerStats.critChance });
           // Log both rolls (first failed/missed, second result)
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: ability.name, target: target.name, damage: 0, isCrit: false, nat: attackResolved.natRoll, rollTier: attackResolved.rollTier, narrative: `First roll ${attackResolved.natRoll} (${rollText}) - rerolling...`, timestamp: Date.now() });
           attackResolved = second;
@@ -2408,7 +2680,7 @@ export const executePlayerAction = (
       const battleaxeBleedChance = getCombatPerkBonus(character, 'battleaxeBleed');
       if (isAxe && axeBleedChance > 0 && Math.random() * 100 < axeBleedChance) {
         // Apply bleed effect to target (5 damage/turn for 3 turns)
-        const bleedEffect = { type: 'dot', stat: 'health', value: 5, duration: 3 };
+        const bleedEffect = { type: 'dot', stat: 'health', value: 5, duration: 3, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' };
         if (!targetIsAlly) {
           const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
           if (enemyIndex >= 0) {
@@ -2423,7 +2695,7 @@ export const executePlayerAction = (
       }
       if (isBattleaxe && battleaxeBleedChance > 0 && Math.random() * 100 < battleaxeBleedChance) {
         // Apply stronger bleed effect (7 damage/turn for 3 turns)
-        const bleedEffect = { type: 'dot', stat: 'health', value: 7, duration: 3 };
+        const bleedEffect = { type: 'dot', stat: 'health', value: 7, duration: 3, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' };
         if (!targetIsAlly) {
           const enemyIndex = newState.enemies.findIndex(e => e.id === target.id);
           if (enemyIndex >= 0) {
@@ -2478,6 +2750,42 @@ export const executePlayerAction = (
 
       narrative = `You use ${ability.name} on ${target.name} and ${damageNarrative}!`;
 
+      // === SPECIAL AMMO / ARROW HANDLING ===
+      if (itemId && inventory) {
+        const ammoItem = inventory.find(i => i.id === itemId);
+        if (ammoItem && ammoItem.quantity > 0 && (ammoItem.name.toLowerCase().includes('arrow') || ammoItem.type === 'ammo' || ammoItem.type === 'weapon')) {
+          // Consume one arrow
+          usedItem = { ...ammoItem, quantity: ammoItem.quantity - 1 };
+          consumedAction = 'main'; // Attacks consume main action
+          
+          // Defensive contract: record inventory delta
+          newState.removedItems = [{ id: usedItem.id, quantity: usedItem.quantity } as any];
+
+          // Apply arrow effects if hit confirmed
+          // Use 'attackResolved' which contains the roll results
+          if (attackResolved && attackResolved.hit && !targetIsAlly && enemyIndex >= 0) {
+            const arrowNarrative = applyArrowEffects(newState, enemyIndex, itemId, appliedDamage, attackResolved, ability);
+            if (arrowNarrative) {
+              narrative += ` ${arrowNarrative}`;
+            }
+          }
+          
+          // Handle 'command' arrow (ally trigger) logic directly here if not handled by applyArrowEffects
+          if (itemId.includes('allycall') || itemId.includes('command')) {
+             if (newState.allies && newState.allies.length > 0) {
+               const ally = newState.allies[0]; // trigger first ally
+               // Force an immediate ally action
+               const allyRes = executeCompanionAction(newState, ally.id, (ally.abilities[0]?.id || 'attack'), target.id, undefined, true);
+               if (allyRes.success) {
+                 narrative += ` The command arrow signals ${ally.name} to attack!`;
+                 // Merge state changes (companion action might have updated enemies/log)
+                 newState = allyRes.newState;
+               }
+             }
+          }
+        }
+      }
+
       // === LIFESTEAL PERK EFFECT ===
       if (perkLifesteal > 0 && ability.type === 'melee' && appliedDamage > 0 && !targetIsAlly) {
         const lifestealAmount = Math.max(1, Math.floor(appliedDamage * perkLifesteal / 100));
@@ -2486,6 +2794,156 @@ export const executePlayerAction = (
           newPlayerStats.currentHealth + lifestealAmount
         );
         narrative += ` You drain ${lifestealAmount} health.`;
+      }
+
+      // === WEAPON ENCHANTMENTS ===
+      // If the equipped weapon has enchantments, translate them into combat effects
+      try {
+        const equippedWeapon = (inventory || []).find((i: any) => i.equipped && i.slot === 'weapon' && i.type === 'weapon');
+        if (equippedWeapon && Array.isArray(equippedWeapon.enchantments) && equippedWeapon.enchantments.length) {
+          const tierMultipliers: Record<string, number> = { low: 0.6, mid: 1.0, high: 1.25, crit: 1.75 };
+          const tierMult = (tierMultipliers && tierMultipliers[attackResolved.rollTier]) ? tierMultipliers[attackResolved.rollTier] : 1;
+
+          for (const ench of equippedWeapon.enchantments) {
+            const effId = ench.effect || ench.id || '';
+            const magnitude = Number(ench.magnitude || 0) || 0;
+            const chance = Number(ench.chance || ench.procChance || 100);
+            if (Math.random() * 100 > (chance || 100)) continue;
+
+            // Helpers to apply to the resolved target (enemy or ally)
+            const applyToEnemy = (effectObj: any) => {
+              if (enemyIndex >= 0) {
+                newState.enemies = [...newState.enemies];
+                newState.enemies[enemyIndex] = {
+                  ...newState.enemies[enemyIndex],
+                  activeEffects: [...((newState.enemies[enemyIndex]?.activeEffects) || []), { effect: effectObj, turnsRemaining: effectObj.duration || 1 }]
+                } as any;
+              }
+            };
+            const applyToAlly = (effectObj: any) => {
+              if (allyIndex >= 0) {
+                newState.allies = [...(newState.allies || [])];
+                newState.allies[allyIndex] = {
+                  ...newState.allies[allyIndex],
+                  activeEffects: [...((newState.allies[allyIndex]?.activeEffects) || []), { effect: effectObj, turnsRemaining: effectObj.duration || 1 }]
+                } as any;
+              }
+            };
+
+            switch (effId) {
+              case 'fire_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.2 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                const dotValue = Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                const burnEffect = { type: 'dot', stat: 'health', name: 'Burning', duration, value: dotValue, description: 'Burns the target for damage over time' } as any;
+                if (targetIsAlly) applyToAlly(burnEffect); else applyToEnemy(burnEffect);
+                narrative += ` ${ench.name || 'Flaming enchantment'} scorches ${target.name}!`;
+                break;
+              }
+              case 'frost_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.15 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 3 : 2;
+                const debuffValue = -Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                const chillEffect = { type: 'debuff', stat: 'damage', name: 'Chilled', duration, value: debuffValue, description: 'Reduces target damage output' } as any;
+                if (targetIsAlly) applyToAlly(chillEffect); else applyToEnemy(chillEffect);
+                narrative += ` ${ench.name || 'Frost enchantment'} chills ${target.name}.`;
+                break;
+              }
+              case 'shock_damage': {
+                const factor = Math.max(0.1, magnitude / 15 || 1);
+                const extra = Math.max(1, Math.floor(appliedDamage * 0.18 * tierMult * factor));
+                if (!targetIsAlly && enemyIndex >= 0) {
+                  newState.enemies = [...newState.enemies];
+                  newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                }
+                const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                const dotValue = Math.max(1, Math.floor(appliedDamage * 0.10 * tierMult * factor));
+                const electroEffect = { type: 'dot', stat: 'health', name: 'Electrocute', duration, value: dotValue, description: 'Shocks the target for damage over time' } as any;
+                if (targetIsAlly) applyToAlly(electroEffect); else applyToEnemy(electroEffect);
+                const stunChance = attackResolved.isCrit ? 50 : attackResolved.rollTier === 'high' ? 35 : attackResolved.rollTier === 'mid' ? 20 : 10;
+                if (Math.random() * 100 < stunChance) {
+                  const stun = { type: 'stun', name: 'Shocked Stun', duration: 1 } as any;
+                  if (targetIsAlly) applyToAlly(stun); else applyToEnemy(stun);
+                  narrative += ` ${target.name} is stunned by the shock!`;
+                }
+                narrative += ` ${ench.name || 'Shock enchantment'} jolts ${target.name}.`;
+                break;
+              }
+              case 'absorb_health': {
+                // Heal the player based on magnitude or portion of applied damage
+                const healAmt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentHealth = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + healAmt);
+                narrative += ` ${ench.name || 'Vampiric enchantment'} restores ${healAmt} health to you.`;
+                break;
+              }
+              case 'absorb_magicka': {
+                const amt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentMagicka = Math.min(newPlayerStats.maxMagicka || 0, (newPlayerStats.currentMagicka || 0) + amt);
+                narrative += ` ${ench.name || 'Magicka drain'} absorbs ${amt} magicka.`;
+                break;
+              }
+              case 'absorb_stamina': {
+                const amt = Math.max(1, Math.floor(Math.min(magnitude, Math.floor(appliedDamage * 0.35))));
+                newPlayerStats.currentStamina = Math.min(newPlayerStats.maxStamina || 0, (newPlayerStats.currentStamina || 0) + amt);
+                narrative += ` ${ench.name || 'Stamina drain'} absorbs ${amt} stamina.`;
+                break;
+              }
+              case 'paralyze': {
+                const proc = attackResolved.isCrit ? 85 : attackResolved.rollTier === 'high' ? 60 : attackResolved.rollTier === 'mid' ? 40 : 20;
+                if (Math.random() * 100 < proc) {
+                  const paralyzeEffect = { type: 'stun', name: 'Paralyzed', duration: 2 } as any;
+                  if (targetIsAlly) applyToAlly(paralyzeEffect); else applyToEnemy(paralyzeEffect);
+                  narrative += ` ${target.name} is paralyzed by the enchantment!`;
+                }
+                break;
+              }
+              case 'chaos_damage': {
+                // Randomly pick fire/frost/shock
+                const opts = ['fire_damage', 'frost_damage', 'shock_damage'];
+                const pick = opts[Math.floor(Math.random() * opts.length)];
+                // Re-use the above by simple branching
+                if (pick === 'fire_damage') {
+                  const factor = Math.max(0.1, magnitude / 15 || 1);
+                  const extra = Math.max(1, Math.floor(appliedDamage * 0.18 * tierMult * factor));
+                  if (!targetIsAlly && enemyIndex >= 0) {
+                    newState.enemies = [...newState.enemies];
+                    newState.enemies[enemyIndex] = { ...newState.enemies[enemyIndex], currentHealth: Math.max(0, newState.enemies[enemyIndex].currentHealth - extra) } as any;
+                  }
+                  const duration = attackResolved.isCrit ? 4 : attackResolved.rollTier === 'high' ? 3 : 2;
+                  const dotValue = Math.max(1, Math.floor(appliedDamage * 0.12 * tierMult * factor));
+                  const burnEffect = { type: 'dot', stat: 'health', name: 'Burning', duration, value: dotValue, description: 'Burns the target for damage over time' } as any;
+                  if (targetIsAlly) applyToAlly(burnEffect); else applyToEnemy(burnEffect);
+                  narrative += ` Chaos enchantment triggers ${burnEffect.name} on ${target.name}.`;
+                }
+                break;
+              }
+              case 'soul_trap': {
+                // Attach a temporary soul_trap marker so other systems can detect and handle filling soul gems
+                const soulEffect = { type: 'utility', name: 'Soul Trap', duration: 5, value: magnitude, description: 'Target is soul trapped for a short time' } as any;
+                if (targetIsAlly) applyToAlly(soulEffect); else applyToEnemy(soulEffect);
+                narrative += ` ${target.name} is soul-trapped!`;
+                break;
+              }
+              default: {
+                // Unknown enchantment effects are ignored here; they may be handled elsewhere
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // swallow enchantment application errors to avoid breaking combat
+        console.warn && console.warn('[combat] enchantment application error', e);
       }
 
       // Record the applied damage in combat log (after modifiers & lifesteal applied)
@@ -2617,6 +3075,58 @@ export const executePlayerAction = (
               aoeSummary.healed = aoeSummary.healed || [];
               aoeSummary.healed.push(...aoeHeals);
 
+            } else if (effect.type === 'aoe_restore') {
+              // AoE restore (magicka/stamina) - support 'all_allies' target
+              const stat = (effect.stat || 'magicka') as 'magicka' | 'stamina' | 'health';
+              const aoeAmt: number = effect.value || effect.amount || 0;
+              let totalRestored = 0;
+              const aoeRestores: Array<{ id: string; name: string; amount: number }> = [];
+
+              if (effect.aoeTarget === 'all_allies') {
+                if (stat === 'magicka') {
+                  const playerRestore = Math.min(aoeAmt, (newPlayerStats.maxMagicka || 0) - (newPlayerStats.currentMagicka || 0));
+                  newPlayerStats.currentMagicka = Math.min(newPlayerStats.maxMagicka || 0, (newPlayerStats.currentMagicka || 0) + aoeAmt);
+                  totalRestored += playerRestore;
+                  if (playerRestore > 0) aoeRestores.push({ id: 'player', name: (character && character.name) || 'You', amount: playerRestore });
+
+                  if (newState.allies && newState.allies.length > 0) {
+                    newState.allies = newState.allies.map(ally => {
+                      if ((ally.currentMagicka || 0) < (ally.maxMagicka || 0)) {
+                        const amt = Math.min(aoeAmt, (ally.maxMagicka || 0) - (ally.currentMagicka || 0));
+                        totalRestored += amt;
+                        if (amt > 0) aoeRestores.push({ id: ally.id, name: ally.name, amount: amt });
+                        return { ...ally, currentMagicka: Math.min(ally.maxMagicka || 0, (ally.currentMagicka || 0) + aoeAmt) };
+                      }
+                      return ally;
+                    });
+                  }
+                } else if (stat === 'stamina') {
+                  const playerRestore = Math.min(aoeAmt, (newPlayerStats.maxStamina || 0) - (newPlayerStats.currentStamina || 0));
+                  newPlayerStats.currentStamina = Math.min(newPlayerStats.maxStamina || 0, (newPlayerStats.currentStamina || 0) + aoeAmt);
+                  totalRestored += playerRestore;
+                  if (playerRestore > 0) aoeRestores.push({ id: 'player', name: (character && character.name) || 'You', amount: playerRestore });
+
+                  if (newState.allies && newState.allies.length > 0) {
+                    newState.allies = newState.allies.map(ally => {
+                      if ((ally.currentStamina || 0) < (ally.maxStamina || 0)) {
+                        const amt = Math.min(aoeAmt, (ally.maxStamina || 0) - (ally.currentStamina || 0));
+                        totalRestored += amt;
+                        if (amt > 0) aoeRestores.push({ id: ally.id, name: ally.name, amount: amt });
+                        return { ...ally, currentStamina: Math.min(ally.maxStamina || 0, (ally.currentStamina || 0) + aoeAmt) };
+                      }
+                      return ally;
+                    });
+                  }
+                }
+              }
+
+              if (totalRestored > 0) {
+                narrative += ` The aura restores ${totalRestored} total ${stat} to you and your allies!`;
+              }
+
+              aoeSummary.healed = aoeSummary.healed || [];
+              aoeSummary.healed.push(...aoeRestores);
+
             } else if ((effect as any).type === 'summon') {
               // Enemy conjuration: respect one-summon-per-combat and roll outcome
               const summonName = (effect as any).name || 'Summoned Ally';
@@ -2721,7 +3231,10 @@ export const executePlayerAction = (
                   ]
                 } as any;
               }
-              narrative += ` ${target.name} is affected by ${effect.type}!`;
+              {
+                const nse = normalizeStatusEffect(effect, effect.name || (effect as any).id || 'effect');
+                narrative += ` ${target.name} is affected by ${nse.name}!`;
+              }
             }
           }
         });
@@ -2866,6 +3379,10 @@ export const executePlayerAction = (
           newPlayerStats = mod.newPlayerStats;
           usedItem = { ...item, quantity: item.quantity - 1 };
 
+          // Record the inventory delta on the returned state as a defensive contract so callers that
+          // inspect state can pick this up (UI normally uses `usedItem` and `onInventoryUpdate`).
+          newState.removedItems = [{ id: usedItem.id, quantity: usedItem.quantity } as any];
+
           narrative = `You use ${item.name} and recover ${mod.actual} ${resolved.stat}.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative, usedItem, aoeSummary, consumedAction };
@@ -2890,6 +3407,9 @@ export const executePlayerAction = (
           newState.survivalDelta.hunger = (newState.survivalDelta.hunger || 0) - (nutrition.hungerReduction || 0);
           newState.survivalDelta.thirst = (newState.survivalDelta.thirst || 0) - (nutrition.thirstReduction || 0);
 
+          // Defensive contract: include removedItems on state so callers can pick up inventory deltas.
+          newState.removedItems = [{ id: usedItem.id, quantity: usedItem.quantity } as any];
+
           narrative = `You consume ${item.name} and recover ${actualHeal} health.`;
           pushCombatLogUnique(newState, { turn: newState.turn, actor: 'player', action: 'item', target: item.name, damage: 0, narrative, isCrit: false, timestamp: Date.now() });
           return { newState, newPlayerStats, narrative, usedItem, aoeSummary, consumedAction };
@@ -2907,7 +3427,7 @@ export const executePlayerAction = (
     }
   }
 
-  return { newState, newPlayerStats, narrative, aoeSummary, consumedAction };
+  return { newState, newPlayerStats, narrative, aoeSummary, consumedAction, usedItem };
 };
 
 export const executeEnemyTurn = (
@@ -2957,9 +3477,16 @@ export const executeEnemyTurn = (
       .map(ae => ({ ...ae, turnsRemaining: ae.turnsRemaining - 1 }))
       .filter(ae => ae.turnsRemaining > 0);
 
-    // If stunned, skip the rest of this turn
-    if (isStunned) {
-      return { newState, newPlayerStats, narrative: `${actor.name} is stunned and skips their turn.`, aoeSummary };
+    // If stunned or just died from DOT/Decay, skip the rest of this turn
+    if (isStunned || actor.currentHealth <= 0) {
+      // CLEANUP: If the actor is dead, ensure they are removed from turn order and correct list
+      if (actor.currentHealth <= 0 && (actor as any).companionMeta?.isSummon) {
+        if (isAlly) newState.allies = (newState.allies || []).filter(a => a.id !== actor.id);
+        else newState.enemies = (newState.enemies || []).filter(e => e.id !== actor.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== actor.id);
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== actor.id);
+      }
+      return { newState, newPlayerStats, narrative: actor.currentHealth <= 0 ? '' : `${actor.name} is stunned and skips their turn.`, aoeSummary };
     }
   }
 
@@ -3170,7 +3697,13 @@ export const executeEnemyTurn = (
 
   // Resolve enemy/actor attack via d20 + attack bonus
   const attackBonus = Math.max(0, Math.floor(actor.damage / 8));
-  const resolved = resolveAttack({ attackerLevel: actor.level, attackBonus, targetArmor: playerStats.armor, targetDodge: playerStats.dodgeChance, critChance: 10, natRoll });
+  
+  // Apply active effects to player stats for defense
+  const playerBaseStats = { armor: playerStats.armor, dodgeChance: playerStats.dodgeChance };
+  const playerEffects = newState.playerActiveEffects || [];
+  const playerModifiedStats = applyActiveEffectsToStats(playerBaseStats, playerEffects);
+  
+  const resolved = resolveAttack({ attackerLevel: actor.level, attackBonus, targetArmor: playerModifiedStats.armor, targetDodge: playerModifiedStats.dodgeChance, critChance: 10, natRoll });
 
   // If stamina is low, scale melee damage instead of preventing the attack
   let appliedDamage = 0;
@@ -3546,7 +4079,13 @@ export const executeCompanionAction = (
 
   // Resolve attack
   const attackBonus = Math.max(0, Math.floor((ally.damage || 4) / 8));
-  const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: target.armor, critChance: 5, natRoll });
+  
+  // Apply active effects to target stats
+  const targetBaseStats = { armor: target.armor, dodgeChance: (target as any).dodgeChance || 0 };
+  const targetEffects = target.activeEffects || [];
+  const targetModifiedStats = applyActiveEffectsToStats(targetBaseStats, targetEffects);
+  
+  const resolved = resolveAttack({ attackerLevel: ally.level, attackBonus, targetArmor: targetModifiedStats.armor, critChance: 5, natRoll });
   if (!resolved.hit) {
     const narrative = `${ally.name} misses ${target.name} with ${ability.name}.`;
     pushCombatLogUnique(newState, { turn: newState.turn, actor: ally.name, action: ability.name, target: target.name, damage: 0, narrative, timestamp: Date.now(), auto: !!isAuto });
@@ -3600,13 +4139,108 @@ export const advanceTurn = (state: CombatState): CombatState => {
   }
   
   newState.currentTurnActor = newState.turnOrder[nextIndex];
+  try { console.debug('[combat] turn advanced to', newState.currentTurnActor, 'turn', newState.turn); } catch (e) {}
 
   // Reset per-turn action usage flags when player turn begins (covers both cycling and direct set)
   if (newState.currentTurnActor === 'player') {
     newState.playerMainActionUsed = false;
     newState.playerBonusActionUsed = false;
+    
+    // Debug: print out allies companionMeta states to aid in diagnosing decay timing
+    try { console.debug('[combat] allies companionMeta summary', (newState.allies || []).map(a => ({ id: a.id, meta: (a as any).companionMeta }))); } catch (e) {}
+
+    // Activate any companions that had their pending player-turn duration expire on the previous decrement.
+    try {
+      const allActors = (newState.allies || []).concat(newState.enemies || []);
+      allActors.forEach(actor => {
+        const meta = (actor as any).companionMeta;
+        if (meta && meta.decayPending && meta.isSummon) {
+          // Activate decay; do NOT apply decay on the same player-start — decay begins on the following player-start
+          (actor as any).companionMeta = { ...(meta || {}), decayPending: false, decayActive: true, decayJustActivated: true };
+          actor.activeEffects = [...(actor.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+          try { console.debug('[combat] activated pending decay for actor (will apply next player-start)', actor.id); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+    
+    // Apply decay damage to summoned allies that are decaying (skip those that were just activated this player-start)
+    const decayingAllies = (newState.allies || []).filter(ally => 
+      (ally as any).companionMeta?.decayActive && !(ally as any).companionMeta?.decayJustActivated && ally.currentHealth > 0
+    );
+    
+    try { console.debug('[combat] applying decay to allies', decayingAllies.map(a => ({ id: a.id, name: a.name, health: a.currentHealth }))); } catch (e) {}
+    for (const ally of decayingAllies) {
+      const decayDamage = Math.floor(ally.currentHealth * 0.5); // 50% of current health
+      const before = ally.currentHealth;
+      const newHealth = Math.max(0, ally.currentHealth - decayDamage);
+      ally.currentHealth = newHealth;
+      try { console.debug('[combat] decay applied', { id: ally.id, before, after: ally.currentHealth, dmg: decayDamage }); } catch (e) {}
+
+      // Log the decay damage
+      pushCombatLogUnique(newState, { 
+        turn: newState.turn, 
+        actor: ally.name, 
+        action: 'decay', 
+        target: 'self', 
+        damage: decayDamage, 
+        narrative: `${ally.name} decays, losing ${decayDamage} health.`, 
+        timestamp: Date.now() 
+      });
+      
+      // If the ally died from decay, mark them as dead
+      if (newHealth <= 0) {
+        pushCombatLogUnique(newState, { 
+          turn: newState.turn, 
+          actor: ally.name, 
+          action: 'decay_death', 
+          target: 'self', 
+          damage: 0, 
+          narrative: `${ally.name} decays completely and vanishes.`, 
+          timestamp: Date.now() 
+        });
+        
+        // Remove dead summon from allies and turn order immediately
+        newState.allies = (newState.allies || []).filter(a => a.id !== ally.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== ally.id);
+        // Ensure pendingSummons doesn't track it anymore
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== ally.id);
+      }
+    }
+
+    // NEW: Handle decay for enemy summons acted during the previous cycle
+    const decayingEnemies = (newState.enemies || []).filter(e => 
+      (e as any).companionMeta?.decayActive && !(e as any).companionMeta?.decayJustActivated && e.currentHealth > 0
+    );
+    for (const enemy of decayingEnemies) {
+      const decayDamage = Math.floor(enemy.currentHealth * 0.5);
+      const newHealth = Math.max(0, enemy.currentHealth - decayDamage);
+      enemy.currentHealth = newHealth;
+      pushCombatLogUnique(newState, { turn: newState.turn, actor: enemy.name, action: 'decay', target: 'self', damage: decayDamage, narrative: `${enemy.name} decays, losing ${decayDamage} health.`, timestamp: Date.now() });
+      if (newHealth <= 0) {
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: enemy.name, action: 'decay_death', target: 'self', damage: 0, narrative: `${enemy.name} decays completely and vanishes.`, timestamp: Date.now() });
+        newState.enemies = (newState.enemies || []).filter(e => e.id !== enemy.id);
+        newState.turnOrder = (newState.turnOrder || []).filter(id => id !== enemy.id);
+        // Ensure pendingSummons doesn't track it anymore
+        newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== enemy.id);
+      }
+    }
+
+    // Clear the `decayJustActivated` flag so decays apply on subsequent player turns
+    try {
+      (newState.allies || []).forEach(ally => {
+        if ((ally as any).companionMeta?.decayJustActivated) {
+          (ally as any).companionMeta.decayJustActivated = false;
+        }
+      });
+      (newState.enemies || []).forEach(enemy => {
+        if ((enemy as any).companionMeta?.decayJustActivated) {
+          (enemy as any).companionMeta.decayJustActivated = false;
+        }
+      });
+    } catch (e) {}
+
   }
-  
+
   // If we've cycled back to start, increment turn
   if (nextIndex <= currentIndex || nextIndex === 0) {
     newState.turn++;
@@ -3633,15 +4267,43 @@ export const advanceTurn = (state: CombatState): CombatState => {
       // Mark companions as decaying (they will start losing HP on the next player turn start)
       for (const id of newlyExpired) {
         const ally = (newState.allies || []).find(a => a.id === id);
-        if (ally && (ally as any).companionMeta?.isSummon) {
-          (ally as any).companionMeta = { ...(ally as any).companionMeta || {}, decayActive: true };
-          ally.activeEffects = [...(ally.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+        const enemy = (newState.enemies || []).find(e => e.id === id);
+        const actor = ally || enemy;
+        
+        if (actor && (actor as any).companionMeta?.isSummon) {
+          // Flag the summon as pending decay; activation and first tick will be handled at the next player-start
+          (actor as any).companionMeta = { ...(actor as any).companionMeta || {}, decayPending: true };
+          actor.activeEffects = [...(actor.activeEffects || []), { effect: { type: 'debuff', name: 'Decaying', description: 'This summoned ally is decaying and will lose 50% health each player turn.', duration: -1 }, turnsRemaining: -1 } as any];
+          try { console.debug('[combat] flagged companion as pending decay (will activate next player-start)', id, { companion: actor, companionMeta: (actor as any).companionMeta }); } catch (e) {}
         }
       }
       // Keep only pending summons that still have player turns remaining (preserve remaining player-turn counters)
       newState.pendingSummons = updated.filter(s => (s as any).playerTurnsRemaining > 0).map(s => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: (s as any).playerTurnsRemaining } as any));
       if (newlyExpired.length) {
         pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_degrade', narrative: `Some summoned allies begin to decay and will lose 50% health each player turn.`, timestamp: Date.now() });
+      }
+    }
+
+    // Decrement player-side active effects durations (e.g., conjured weapons) and remove/cleanup expired conjured items
+    if (newState.playerActiveEffects && newState.playerActiveEffects.length) {
+      const updated = newState.playerActiveEffects.map(pe => ({ ...pe, turnsRemaining: (pe.turnsRemaining || 0) - 1 }));
+      const expired = updated.filter(pe => (pe.turnsRemaining || 0) <= 0);
+      newState.playerActiveEffects = updated.filter(pe => (pe.turnsRemaining || 0) > 0);
+
+      if (expired.length) {
+        // Ensure removedItems exists
+        newState.removedItems = [...(newState.removedItems || [])];
+        for (const pe of expired) {
+          try {
+            const eff: any = pe && (pe as any).effect;
+            if (eff && eff.type === 'conjured_weapon' && (eff.itemId || (eff.weapon && eff.weapon.id))) {
+              const id = eff.itemId || (eff.weapon && eff.weapon.id);
+              // Queue deletion via id-based removal (quantity=0)
+              (newState as any).removedItems = [...((newState as any).removedItems || []), { id, quantity: 0 } as any];
+              pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'conjured_weapon_expire', narrative: `${eff.name} fades from existence.`, timestamp: Date.now() });
+            }
+          } catch (e) {}
+        }
       }
     }
   }
@@ -3651,6 +4313,18 @@ export const advanceTurn = (state: CombatState): CombatState => {
 
 export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStats): CombatState => {
   const newState = { ...state };
+
+  // CLEANUP: Remove dead summoned companions from allies/turnOrder immediately.
+  // This ensures dead summons don't block subsequent summoning attempts.
+  newState.allies = (newState.allies || []).filter(a => {
+    const isDeadSummon = !!a.companionMeta?.isSummon && (a.currentHealth || 0) <= 0;
+    if (isDeadSummon) {
+      newState.turnOrder = (newState.turnOrder || []).filter(id => id !== a.id);
+      newState.pendingSummons = (newState.pendingSummons || []).filter(ps => ps.companionId !== a.id);
+      return false;
+    }
+    return true;
+  });
 
   // Normalize/derive explicit enemy states from health when missing.
   newState.enemies = (newState.enemies || []).map(e => {
@@ -3767,77 +4441,43 @@ export const checkCombatEnd = (state: CombatState, playerStats: PlayerCombatStat
     newState.combatElapsedSec = elapsedSec;
     const hungerPerMinute = 1 / 180;
     const thirstPerMinute = 1 / 120;
-    const fatiguePerMinute = 1 / 90;
-    const minutes = elapsedSec / 60;
-    newState.survivalDelta = {
-      hunger: Math.round(minutes * hungerPerMinute * 10) / 10,
-      thirst: Math.round(minutes * thirstPerMinute * 10) / 10,
-      fatigue: Math.round(minutes * fatiguePerMinute * 10) / 10
-    };
   }
 
-  // === CLEANUP: Dead summoned companions should not remain active or block new conjures ===
-  try {
-    // Remove pendingSummons entries that point to companions that have died
-    if (newState.pendingSummons && newState.pendingSummons.length) {
-      const alivePending = newState.pendingSummons.filter((s: any) => {
-        const ally = (newState.allies || []).find(a => a.id === s.companionId);
-        // Keep pending if it still has playerTurnsRemaining > 0 AND (ally does not exist yet OR ally is alive)
-        const playerTurns = (s as any).playerTurnsRemaining !== undefined ? (s as any).playerTurnsRemaining : (s as any).turnsRemaining;
-        if (!playerTurns || playerTurns <= 0) return false;
-        if (!ally) return true; // still pending spawn
-        return (ally.currentHealth || 0) > 0;
-      });
-      if (alivePending.length !== newState.pendingSummons.length) {
-        newState.pendingSummons = alivePending.map((s: any) => ({ companionId: s.companionId, turnsRemaining: s.turnsRemaining, playerTurnsRemaining: s.playerTurnsRemaining }));
+  // If combat has ended (victory/defeat/fled/etc), ensure ephemeral conjured items are cleaned up
+  if (!newState.active) {
+    try {
+      const conjured = (newState.playerActiveEffects || []).filter((pe: any) => pe && pe.effect && pe.effect.type === 'conjured_weapon' && (pe.effect.itemId || (pe.effect.weapon && pe.effect.weapon.id)));
+      if (conjured.length) {
+        (newState as any).removedItems = [...((newState as any).removedItems || []), ...conjured.map((pe: any) => ({ id: (pe as any).effect.itemId || ((pe as any).effect.weapon && (pe as any).effect.weapon.id), quantity: 0 } as any))];
+        newState.playerActiveEffects = (newState.playerActiveEffects || []).filter((pe: any) => !(pe && (pe as any).effect && (pe as any).effect.type === 'conjured_weapon'));
+        pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'conjured_weapon_cleanup', narrative: `All conjured weapons fade as the battle ends.`, timestamp: Date.now() });
       }
-    }
-
-    // For allies that are summons and dead, clear their summon flags and any decay markers
-    if (newState.allies && newState.allies.length) {
-      newState.allies = newState.allies.map(a => {
-        if ((a as any).companionMeta?.isSummon && (a.currentHealth || 0) <= 0) {
-          const meta = { ...(a as any).companionMeta };
-          // Remove decayActive and isSummon so player can conjure again
-          delete meta.decayActive;
-          meta.isSummon = false;
-          const filteredEffects = (a.activeEffects || []).filter((ae: any) => !(ae.effect && ae.effect.name && ae.effect.name.toLowerCase().includes('decay')));
-          // Log the cleanup
-          pushCombatLogUnique(newState, { turn: newState.turn, actor: 'system', action: 'summon_removed', narrative: `${a.name} has been defeated and is no longer active. You may summon again.`, timestamp: Date.now() });
-          return { ...a, companionMeta: meta, activeEffects: filteredEffects } as any;
-        }
-        return a;
-      });
-    }
-  } catch (e) {
-    console.warn('[combat] cleanup dead summons failed', e);
+    } catch (e) {}
   }
 
   return newState;
 };
 
-// Apply regen after a turn. Uses per-second regen values but applies them for a turn-length equivalent.
-// By default a "turn" yields the same healing as the previous 4s tick (regenPerSec * 4).
-// Now includes health regen based on level and perks
-export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
-  let newPlayerStats = { ...playerStats };
-  const multiplier = secondsPerTurn;
-  
-  // Record pre-regen values so we can log exact deltas
-  const beforeHealth = newPlayerStats.currentHealth || 0;
-  const beforeMagicka = newPlayerStats.currentMagicka || 0;
-  const beforeStamina = newPlayerStats.currentStamina || 0;
+    // Ensure applyTurnRegen has its header and initial state (was accidentally removed during edits)
+    export const applyTurnRegen = (state: CombatState, playerStats: PlayerCombatStats, secondsPerTurn = 4) => {
+      let newPlayerStats = { ...playerStats };
+      const multiplier = secondsPerTurn;
+      
+      // Record pre-regen values so we can log exact deltas
+      const beforeHealth = newPlayerStats.currentHealth || 0;
+      const beforeMagicka = newPlayerStats.currentMagicka || 0;
+      const beforeStamina = newPlayerStats.currentStamina || 0;
 
-  // Apply health regen (now available based on level/perks)
-  const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
-  const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
-  const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
-  
-  newPlayerStats.currentHealth = nh;
-  newPlayerStats.currentMagicka = nm;
-  newPlayerStats.currentStamina = ns;
+      // Apply health regen (now available based on level/perks)
+      const nh = Math.min(newPlayerStats.maxHealth, newPlayerStats.currentHealth + Math.round((newPlayerStats.regenHealthPerSec || 0) * multiplier));
+      const nm = Math.min(newPlayerStats.maxMagicka, newPlayerStats.currentMagicka + Math.round((newPlayerStats.regenMagickaPerSec || 0) * multiplier));
+      const ns = Math.min(newPlayerStats.maxStamina, newPlayerStats.currentStamina + Math.round((newPlayerStats.regenStaminaPerSec || 0) * multiplier));
+      
+      newPlayerStats.currentHealth = nh;
+      newPlayerStats.currentMagicka = nm;
+      newPlayerStats.currentStamina = ns;
 
-  const newState = { ...state };
+    const newState = { ...state };
   // If any vitals recovered, append a concise turn chat entry to the combat log
   try {
     const deltaH = Math.max(0, (newPlayerStats.currentHealth || 0) - beforeHealth);
@@ -3931,7 +4571,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     possibleAbilities: [
       { id: 'bite', name: 'Bite', type: 'melee', damage: 10, cost: 5, description: 'A vicious bite' },
       { id: 'pounce', name: 'Pounce', type: 'melee', damage: 15, cost: 15, description: 'Leap and attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 15 }] },
-      { id: 'savage_bite', name: 'Savage Bite', type: 'melee', damage: 14, cost: 12, description: 'A tearing bite', effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30 }] },
+      { id: 'savage_bite', name: 'Savage Bite', type: 'melee', damage: 14, cost: 12, description: 'A tearing bite', effects: [{ type: 'dot', stat: 'health', value: 2, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'howl', name: 'Howl', type: 'melee', damage: 0, cost: 10, description: 'A terrifying howl', effects: [{ type: 'debuff', stat: 'damage', value: -3, duration: 2, chance: 25 }] }
     ],
     baseXP: 15,
@@ -4006,10 +4646,10 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     resistances: ['frost'],
     weaknesses: ['fire'],
     possibleAbilities: [
-      { id: 'bite', name: 'Venomous Bite', type: 'melee', damage: 16, cost: 10, description: 'A poisonous bite', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 3, chance: 50 }] },
+      { id: 'bite', name: 'Venomous Bite', type: 'melee', damage: 16, cost: 10, description: 'A poisonous bite', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 3, chance: 50, name: 'Poisoned', description: 'Target takes X poison damage at the start of each turn.' }] },
       { id: 'web', name: 'Web Spray', type: 'ranged', damage: 5, cost: 15, description: 'Spray sticky web', effects: [{ type: 'debuff', stat: 'stamina', value: -20, duration: 2 }] },
       { id: 'lunge', name: 'Lunge', type: 'melee', damage: 18, cost: 14, description: 'A sudden lunge attack' },
-      { id: 'spit_venom', name: 'Spit Venom', type: 'ranged', damage: 10, cost: 12, description: 'Spit corrosive venom', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 60 }] }
+      { id: 'spit_venom', name: 'Spit Venom', type: 'ranged', damage: 10, cost: 12, description: 'Spit corrosive venom', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 60, name: 'Poisoned', description: 'Target takes X poison damage at the start of each turn.' }] }
     ],
     baseXP: 35,
     possibleLoot: [
@@ -4029,7 +4669,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     weaknesses: ['fire'],
     possibleAbilities: [
       { id: 'slam', name: 'Slam', type: 'melee', damage: 30, cost: 15, description: 'A powerful slam attack' },
-      { id: 'rend', name: 'Rend', type: 'melee', damage: 25, cost: 12, description: 'Tear with claws', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 3, chance: 40 }] },
+      { id: 'rend', name: 'Rend', type: 'melee', damage: 25, cost: 12, description: 'Tear with claws', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 3, chance: 40, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'regenerate', name: 'Regenerate', type: 'melee', damage: 0, cost: 20, description: 'Troll regeneration', effects: [{ type: 'heal', stat: 'health', value: 20 }] },
       { id: 'frenzy', name: 'Frenzy', type: 'melee', damage: 35, cost: 25, description: 'A frenzied assault', cooldown: 2 }
     ],
@@ -4049,7 +4689,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     behaviors: ['aggressive', 'berserker', 'defensive'],
     possibleAbilities: [
       { id: 'swipe', name: 'Swipe', type: 'melee', damage: 25, cost: 12, description: 'A powerful claw swipe' },
-      { id: 'maul', name: 'Maul', type: 'melee', damage: 35, cost: 20, description: 'A devastating maul attack', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 2, chance: 35 }] },
+      { id: 'maul', name: 'Maul', type: 'melee', damage: 35, cost: 20, description: 'A devastating maul attack', effects: [{ type: 'dot', stat: 'health', value: 4, duration: 2, chance: 35, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'roar', name: 'Roar', type: 'melee', damage: 0, cost: 10, description: 'A terrifying roar', effects: [{ type: 'debuff', stat: 'stamina', value: -15, duration: 2, chance: 50 }] },
       { id: 'charge', name: 'Charge', type: 'melee', damage: 30, cost: 18, description: 'A charging attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 30 }] }
     ],
@@ -4071,7 +4711,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
     possibleAbilities: [
       { id: 'bite', name: 'Sabre Bite', type: 'melee', damage: 28, cost: 10, description: 'A vicious bite with massive fangs' },
       { id: 'pounce', name: 'Pounce', type: 'melee', damage: 35, cost: 18, description: 'A leaping pounce attack', effects: [{ type: 'stun', value: 1, duration: 1, chance: 25 }] },
-      { id: 'claw_swipe', name: 'Claw Swipe', type: 'melee', damage: 24, cost: 12, description: 'Quick claw attack', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30 }] },
+      { id: 'claw_swipe', name: 'Claw Swipe', type: 'melee', damage: 24, cost: 12, description: 'Quick claw attack', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 30, name: 'Bleeding', description: 'Target bleeds, taking X damage at the start of each turn.' }] },
       { id: 'rake', name: 'Rake', type: 'melee', damage: 20, cost: 8, description: 'A raking attack with hind claws' }
     ],
     baseXP: 80,
@@ -4107,7 +4747,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'aeonic_wave', name: 'Aeonic Wave', type: 'aeo', damage: 26, cost: 60, cooldown: 3, description: 'A sweeping aeonic wave — high power, long cooldown.', effects: [{ type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' }] },
       // Enemy-only corrupted variant (higher damage, no ally heal)
       { id: 'necrotic_aeon', name: 'Necrotic Aeon', type: 'aeo', damage: 30, cost: 55, description: 'A corrupted aeonic eruption that favors damage over restoration.', effects: [{ type: 'aoe_damage', value: 30, aoeTarget: 'all_enemies' }] },
-      { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100 }] }
+      { id: 'frost_cloak', name: 'Frost Cloak', type: 'magic', damage: 10, cost: 22, description: 'A swirling cloak of frost', effects: [{ type: 'dot', stat: 'health', value: 5, duration: 2, chance: 100, name: 'Frostbite', description: 'Target takes X frost damage at the start of each turn.' }] }
     ],
     baseXP: 120,
     baseGold: 50,
@@ -4132,7 +4772,7 @@ const BASE_ENEMY_TEMPLATES: Record<string, BaseEnemyTemplate> = {
       { id: 'ice_spike', name: 'Ice Spike', type: 'magic', damage: 22, cost: 18, description: 'A spike of ice' },
       { id: 'lightning', name: 'Lightning Bolt', type: 'magic', damage: 28, cost: 25, description: 'A bolt of lightning', effects: [{ type: 'drain', stat: 'magicka', value: 10 }] },
       { id: 'ward', name: 'Lesser Ward', type: 'magic', damage: 0, cost: 15, description: 'A protective ward', effects: [{ type: 'buff', stat: 'armor', value: 20, duration: 2 }] },
-      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40 }] },
+      { id: 'flames', name: 'Flames', type: 'magic', damage: 15, cost: 10, description: 'A stream of fire', effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, chance: 40, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }] },
       // SKY-52: Additional AoE and spell abilities
       { id: 'fireball', name: 'Fireball', type: 'magic', damage: 30, cost: 35, description: 'An explosive ball of fire that damages all foes', effects: [{ type: 'aoe_damage', value: 20, aoeTarget: 'all_enemies' }] },
       { id: 'aeonic_pulse', name: 'Aeonic Pulse', type: 'aeo', damage: 10, cost: 38, description: 'A focused pulse of aeonic energy (lesser).', effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }] },

@@ -5,11 +5,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { 
+import {
   ChevronDown,
-  ChevronLeft, 
-  ChevronRight, 
-  Users, 
+  ChevronLeft,
+  ChevronRight,
+  Users,
   Trophy,
   Flame,
   Sparkles,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { ActionBarToggle } from './ActionBar';
+import { useLocalization } from '../services/localization';
 
 interface SidebarSection {
   id: string;
@@ -47,7 +48,17 @@ const GameSidebar: React.FC = () => {
     'ai-tools': false,
     progress: false,
   }));
-  
+
+  // Bug reports count badge
+  const [bugCount, setBugCount] = useState<number>(0);
+  useEffect(() => {
+    try {
+      const br = require('../services/bugReportService');
+      const all = br.getBugReports();
+      setBugCount(all.filter((r: any) => r.status === 'open' || r.status === 'tracking').length);
+    } catch (e) { }
+  }, [isOpen]);
+
   const {
     openCompanions,
     openAchievements,
@@ -63,6 +74,7 @@ const GameSidebar: React.FC = () => {
     openTransformation,
     openHousing,
     openAIScribe,
+    openBugReport,
   } = useAppContext();
 
   // Check for mobile on mount and resize
@@ -83,6 +95,8 @@ const GameSidebar: React.FC = () => {
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen]);
 
+  const { t } = useLocalization();
+
   const handleItemClick = (onClick: () => void) => {
     onClick();
     if (isMobile) setIsOpen(false);
@@ -98,74 +112,75 @@ const GameSidebar: React.FC = () => {
   const sections: SidebarSection[] = [
     {
       id: 'crafting',
-      title: 'Crafting',
+      title: t('sidebar.crafting'),
       icon: <Flame size={16} className="text-orange-400" />,
       items: [
-        { id: 'alchemy', label: 'Alchemy', icon: '🧪', onClick: () => openAlchemy?.(), color: 'green' },
-        { id: 'cooking', label: 'Cooking', icon: '🍳', onClick: () => openCooking?.(), color: 'orange' },
-        { id: 'enchanting', label: 'Enchanting', icon: '✨', onClick: () => openEnchanting?.(), color: 'purple' },
+        { id: 'alchemy', label: t('sidebar.alchemy'), icon: '🧪', onClick: () => openAlchemy?.(), color: 'green' },
+        { id: 'cooking', label: t('sidebar.cooking'), icon: '🍳', onClick: () => openCooking?.(), color: 'orange' },
+        { id: 'enchanting', label: t('sidebar.enchanting'), icon: '✨', onClick: () => openEnchanting?.(), color: 'purple' },
       ],
     },
     {
       id: 'magic',
-      title: 'Magic & Powers',
+      title: t('sidebar.magic'),
       icon: <Sparkles size={16} className="text-cyan-400" />,
       items: [
-        { id: 'shouts', label: 'Shouts', icon: '🗣️', onClick: () => openShouts?.(), color: 'cyan' },
-        { id: 'stones', label: 'Standing Stones', icon: '🪨', onClick: () => openStandingStones?.(), color: 'indigo' },
-        { id: 'transform', label: 'Transformations', icon: '🐺', onClick: () => openTransformation?.(), color: 'red' },
+        { id: 'shouts', label: t('sidebar.shouts'), icon: '🗣️', onClick: () => openShouts?.(), color: 'cyan' },
+        { id: 'stones', label: t('sidebar.standingStones'), icon: '🪨', onClick: () => openStandingStones?.(), color: 'indigo' },
+        { id: 'transform', label: t('sidebar.transformations'), icon: '🐺', onClick: () => openTransformation?.(), color: 'red' },
       ],
     },
     {
       id: 'world',
-      title: 'World',
+      title: t('sidebar.world'),
       icon: <Map size={16} className="text-blue-400" />,
       items: [
-        { id: 'travel', label: 'Travel', icon: '🏰', onClick: () => openTravel?.(), color: 'blue' },
-        { id: 'factions', label: 'Factions', icon: '⚔️', onClick: () => openFactions?.(), color: 'red' },
-        { id: 'bounty', label: 'Bounty', icon: '⚖️', onClick: () => openBounty?.(), color: 'yellow' },
-        { id: 'training', label: 'Training', icon: '📚', onClick: () => openTraining?.(), color: 'emerald' },
-        { id: 'housing', label: 'Housing', icon: '🏠', onClick: () => openHousing?.(), color: 'amber' },
+        { id: 'travel', label: t('sidebar.travel'), icon: '🏰', onClick: () => openTravel?.(), color: 'blue' },
+        { id: 'factions', label: t('sidebar.factions'), icon: '⚔️', onClick: () => openFactions?.(), color: 'red' },
+        { id: 'bounty', label: t('sidebar.bounty'), icon: '⚖️', onClick: () => openBounty?.(), color: 'yellow' },
+        { id: 'training', label: t('sidebar.training'), icon: '📚', onClick: () => openTraining?.(), color: 'emerald' },
+        { id: 'housing', label: t('sidebar.housing'), icon: '🏠', onClick: () => openHousing?.(), color: 'amber' },
       ],
     },
     {
       id: 'social',
-      title: 'Social',
+      title: t('sidebar.social'),
       icon: <Users size={16} className="text-purple-400" />,
       items: [
-        { id: 'companions', label: 'Companions', icon: '👥', onClick: openCompanions, color: 'purple' },
+        { id: 'companions', label: t('sidebar.companions'), icon: '👥', onClick: openCompanions, color: 'purple' },
       ],
     },
     {
       id: 'ai-tools',
-      title: 'AI Tools',
+      title: t('sidebar.aiTools'),
       icon: <Sparkles size={16} className="text-cyan-400" />,
       items: [
-        { id: 'ai-scribe', label: 'Consult Game Master', icon: '🧙', onClick: () => openAIScribe?.(), color: 'cyan' },
+        { id: 'ai-scribe', label: t('sidebar.gameMaster'), icon: '🧙', onClick: () => openAIScribe?.(), color: 'cyan' },
+        { id: 'bug_reports', label: t('sidebar.bugReports'), icon: '🐞', onClick: () => openBugReport?.(), color: 'red' },
       ],
     },
     {
       id: 'progress',
-      title: 'Progress',
+      title: t('sidebar.progress'),
       icon: <Trophy size={16} className="text-amber-400" />,
       items: [
-        { id: 'achievements', label: 'Achievements', icon: '🏆', onClick: openAchievements, color: 'amber' },
+        { id: 'achievements', label: t('sidebar.achievements'), icon: '🏆', onClick: openAchievements, color: 'amber' },
       ],
     },
   ];
 
   const getColorClasses = (color: string) => {
     const colors: Record<string, string> = {
-      green: 'border-green-600 bg-green-700/20 text-green-200 hover:bg-green-700/40',
-      orange: 'border-orange-600 bg-orange-700/20 text-orange-200 hover:bg-orange-700/40',
-      purple: 'border-purple-600 bg-purple-700/20 text-purple-200 hover:bg-purple-700/40',
-      cyan: 'border-cyan-600 bg-cyan-700/20 text-cyan-200 hover:bg-cyan-700/40',
-      indigo: 'border-indigo-600 bg-indigo-700/20 text-indigo-200 hover:bg-indigo-700/40',
-      red: 'border-red-600 bg-red-700/20 text-red-200 hover:bg-red-700/40',
-      blue: 'border-blue-600 bg-blue-700/20 text-blue-200 hover:bg-blue-700/40',
-      yellow: 'border-yellow-600 bg-yellow-700/20 text-yellow-200 hover:bg-yellow-700/40',
-      emerald: 'border-emerald-600 bg-emerald-700/20 text-emerald-200 hover:bg-emerald-700/40',
-      amber: 'border-amber-600 bg-amber-700/20 text-amber-200 hover:bg-amber-700/40',
+      green: 'border-green-600/50 glass-panel-lighter text-green-200 hover:bg-green-900/40',
+      orange: 'border-orange-600/50 glass-panel-lighter text-orange-200 hover:bg-orange-900/40',
+      purple: 'border-purple-600/50 glass-panel-lighter text-purple-200 hover:bg-purple-900/40',
+      cyan: 'border-cyan-600/50 glass-panel-lighter text-cyan-200 hover:bg-cyan-900/40',
+      indigo: 'border-indigo-600/50 glass-panel-lighter text-indigo-200 hover:bg-indigo-900/40',
+      red: 'border-red-600/50 glass-panel-lighter text-red-200 hover:bg-red-900/40',
+      blue: 'border-blue-600/50 glass-panel-lighter text-blue-200 hover:bg-blue-900/40',
+      yellow: 'border-yellow-600/50 glass-panel-lighter text-yellow-200 hover:bg-yellow-900/40',
+      emerald: 'border-emerald-600/50 glass-panel-lighter text-emerald-200 hover:bg-emerald-900/40',
+      amber: 'border-amber-600/50 glass-panel-lighter text-amber-200 hover:bg-amber-900/40',
     };
     return colors[color] || colors.purple;
   };
@@ -174,12 +189,11 @@ const GameSidebar: React.FC = () => {
   const toggleButton = (
     <button
       onClick={() => setIsOpen(!isOpen)}
-      className={`fixed top-20 z-50 p-2 rounded-r-lg transition-all duration-300 ${
-        isOpen 
-          ? 'left-64 bg-skyrim-paper border border-l-0 border-skyrim-gold' 
-          : 'left-0 bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400'
-      }`}
-      aria-label={isOpen ? 'Close sidebar' : 'Open sidebar'}
+      className={`fixed top-20 z-50 p-2 rounded-r-lg transition-all duration-300 shadow-lg ${isOpen
+        ? 'left-64 glass-panel border border-l-0 border-zinc-700/50'
+        : 'left-0 bg-gradient-to-r from-amber-600 to-yellow-600 text-white hover:pl-4 shadow-gold'
+        }`}
+      aria-label={isOpen ? t('common.close') : t('common.settings')} // Using simpler common keys for toggle ARIA
     >
       {isOpen ? (
         <ChevronLeft size={20} className="text-skyrim-gold" />
@@ -192,13 +206,12 @@ const GameSidebar: React.FC = () => {
   // Sidebar content
   const sidebarContent = (
     <div
-      className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-skyrim-paper/98 backdrop-blur-md border-r border-skyrim-gold z-40 transform transition-transform duration-300 overflow-hidden ${
-        isOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}
+      className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 glass-panel z-40 transform transition-transform duration-300 overflow-hidden ${isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-skyrim-border bg-gradient-to-r from-skyrim-dark/30 to-transparent">
-        <h2 className="text-lg font-serif text-skyrim-gold tracking-wide">Game Menu</h2>
+        <h2 className="text-lg font-serif text-skyrim-gold tracking-wide">{t('nav.gameMenu')}</h2>
         {isMobile && (
           <button
             onClick={() => setIsOpen(false)}
@@ -225,12 +238,12 @@ const GameSidebar: React.FC = () => {
               >
                 <ChevronDown size={14} className="text-skyrim-gold/80" />
               </span>
-              {section.icon}
+              {typeof section.icon === 'function' ? (section.icon as any)() : section.icon}
               <span className="text-xs font-bold text-skyrim-gold uppercase tracking-wider">
                 {section.title}
               </span>
               <span className="ml-auto text-[10px] text-skyrim-text/50">
-                {expandedSections[section.id] ? 'Hide' : 'Show'}
+                {expandedSections[section.id] ? t('common.hide') : t('common.show')}
               </span>
             </button>
 
@@ -244,8 +257,11 @@ const GameSidebar: React.FC = () => {
                     onClick={() => handleItemClick(item.onClick)}
                     className={`flex items-center gap-2 px-3 py-2 rounded border text-sm transition-colors ${getColorClasses(item.color)}`}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <span className="text-base">{typeof item.icon === 'function' ? (item.icon as any)() : item.icon}</span>
                     <span>{item.label}</span>
+                    {item.id === 'bug_reports' && bugCount > 0 && (
+                      <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-700 text-white">{bugCount}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -256,7 +272,7 @@ const GameSidebar: React.FC = () => {
         {/* Footer */}
         <div className="p-4 text-center">
           <p className="text-[10px] text-gray-500 italic">
-            Access crafting, magic, and world features
+            {t('app.title')}
           </p>
         </div>
       </div>

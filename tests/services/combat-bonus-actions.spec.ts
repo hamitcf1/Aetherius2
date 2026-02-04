@@ -39,4 +39,22 @@ describe('combat — bonus action support', () => {
     expect(res.consumedAction).toBe('bonus');
     expect(res.newPlayerStats.currentHealth).toBeGreaterThan(10);
   });
+
+  it('shield bash is treated as a bonus action', () => {
+    const bashAbility: any = { id: 'shield_bash', name: 'Shield Bash', type: 'melee', damage: 8, cost: 15, cooldown: 2, effects: [{ type: 'stun', value: 1, duration: 1, chance: 50 }] };
+    const state: any = initializeCombat([{ id: 'e1', name: 'Bandit', level: 1, maxHealth: 20, currentHealth: 20 } as any], 'road');
+    const playerStats: any = { currentHealth: 30, maxHealth: 100, abilities: [bashAbility], currentStamina: 50 };
+
+    const res: any = executePlayerAction(state, playerStats, 'attack', undefined, 'shield_bash', undefined, undefined, 13, { perks: [], skills: [] } as any);
+    expect(res.consumedAction).toBe('bonus');
+  });
+
+  it('basic damage magic abilities consume the bonus action', () => {
+    const fireBolt: any = { id: 'fire_bolt', name: 'Fire Bolt', type: 'magic', damage: 20, cost: 20 };
+    const state: any = initializeCombat([{ id: 'e1', name: 'Bandit', level: 1, maxHealth: 60, currentHealth: 60 } as any], 'road');
+    const playerStats: any = { currentHealth: 30, maxHealth: 100, abilities: [fireBolt], currentMagicka: 50 };
+
+    const res: any = executePlayerAction(state, playerStats, 'magic', undefined, 'fire_bolt', undefined, undefined, 12, { perks: [], skills: [] } as any);
+    expect(res.consumedAction).toBe('bonus');
+  });
 });

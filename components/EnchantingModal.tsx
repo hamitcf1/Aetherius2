@@ -77,31 +77,25 @@ export default function EnchantingModal({
 
   // Get enchantable items from inventory
   const enchantableItems = useMemo(() => {
-    return inventory.filter(item => 
-      (item.type === 'weapon' || item.type === 'armor' || item.type === 'jewelry') &&
+    return inventory.filter(item =>
+      (item.type === 'weapon' || item.type === 'apparel') &&
       (!item.enchantments || item.enchantments.length === 0)
     );
   }, [inventory]);
 
-  // Get disenchantable items (items with enchantments)
+  // Get disenchantable items (any items with enchantments)
   const disenchantableItems = useMemo(() => {
-    return inventory.filter(item =>
-      item.enchantments && item.enchantments.length > 0 &&
-      // Check if any enchantment is not yet learned
-      item.enchantments.some(e => 
-        !enchantingState.learnedEnchantments.find(l => l.enchantmentId === e.id)
-      )
-    );
-  }, [inventory, enchantingState.learnedEnchantments]);
+    return inventory.filter(item => item.enchantments && item.enchantments.length > 0);
+  }, [inventory]);
 
   // Get learned enchantments
-  const learnedEnchantments = useMemo(() => 
+  const learnedEnchantments = useMemo(() =>
     getLearnedEnchantmentsWithDetails(enchantingState),
     [enchantingState]
   );
 
   // Get filled soul gems
-  const filledSoulGems = useMemo(() => 
+  const filledSoulGems = useMemo(() =>
     getFilledSoulGems(enchantingState),
     [enchantingState]
   );
@@ -109,8 +103,9 @@ export default function EnchantingModal({
   // Get applicable enchantments for selected item
   const applicableEnchantments = useMemo(() => {
     if (!selectedItem) return [];
-    const applicable = getEnchantmentsForItemType(selectedItem.type, selectedItem.slot);
-    return applicable.filter(e => 
+    const lookupType = selectedItem.type === 'apparel' ? 'armor' : selectedItem.type;
+    const applicable = getEnchantmentsForItemType(lookupType, selectedItem.slot);
+    return applicable.filter(e =>
       learnedEnchantments.some(l => l.enchantment.id === e.id)
     );
   }, [selectedItem, learnedEnchantments]);
@@ -157,7 +152,7 @@ export default function EnchantingModal({
       onRemoveFromInventory?.(selectedItem.id);
       onAddToInventory?.(result.enchantedItem);
       if (onGainXP) onGainXP(result.xpGained);
-      
+
       // Reset selection
       setSelectedItem(null);
       setSelectedEnchantment(null);
@@ -193,9 +188,9 @@ export default function EnchantingModal({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-purple-500/30 rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+      <div className="glass-panel w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl rounded-lg">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-purple-500/20 bg-gradient-to-r from-slate-900 via-purple-900/20 to-slate-900">
+        <div className="flex items-center justify-between p-4 border-b border-skyrim-border/30 bg-white/5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-500/20 rounded-lg">
               <Sparkles className="w-6 h-6 text-purple-400" />
@@ -207,27 +202,25 @@ export default function EnchantingModal({
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             {/* Mode Toggle */}
             <div className="flex bg-slate-800 rounded-lg p-1">
               <button
                 onClick={() => { setMode('enchant'); setSelectedItem(null); }}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  mode === 'enchant'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'enchant'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 Enchant
               </button>
               <button
                 onClick={() => { setMode('disenchant'); setSelectedItem(null); }}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  mode === 'disenchant'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'disenchant'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 Disenchant
               </button>
@@ -259,11 +252,10 @@ export default function EnchantingModal({
                     <button
                       key={item.id}
                       onClick={() => { setSelectedItem(item); setSelectedEnchantment(null); }}
-                      className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${
-                        selectedItem?.id === item.id
-                          ? 'bg-purple-600/30 border border-purple-500/50'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
-                      }`}
+                      className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${selectedItem?.id === item.id
+                        ? 'bg-purple-600/30 border border-purple-500/50'
+                        : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
+                        }`}
                     >
                       <span className={`text-sm ${selectedItem?.id === item.id ? 'text-purple-100' : 'text-gray-300'}`}>
                         {item.name}
@@ -293,11 +285,10 @@ export default function EnchantingModal({
                         <button
                           key={ench.id}
                           onClick={() => setSelectedEnchantment(ench.id)}
-                          className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${
-                            selectedEnchantment === ench.id
-                              ? 'bg-purple-600/30 border border-purple-500/50'
-                              : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
-                          }`}
+                          className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${selectedEnchantment === ench.id
+                            ? 'bg-purple-600/30 border border-purple-500/50'
+                            : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
+                            }`}
                         >
                           {schoolIcons[ench.school]}
                           <div className="flex-1 min-w-0">
@@ -333,18 +324,16 @@ export default function EnchantingModal({
                     <button
                       key={gem.id}
                       onClick={() => setSelectedSoulGem(gem.id)}
-                      className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${
-                        selectedSoulGem === gem.id
-                          ? 'bg-purple-600/30 border border-purple-500/50'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
-                      }`}
+                      className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors ${selectedSoulGem === gem.id
+                        ? 'bg-purple-600/30 border border-purple-500/50'
+                        : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
+                        }`}
                     >
-                      <Gem className={`w-4 h-4 ${
-                        gem.size === 'grand' || gem.size === 'black' ? 'text-purple-400' :
+                      <Gem className={`w-4 h-4 ${gem.size === 'grand' || gem.size === 'black' ? 'text-purple-400' :
                         gem.size === 'greater' ? 'text-blue-400' :
-                        gem.size === 'common' ? 'text-green-400' :
-                        'text-gray-400'
-                      }`} />
+                          gem.size === 'common' ? 'text-green-400' :
+                            'text-gray-400'
+                        }`} />
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm truncate ${selectedSoulGem === gem.id ? 'text-purple-100' : 'text-gray-300'}`}>
                           {gem.name}
@@ -438,11 +427,10 @@ export default function EnchantingModal({
                     <button
                       key={item.id}
                       onClick={() => setSelectedItem(item)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
-                        selectedItem?.id === item.id
-                          ? 'bg-purple-600/30 border border-purple-500/50'
-                          : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
-                      }`}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${selectedItem?.id === item.id
+                        ? 'bg-purple-600/30 border border-purple-500/50'
+                        : 'bg-slate-800/30 hover:bg-slate-700/30 border border-transparent'
+                        }`}
                     >
                       <Sparkles className="w-5 h-5 text-purple-400" />
                       <div className="flex-1">

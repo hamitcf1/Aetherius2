@@ -18,12 +18,51 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.9',
+    date: '2026-01-29',
+    title: 'Level-Up Rewards: Chest & Gold UX + Accessibility',
+    changes: [
+      { type: 'feature', text: 'Level-Up rewards: choose Gold or Open Chest with chest preview and deterministic chest generation' },
+      { type: 'improvement', text: 'Open Chest: staged, skippable reveal animation with ARIA live announcements and sound effects' },
+      { type: 'improvement', text: 'Gold reward displayed immediately when selected so Confirm can be used without delay' },
+      { type: 'fix', text: 'Chest fallback: when no items are yielded, grant fractional gold and notify the player to avoid empty rewards' },
+      { type: 'improvement', text: 'Confirm guard: prevent double-confirm/double-apply by disabling Confirm and clearing pending state early' },
+      { type: 'improvement', text: 'UI tests: added deterministic tests for chest flow, animation skippability, gold display, and confirm-once behavior' },
+      { type: 'improvement', text: 'UX: short-window toast dedupe to reduce duplicate notifications for rapid events' }
+    ]
+  },
+  {
+    version: '1.0.8',
+    date: '2026-01-28',
+    title: 'Shop & Blacksmith UX Quality-of-life',
+    changes: [
+      { type: 'improvement', text: 'Blacksmith: added quick-buy for missing upgrade materials showing required quantity and total cost' },
+      { type: 'improvement', text: 'Blacksmith: Confirm button now disables and clearly indicates when gold is insufficient' },
+      { type: 'improvement', text: 'Shop: Buy list shows compact owned badge (icon + count) when player owns the item' },
+      { type: 'improvement', text: 'Shop: Sell list now groups identical stacks and provides both "Sell 1" and "Sell All" actions' },
+      { type: 'improvement', text: 'Shop: restored damage/armor/nutrition/potion indicators in Buy and Sell views and added category icon to Sell rows' },
+      { type: 'improvement', text: 'Perk Tree: per-rank contribution displayed inline for perks across all categories; Expand/Collapse All controls added to Perk Tree modal' },
+      { type: 'fix', text: 'Shop: removed duplicate footer item count and fixed Sell-all category summary' }
+    ]
+  },
+  {
+    version: '1.0.7',
+    date: '2026-01-27',
+    title: 'Combat UX: Learned Abilities Only',
+    changes: [
+      { type: 'fix', text: 'Combat: hide unlearned spells from ability lists — learned spell IDs now control which magical abilities appear' },
+      { type: 'improvement', text: 'Combat: advanced One-Handed and Sneak abilities now require perk investment before appearing' },
+      { type: 'improvement', text: 'UX: clarified buff/debuff naming to avoid placeholder labels in status effects' },
+    ]
+  },
+  {
     version: '1.0.6',
     date: '2026-01-26',
     title: 'Combat: VFX & Tests',
     changes: [
       { type: 'combat', text: 'Combat: Restored healing and conjuration visual effects and screen flashes; spell visuals now anchor to their targets' },
       { type: 'improvement', text: 'Combat: Increased VFX z-index and standardized timing (ms helper) so effects render above modals and persist reliably' },
+      { type: 'improvement', text: 'UX: Normalize incoming status effect names and icons (e.g., DOTs, generic "buff" names) for clearer buffs/debuffs display' },
       { type: 'fix', text: 'Tests: added unit tests for healing and conjuration visuals and improved test stability for spell effects' },
     ]
   },

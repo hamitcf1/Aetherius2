@@ -398,8 +398,371 @@ export const HolyLight: React.FC<{
 };
 
 /**
- * PortalRift - Purple swirling portal effect for conjuration
+ * BloodSplatter - Blood particles for damage effects
  */
+export const BloodSplatter: React.FC<{
+  x: number;
+  y: number;
+  intensity?: 'light' | 'medium' | 'heavy';
+}> = ({ x, y, intensity = 'medium' }) => {
+  const [particles, setParticles] = useState<Array<{
+    id: number;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    size: number;
+  }>>([]);
+
+  const particleCount = intensity === 'light' ? 8 : intensity === 'medium' ? 15 : 25;
+
+  useEffect(() => {
+    const newParticles = Array.from({ length: particleCount }, (_, i) => {
+      const angle = (Math.random() - 0.5) * Math.PI * 1.5; // Spread mostly downward
+      const speed = 1 + Math.random() * 4;
+      return {
+        id: i,
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed + Math.random() * 2,
+        life: 1,
+        size: 2 + Math.random() * 4,
+      };
+    });
+    setParticles(newParticles);
+
+    const interval = setInterval(() => {
+      setParticles((prev) =>
+        prev
+          .map((p) => ({
+            ...p,
+            x: p.x + p.vx,
+            y: p.y + p.vy,
+            vy: p.vy + 0.3, // gravity
+            life: p.life - 0.03,
+          }))
+          .filter((p) => p.life > 0)
+      );
+    }, 20);
+
+    return () => clearInterval(interval);
+  }, [x, y, particleCount]);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[96]">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="absolute rounded-full bg-red-600"
+          style={{
+            left: `${p.x}px`,
+            top: `${p.y}px`,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            opacity: p.life,
+            boxShadow: `0 0 4px rgba(220, 38, 38, ${p.life * 0.8})`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+/**
+ * WeaponTrail - Sword slash trail effect
+ */
+export const WeaponTrail: React.FC<{
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  duration?: number;
+}> = ({ fromX, fromY, toX, toY, duration = 200 }) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      setProgress(Math.min(elapsed / duration, 1));
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [duration]);
+
+  const currentX = fromX + (toX - fromX) * progress;
+  const currentY = fromY + (toY - fromY) * progress;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[94]">
+      <div
+        className="absolute bg-gradient-to-r from-transparent via-blue-400 to-transparent"
+        style={{
+          left: `${Math.min(fromX, currentX)}px`,
+          top: `${Math.min(fromY, currentY)}px`,
+          width: `${Math.abs(toX - fromX)}px`,
+          height: `${Math.abs(toY - fromY)}px`,
+          transform: `rotate(${Math.atan2(toY - fromY, toX - fromX)}rad)`,
+          transformOrigin: 'left center',
+          opacity: 1 - progress,
+          boxShadow: '0 0 10px rgba(59, 130, 246, 0.6)',
+        }}
+      />
+    </div>
+  );
+};
+
+/**
+ * MagicGlow - Glowing aura around caster during spell casting
+ */
+export const MagicGlow: React.FC<{
+  x: number;
+  y: number;
+  effectType: SpellEffectState['type'];
+  duration?: number;
+}> = ({ x, y, effectType, duration = 1000 }) => {
+  const [scale, setScale] = useState(1);
+  const [opacity, setOpacity] = useState(0.8);
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      setScale(1 + progress * 0.5);
+      setOpacity(Math.max(0.8 - progress * 0.8, 0));
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [duration]);
+
+  let glowColor = 'rgba(107, 114, 128, 0.6)';
+  switch (effectType) {
+    case 'fire':
+      glowColor = 'rgba(239, 68, 68, 0.6)';
+      break;
+    case 'frost':
+      glowColor = 'rgba(59, 130, 246, 0.6)';
+      break;
+    case 'shock':
+      glowColor = 'rgba(234, 179, 8, 0.6)';
+      break;
+    case 'healing':
+      glowColor = 'rgba(34, 197, 94, 0.6)';
+      break;
+    case 'conjuration':
+      glowColor = 'rgba(147, 51, 234, 0.6)';
+      break;
+  }
+
+  return (
+    <div
+      className="fixed pointer-events-none z-[93]"
+      style={{
+        left: `${x}px`,
+        top: `${y}px`,
+        transform: `translate(-50%, -50%) scale(${scale})`,
+      }}
+    >
+      <div
+        style={{
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`,
+          opacity,
+          boxShadow: `0 0 30px ${glowColor}`,
+        }}
+      />
+    </div>
+  );
+};
+
+/**
+ * ScreenShake - Camera shake effect for powerful attacks
+ */
+export const ScreenShake: React.FC<{
+  intensity?: 'light' | 'medium' | 'heavy';
+  duration?: number;
+}> = ({ intensity = 'medium', duration = 300 }) => {
+  const [shake, setShake] = useState({ x: 0, y: 0 });
+
+  const shakeIntensity = intensity === 'light' ? 2 : intensity === 'medium' ? 5 : 10;
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= duration) {
+        setShake({ x: 0, y: 0 });
+        return;
+      }
+
+      const progress = elapsed / duration;
+      const currentIntensity = shakeIntensity * (1 - progress);
+      setShake({
+        x: (Math.random() - 0.5) * currentIntensity * 2,
+        y: (Math.random() - 0.5) * currentIntensity * 2,
+      });
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [shakeIntensity, duration]);
+
+  return (
+    <style>{`
+      .combat-modal-shake {
+        transform: translate(${shake.x}px, ${shake.y}px) !important;
+      }
+    `}</style>
+  );
+};
+
+/**
+ * CriticalHitEffect - Special effect for critical hits
+ */
+export const CriticalHitEffect: React.FC<{
+  x: number;
+  y: number;
+}> = ({ x, y }) => {
+  const [show, setShow] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShow(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[97]">
+      {/* Star burst effect */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const angle = (i / 8) * Math.PI * 2;
+        const distance = 60;
+        const starX = x + Math.cos(angle) * distance;
+        const starY = y + Math.sin(angle) * distance;
+
+        return (
+          <div
+            key={i}
+            className="absolute text-2xl animate-ping"
+            style={{
+              left: `${starX}px`,
+              top: `${starY}px`,
+              transform: 'translate(-50%, -50%)',
+              animationDelay: `${i * 50}ms`,
+            }}
+          >
+            ⭐
+          </div>
+        );
+      })}
+
+      {/* Central explosion */}
+      <div
+        className="absolute animate-ping"
+        style={{
+          left: `${x}px`,
+          top: `${y}px`,
+          transform: 'translate(-50%, -50%)',
+          fontSize: '3rem',
+        }}
+      >
+        💥
+      </div>
+    </div>
+  );
+};
+
+/**
+ * DodgeEffect - Visual feedback for successful dodges
+ */
+export const DodgeEffect: React.FC<{
+  x: number;
+  y: number;
+}> = ({ x, y }) => {
+  const [show, setShow] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShow(false), 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[97]">
+      <div
+        className="absolute animate-bounce text-4xl text-blue-400"
+        style={{
+          left: `${x}px`,
+          top: `${y}px`,
+          transform: 'translate(-50%, -50%)',
+          textShadow: '0 0 10px rgba(59, 130, 246, 0.8)',
+        }}
+      >
+        💨
+      </div>
+    </div>
+  );
+};
+
+/**
+ * ImpactWave - Expanding shockwave from impact point
+ */
+export const ImpactWave: React.FC<{
+  x: number;
+  y: number;
+  effectType?: 'physical' | 'magical';
+  duration?: number;
+}> = ({ x, y, effectType = 'physical', duration = 400 }) => {
+  const [scale, setScale] = useState(0);
+  const [opacity, setOpacity] = useState(1);
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      setScale(progress * 150);
+      setOpacity(Math.max(1 - progress, 0));
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [duration]);
+
+  const waveColor = effectType === 'physical'
+    ? 'rgba(239, 68, 68, 0.4)'
+    : 'rgba(147, 51, 234, 0.4)';
+
+  return (
+    <div
+      className="fixed pointer-events-none z-[92]"
+      style={{
+        left: `${x}px`,
+        top: `${y}px`,
+        transform: `translate(-50%, -50%)`,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          width: `${scale}px`,
+          height: `${scale}px`,
+          left: `-${scale / 2}px`,
+          top: `-${scale / 2}px`,
+          border: `2px solid ${waveColor}`,
+          borderRadius: '50%',
+          opacity,
+          boxShadow: `0 0 20px ${waveColor}`,
+        }}
+      />
+    </div>
+  );
+};
 export const PortalRift: React.FC<{
   x: number;
   y: number;

@@ -88,6 +88,8 @@ export interface AppContextType {
   openTransformation?: () => void;
   openHousing?: () => void;
   openAIScribe?: () => void;
+  // Bug reports modal opener
+  openBugReport?: () => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);

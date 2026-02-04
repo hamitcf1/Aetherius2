@@ -65,6 +65,17 @@ describe('DungeonModal — item consumption in dungeon combat', () => {
     // Wait for CombatModal to call onInventoryUpdate (id-based or name-based)
     await waitFor(() => expect(onInventoryUpdate).toHaveBeenCalled());
 
+    // Ensure payload contains id-based update with characterId when available
+    const payload = onInventoryUpdate.mock.calls[0][0];
+    expect(Array.isArray(payload)).toBeTruthy();
+    const first = payload[0];
+    if (first.id) {
+      expect(first.id).toBe('p_hp_1');
+      expect(first.characterId).toBe(character.id);
+    } else {
+      expect(first.name).toMatch(/Potion of Minor Healing/i);
+    }
+
     // Cleanup external button
     document.body.removeChild(external);
 

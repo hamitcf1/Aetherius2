@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { InventoryItem, EquipmentSlot } from '../types';
+import { useLocalization } from '../services/localization';
+import { getItemName } from '../services/itemLocalization';
 import { Sword, Shield, Crown, Shirt, Hand, Footprints, CircleDot, Gem, X, Swords, Star, Lock } from 'lucide-react';
 import { getItemStats, shouldHaveStats } from '../services/itemStats';
 // Show base + upgrade bonus breakdowns in equipment tooltips
@@ -7,7 +9,7 @@ import { getItemBaseAndBonus } from '../services/upgradeService';
 
 interface EquipmentHUDProps {
   items: InventoryItem[];
-  onUnequip: (item: InventoryItem) => void;
+  onUnequip?: (item: InventoryItem) => void;
   onEquipFromSlot: (slot: EquipmentSlot) => void;
 }
 
@@ -36,6 +38,7 @@ const RING_KEYWORDS = ['ring', 'band', 'signet'];
 const NECKLACE_KEYWORDS = ['necklace', 'amulet', 'pendant', 'torc', 'chain'];
 
 export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, onEquipFromSlot }) => {
+  const { t } = useLocalization();
   // Get equipped items by slot (filter out zero-quantity items to prevent "x0" display bugs)
   const equippedBySlot = useMemo(() => {
     const map: Record<EquipmentSlot, InventoryItem | null> = {
@@ -48,14 +51,14 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
       ring: null,
       necklace: null,
     };
-    
+
     // Only consider items with positive quantity to prevent zero-qty/equipped state bugs
     items.filter(i => i.equipped && i.slot && (i.quantity || 0) > 0).forEach(item => {
       if (item.slot) {
         map[item.slot] = item;
       }
     });
-    
+
     return map;
   }, [items]);
 
@@ -75,7 +78,7 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
   const totalStats = useMemo(() => {
     let armor = 0;
     let damage = 0;
-    
+
     items.filter(i => i.equipped && (i.quantity || 0) > 0).forEach(item => {
       // Get stats from item, or fall back to itemStats service
       let itemArmor = item.armor;
@@ -84,18 +87,18 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
         const b = getItemBaseAndBonus(item as any);
         if (b.totalArmor) itemArmor = b.totalArmor;
         if (b.totalDamage) itemDamage = b.totalDamage;
-      } catch (e) {}
-      
+      } catch (e) { }
+
       if ((itemArmor === undefined || itemDamage === undefined) && shouldHaveStats(item.type)) {
         const stats = getItemStats(item.name, item.type);
         if (itemArmor === undefined) itemArmor = stats.armor;
         if (itemDamage === undefined) itemDamage = stats.damage;
       }
-      
+
       armor += itemArmor || 0;
       damage += itemDamage || 0;
     });
-    
+
     return { armor, damage };
   }, [items]);
 
@@ -105,12 +108,12 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
       <div className="flex justify-center gap-6 mb-4 pb-3 border-b border-skyrim-border/50">
         <div className="flex items-center gap-2">
           <Shield size={18} className="text-blue-400" />
-          <span className="text-sm text-skyrim-text">Armor:</span>
+          <span className="text-sm text-skyrim-text">{t('equipment.armor')}:</span>
           <span className="text-lg font-bold text-blue-400">{totalStats.armor}</span>
         </div>
         <div className="flex items-center gap-2">
           <Swords size={18} className="text-red-400" />
-          <span className="text-sm text-skyrim-text">Damage:</span>
+          <span className="text-sm text-skyrim-text">{t('equipment.damage')}:</span>
           <span className="text-lg font-bold text-red-400">{totalStats.damage}</span>
         </div>
       </div>
@@ -118,8 +121,8 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
       {/* Body Silhouette with Equipment Slots */}
       <div className="relative w-full max-w-[280px] mx-auto h-[320px]">
         {/* Body Silhouette SVG */}
-        <svg 
-          viewBox="0 0 100 150" 
+        <svg
+          viewBox="0 0 100 150"
           className="absolute inset-0 w-full h-full opacity-20"
           fill="currentColor"
         >
@@ -155,25 +158,21 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
               <div
                 onClick={() => {
                   if (disabled) return;
-                  return equipped ? onUnequip(equipped) : onEquipFromSlot(config.slot);
+                  return equipped ? (onUnequip ? onUnequip(equipped) : undefined) : onEquipFromSlot(config.slot);
                 }}
                 className={`
                   w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer
                   transition-all duration-200 group relative
-                  ${equipped 
-                    ? 'bg-skyrim-gold/20 border-skyrim-gold shadow-[0_0_10px_rgba(192,160,98,0.3)]' 
+                  ${equipped
+                    ? 'bg-skyrim-gold/20 border-skyrim-gold shadow-[0_0_10px_rgba(192,160,98,0.3)]'
                     : disabled
                       ? 'bg-gray-800 border-gray-700 cursor-not-allowed opacity-60'
                       : 'bg-skyrim-paper/50 border-skyrim-border/50 hover:border-skyrim-gold/50 hover:bg-skyrim-paper/70'
                   }
                 `}
-                title={equipped ? `${equipped.name} (Click to unequip)` : (
-                  disabled ? 'Disabled due to two-handed main weapon' : (
-                    config.slot === 'offhand'
-                      ? 'Equip Off-hand (shields or small weapons only)'
-                      : config.slot === 'weapon'
-                        ? 'Equip Main Hand (two-handed or main-hand weapons)'
-                        : `Equip ${config.label}`
+                title={equipped ? `${getItemName(equipped, t)}${onUnequip ? ` (${t('inventory.unequip')})` : ''}` : (
+                  disabled ? t('equipment.twoHandedDisabled') : (
+                    t('equipment.equipToSlot', { slot: t(`equipment.${config.slot === 'offhand' ? 'offHand' : config.slot}`) })
                   )
                 )}
               >
@@ -181,7 +180,7 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                   <>
                     <div className="text-skyrim-gold">{config.icon}</div>
                     <span className="text-[8px] text-skyrim-gold mt-0.5 truncate w-full text-center px-1">
-                      {equipped.name.length > 8 ? equipped.name.substring(0, 7) + '…' : equipped.name}
+                      {getItemName(equipped, t).length > 8 ? getItemName(equipped, t).substring(0, 7) + '…' : getItemName(equipped, t)}
                     </span>
                     {equipped.isFavorite && (
                       <div className="absolute top-1 right-1 text-yellow-400">
@@ -190,31 +189,33 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
                     )}
                     {/* Show ownership indicator when owned by a companion */}
                     {equipped.equippedBy && equipped.equippedBy !== 'player' && (
-                      <div className="absolute top-1 left-1 text-xs bg-blue-900/60 px-1 py-0.5 rounded text-blue-200" title={`Equipped by companion (${equipped.equippedBy})`}>
+                      <div className="absolute top-1 left-1 text-xs bg-blue-900/60 px-1 py-0.5 rounded text-blue-200" title={`${t('equipment.equippedByCompanion')} (${equipped.equippedBy})`}>
                         <Crown size={12} />
                       </div>
                     )}
                     {/* Unequip indicator on hover */}
-                    <div className="absolute inset-0 bg-red-900/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <X size={20} className="text-red-300" />
-                    </div>
+                    {onUnequip && (
+                      <div className="absolute inset-0 bg-red-900/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <X size={20} className="text-red-300" />
+                      </div>
+                    )}
                     {/* Stats tooltip */}
                     <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-skyrim-paper/95 border border-skyrim-gold/50 rounded px-2 py-1 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
-                      <div className="text-skyrim-gold font-bold">{equipped.name}</div>
+                      <div className="text-skyrim-gold font-bold">{getItemName(equipped, t)}</div>
                       {equipped.armor && (() => {
                         const b = getItemBaseAndBonus(equipped as any);
-                        return <div className="text-blue-400">Armor: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</div>; 
+                        return <div className="text-blue-400">{t('equipment.armor')}: {b.totalArmor}{b.bonusArmor ? ` (${b.baseArmor} + ${b.bonusArmor})` : ''}</div>;
                       })()}
                       {equipped.damage && (() => {
                         const b = getItemBaseAndBonus(equipped as any);
-                        return <div className="text-red-400">Damage: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</div>; 
+                        return <div className="text-red-400">{t('equipment.damage')}: {b.totalDamage}{b.bonusDamage ? ` (${b.baseDamage} + ${b.bonusDamage})` : ''}</div>;
                       })()}
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="text-skyrim-text/70 group-hover:text-skyrim-text">{config.icon}</div>
-                    <span className="text-[9px] text-skyrim-text/70 group-hover:text-skyrim-text mt-0.5">{config.label}</span>
+                    <span className="text-[9px] text-skyrim-text/70 group-hover:text-skyrim-text mt-0.5">{t(`equipment.${config.slot === 'offhand' ? 'offHand' : config.slot}`)}</span>
                     {disabled && (
                       <div className="absolute -top-2 right-0 text-skyrim-text text-xs flex items-center gap-1">
                         <Lock size={12} />
@@ -230,7 +231,7 @@ export const EquipmentHUD: React.FC<EquipmentHUDProps> = ({ items, onUnequip, on
 
       {/* Legend */}
       <div className="mt-4 pt-3 border-t border-skyrim-border/50 text-center">
-        <p className="text-[10px] text-skyrim-text">Click empty slot to equip • Click equipped item to unequip</p>
+        <p className="text-[10px] text-skyrim-text">{t('equipment.legend')}</p>
       </div>
     </div>
   );
@@ -241,14 +242,14 @@ export const getDefaultSlotForItem = (item: InventoryItem): EquipmentSlot | null
   if (item.slot) return item.slot;
   // If explicit spellId present, this is a tome/scroll — not equippable
   if ((item as any).spellId) return null;
-  
+
   const nameLower = item.name.toLowerCase();
-  
+
   // Only weapons and apparel can be equipped
   if (item.type !== 'weapon' && item.type !== 'apparel') {
     return null;
   }
-  
+
   // Shields are conceptually off-hand regardless of being typed as 'apparel' in some data sources.
   // Handle shields first so mis-typed shield items don't fall through to 'chest'.
   if (nameLower.includes('shield')) return 'offhand';
@@ -261,7 +262,7 @@ export const getDefaultSlotForItem = (item: InventoryItem): EquipmentSlot | null
     if (nameLower.includes('torch')) return 'offhand';
     return 'weapon';
   }
-  
+
   if (item.type === 'apparel') {
     if (nameLower.includes('helmet') || nameLower.includes('hood') || nameLower.includes('circlet') || nameLower.includes('crown')) return 'head';
     // Check for ring keywords
@@ -274,7 +275,7 @@ export const getDefaultSlotForItem = (item: InventoryItem): EquipmentSlot | null
     // Default apparel to chest
     return 'chest';
   }
-  
+
   return null;
 };
 

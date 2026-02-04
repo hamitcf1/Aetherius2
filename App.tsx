@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-    INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
-    DifficultyLevel, WeatherState, StatusEffect, Companion,
-    DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
+import {
+  INITIAL_CHARACTER_TEMPLATE, SKYRIM_SKILLS, Character, Perk, CustomQuest, JournalEntry, UserProfile, InventoryItem, StoryChapter, GameStateUpdate, GeneratedCharacterData, CombatState, CombatEnemy,
+  DifficultyLevel, WeatherState, StatusEffect, Companion,
+  DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
 import GameSidebar, { ActionButton } from './components/GameSidebar';
@@ -19,6 +19,9 @@ import { CharacterSelect } from './components/CharacterSelect';
 import { OnboardingModal } from './components/OnboardingModal';
 import { CombatModal } from './components/CombatModal';
 import DungeonModal from './components/DungeonModal';
+import BugReportModal from './components/BugReportModal';
+import { AnimatePresence } from 'framer-motion';
+import { AnimatedPage, AnimatedCard } from './components/AnimatedUI';
 import { LockpickingMinigame, LockDifficulty } from './components/LockpickingMinigame';
 import { BlessingModal, Blessing } from './components/BlessingModal';
 import MapPage, { MapEvent, MapMission } from './components/MapPage';
@@ -29,14 +32,15 @@ import { ConsoleOverlay } from './components/ConsoleOverlay';
 import { Changelog } from './components/Changelog';
 import UpdateNotification from './components/UpdateNotification';
 import { ToastNotification } from './components/ToastNotification';
+import { computeGoldReward } from './services/levelUpRewards';
 import { QuestNotificationOverlay, QuestNotification } from './components/QuestNotification';
 import { LevelUpNotificationOverlay, LevelUpNotificationData } from './components/LevelUpNotification';
 import LevelBadge from './components/LevelBadge';
 import SnowEffect from './components/SnowEffect';
 import type { SnowSettings } from './components/SnowEffect';
-import { 
-  OfflineIndicator, 
-  AutoSaveIndicator, 
+import {
+  OfflineIndicator,
+  AutoSaveIndicator,
   RateLimitIndicator,
   EncumbranceIndicator,
   SaveStatus,
@@ -44,8 +48,8 @@ import {
   processOfflineQueue
 } from './components/StatusIndicators';
 import { COLOR_THEMES, getEasterEggName } from './components/GameFeatures';
-import { 
-  CharacterExportModal, 
+import {
+  CharacterExportModal,
   CharacterImportModal,
   downloadCharacterExport,
   TimeIcon,
@@ -60,15 +64,15 @@ import {
 import { User, Scroll, BookOpen, Skull, Package, Feather, LogOut, Users, Loader, Save, Swords, Compass, ChevronDown } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { setCurrentUser as setFeatureFlagUser, isFeatureEnabled, isFeatureWIP } from './featureFlags';
-import { 
+import {
   initializeCombat,
   calculatePlayerCombatStats
 } from './services/combatService';
 import { shouldStartCombatForEvent, createCombatStateForEvent } from './services/mapEventHandlers';
 import MiniGameModal from './components/MiniGameModal';
-import { 
+import {
   auth,
-  onAuthChange, 
+  onAuthChange,
   registerUser,
   loginUser,
   loginAnonymously,
@@ -99,7 +103,7 @@ import {
   removeDuplicateItems,
   deleteJournalEntry,
   deleteStoryChapter,
-  // Companions & Loadouts
+  // Companions & Loadouts.
   loadUserCompanions,
   saveUserCompanions,
   deleteUserCompanions,
@@ -129,6 +133,7 @@ import { updateMusicForContext, AmbientContext, audioService, playMusic } from '
 import { getSkyrimCalendarDate, formatSkyrimDate, formatSkyrimDateShort } from './utils/skyrimCalendar';
 import { getRateLimitStats, generateAdventureResponse } from './services/geminiService';
 import { learnSpell, getSpellById, mergeLearnedSpellsFromCharacter, getLearnedSpellIds } from './services/spells';
+import { normalizeStatusEffect } from './utils/statusHelpers';
 import { storage } from './services/storage';
 import { applyCompanionXp } from './services/companionsService';
 import { ShopModal, SHOP_INVENTORY } from './components/ShopModal';
@@ -139,9 +144,9 @@ import type { RestOptions } from './components/SurvivalModals';
 import { filterDuplicateTransactions, getTransactionLedger } from './services/transactionLedger';
 import AchievementsModal from './components/AchievementsModal';
 import AchievementNotification from './components/AchievementNotification';
-import { 
-  checkAchievements, 
-  collectAchievementReward, 
+import {
+  checkAchievements,
+  collectAchievementReward,
   getDefaultAchievementStats,
   markAchievementsNotified,
   ACHIEVEMENTS,
@@ -251,7 +256,7 @@ const SURVIVAL_THRESHOLDS = {
 
 const clampNeedValue = (n: number) => clamp(Number(n || 0), 0, 100);
 
-const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue: number }) => {
+const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue: number }, t: (key: string) => string) => {
   const hunger = clampNeedValue(needs.hunger);
   const thirst = clampNeedValue(needs.thirst);
   const fatigue = clampNeedValue(needs.fatigue);
@@ -264,19 +269,19 @@ const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue
   if (hunger >= SURVIVAL_THRESHOLDS.severe) {
     effects.push({
       id: 'survival_hunger_severe',
-      name: 'Starving',
+      name: t('survival.starving'),
       type: 'debuff',
       icon: '🍖',
-      description: 'Weakness and slowed reactions. Fighting and travel suffer until you eat.',
+      description: t('survival.starvingDesc'),
       effects: [{ stat: 'combat', modifier: -0.2 }]
     });
   } else if (hunger >= SURVIVAL_THRESHOLDS.warn) {
     effects.push({
       id: 'survival_hunger_warn',
-      name: 'Hungry',
+      name: t('survival.hungry'),
       type: 'debuff',
       icon: '🍞',
-      description: 'Your body demands food. Stamina and focus start to slip.',
+      description: t('survival.hungryDesc'),
       effects: [{ stat: 'combat', modifier: -0.1 }]
     });
   }
@@ -284,19 +289,19 @@ const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue
   if (thirst >= SURVIVAL_THRESHOLDS.severe) {
     effects.push({
       id: 'survival_thirst_severe',
-      name: 'Dehydrated',
+      name: t('survival.dehydrated'),
       type: 'debuff',
       icon: '💧',
-      description: 'Your endurance is failing. Fatigue rises faster until you drink.',
+      description: t('survival.dehydratedDesc'),
       effects: [{ stat: 'endurance', modifier: -0.2 }]
     });
   } else if (thirst >= SURVIVAL_THRESHOLDS.warn) {
     effects.push({
       id: 'survival_thirst_warn',
-      name: 'Thirsty',
+      name: t('survival.thirsty'),
       type: 'debuff',
       icon: '🥤',
-      description: 'Dry mouth and dull senses. You need water soon.',
+      description: t('survival.thirstyDesc'),
       effects: [{ stat: 'endurance', modifier: -0.1 }]
     });
   }
@@ -304,28 +309,28 @@ const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue
   if (fatigue >= SURVIVAL_THRESHOLDS.critical) {
     effects.push({
       id: 'survival_fatigue_critical',
-      name: 'Collapsed',
+      name: t('survival.exhausted'),
       type: 'debuff',
       icon: '💤',
-      description: 'You can barely stay conscious. Rest is mandatory.',
+      description: t('survival.exhaustedDesc'),
       effects: [{ stat: 'actions', modifier: -1 }]
     });
   } else if (fatigue >= SURVIVAL_THRESHOLDS.severe) {
     effects.push({
       id: 'survival_fatigue_severe',
-      name: 'Exhausted',
+      name: t('survival.exhausted'),
       type: 'debuff',
       icon: '😵',
-      description: 'Your limbs feel heavy. Combat and travel are heavily penalized.',
+      description: t('survival.exhaustedDesc'),
       effects: [{ stat: 'combat', modifier: -0.25 }]
     });
   } else if (fatigue >= SURVIVAL_THRESHOLDS.warn) {
     effects.push({
       id: 'survival_fatigue_warn',
-      name: 'Tired',
+      name: t('survival.tired'),
       type: 'debuff',
       icon: '🕯️',
-      description: 'Slower reactions and reduced endurance.',
+      description: t('survival.tiredDesc'),
       effects: [{ stat: 'combat', modifier: -0.1 }]
     });
   }
@@ -333,10 +338,10 @@ const computeSurvivalEffects = (needs: { hunger: number; thirst: number; fatigue
   if (!forcedRest && sum >= SURVIVAL_THRESHOLDS.collapseSum - 10) {
     effects.push({
       id: 'survival_edge',
-      name: 'On the Edge',
+      name: t('survival.exhausted'), // 'On the Edge' -> Exhausted or similar warning
       type: 'debuff',
       icon: '⚠️',
-      description: 'Hunger and thirst are compounding. Keep pushing and you will collapse.',
+      description: t('survival.exhaustedDesc'),
       effects: [{ stat: 'actions', modifier: -0.5 }]
     });
   }
@@ -448,7 +453,7 @@ const StoryDropdown: React.FC<{ activeTab: string; setActiveTab: (tab: string) =
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        buttonRef.current && 
+        buttonRef.current &&
         !buttonRef.current.contains(event.target as Node) &&
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
@@ -471,10 +476,9 @@ const StoryDropdown: React.FC<{ activeTab: string; setActiveTab: (tab: string) =
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-          isStoryActive
-              ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-              : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
+        className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${isStoryActive
+          ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+          : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
           }`}
       >
         <Feather size={14} className="sm:w-4 sm:h-4" />
@@ -485,7 +489,7 @@ const StoryDropdown: React.FC<{ activeTab: string; setActiveTab: (tab: string) =
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-[100] min-w-[140px] animate-in fade-in slide-in-from-top-2"
+          className="glass-panel border-zinc-700/50 rounded-lg shadow-xl z-[100] min-w-[140px] animate-in fade-in slide-in-from-top-2"
           style={{
             position: 'fixed',
             left: dropdownPos.left,
@@ -496,18 +500,16 @@ const StoryDropdown: React.FC<{ activeTab: string; setActiveTab: (tab: string) =
         >
           <button
             onClick={() => { setActiveTab(TABS.STORY); setIsOpen(false); }}
-            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${
-              activeTab === TABS.STORY ? 'text-skyrim-gold' : 'text-skyrim-text'
-            }`}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${activeTab === TABS.STORY ? 'text-skyrim-gold' : 'text-skyrim-text'
+              }`}
           >
             {t('nav.story')}
             {activeTab === TABS.STORY && <span className="text-skyrim-gold">✓</span>}
           </button>
           <button
             onClick={() => { setActiveTab(TABS.JOURNAL); setIsOpen(false); }}
-            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${
-              activeTab === TABS.JOURNAL ? 'text-skyrim-gold' : 'text-skyrim-text'
-            }`}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-skyrim-paper/30 transition-colors ${activeTab === TABS.JOURNAL ? 'text-skyrim-gold' : 'text-skyrim-text'
+              }`}
           >
             {t('nav.journal')}
             {activeTab === TABS.JOURNAL && <span className="text-skyrim-gold">✓</span>}
@@ -531,7 +533,7 @@ interface AppGameState {
 const App: React.FC = () => {
   // Localization
   const { t } = useLocalization();
-  
+
   // Authentication State
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -584,17 +586,17 @@ const App: React.FC = () => {
   // Mini-game state (prototype for interactive missions)
   const [miniGameOpen, setMiniGameOpen] = useState<boolean>(false);
   const [miniGameMission, setMiniGameMission] = useState<MapMission | null>(null);
-  
+
   // Lockpicking minigame state (for treasure events)
   const [lockpickingOpen, setLockpickingOpen] = useState<boolean>(false);
   const [lockpickingEventId, setLockpickingEventId] = useState<string | null>(null);
   const [lockpickingDifficulty, setLockpickingDifficulty] = useState<LockDifficulty>('novice');
-  
+
   // Blessing modal state (for shrine events)
   const [blessingModalOpen, setBlessingModalOpen] = useState<boolean>(false);
   const [blessingEventId, setBlessingEventId] = useState<string | null>(null);
   const [blessingShrineName, setBlessingShrineName] = useState<string>('Divine Shrine');
-  
+
   // Merchant shop state (for merchant events)
   const [merchantShopOpen, setMerchantShopOpen] = useState<boolean>(false);
   const [merchantEventId, setMerchantEventId] = useState<string | null>(null);
@@ -602,35 +604,35 @@ const App: React.FC = () => {
   // ========== NEW FEATURE MODAL STATES ==========
   // Alchemy modal state
   const [alchemyModalOpen, setAlchemyModalOpen] = useState<boolean>(false);
-  
+
   // Cooking modal state
   const [cookingModalOpen, setCookingModalOpen] = useState<boolean>(false);
-  
+
   // Travel modal state
   const [travelModalOpen, setTravelModalOpen] = useState<boolean>(false);
-  
+
   // Faction modal state
   const [factionModalOpen, setFactionModalOpen] = useState<boolean>(false);
-  
+
   // Faction reputation state
   const [factionReputation, setFactionReputation] = useState<FactionReputation[]>(() => getInitialReputation());
-  
+
   // Dynamic weather state
   const [currentWeather, setCurrentWeather] = useState(() => generateWeather('whiterun', 8));
-  
+
   // ========== EXTENDED GAME SYSTEMS STATES ==========
   // Shouts Modal
   const [shoutsModalOpen, setShoutsModalOpen] = useState<boolean>(false);
   const [shoutState, setShoutState] = useState<ShoutState>(() => initializeShoutState());
-  
+
   // Enchanting Modal
   const [enchantingModalOpen, setEnchantingModalOpen] = useState<boolean>(false);
   const [enchantingState, setEnchantingState] = useState<EnchantingState>(() => initializeEnchantingState());
-  
+
   // Standing Stones Modal
   const [standingStonesModalOpen, setStandingStonesModalOpen] = useState<boolean>(false);
   const [standingStoneState, setStandingStoneState] = useState<StandingStoneState>(() => initializeStandingStoneState());
-  
+
   // Bounty Modal
   const [bountyModalOpen, setBountyModalOpen] = useState<boolean>(false);
   const [bountyState, setBountyState] = useState<BountyState>(() => initializeBountyState());
@@ -649,6 +651,8 @@ const App: React.FC = () => {
 
   // AI Scribe Modal
   const [aiScribeModalOpen, setAiScribeModalOpen] = useState<boolean>(false);
+  // Bug Report modal
+  const [bugReportOpen, setBugReportOpen] = useState<boolean>(false);
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -668,7 +672,7 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [statusEffects.length]);
   const [companions, setCompanions] = useState<Companion[]>([]);
-  
+
   // Dynamic Events System State
   const [dynamicEventState, setDynamicEventState] = useState<DynamicEventState | null>(null);
   const [eventNotifications, setEventNotifications] = useState<EventNotificationData[]>([]);
@@ -679,13 +683,13 @@ const App: React.FC = () => {
     const id = uniqueId();
     // Prevent duplicate notifications for same event within 2 seconds
     setEventNotifications(prev => {
-      const isDuplicate = prev.some(n => 
-        n.eventId === notification.eventId && 
+      const isDuplicate = prev.some(n =>
+        n.eventId === notification.eventId &&
         n.type === notification.type &&
         (Date.now() - n.timestamp) < 2000
       );
       if (isDuplicate) return prev;
-      
+
       // Auto-dismiss after 5 seconds
       const notifWithDefaults: EventNotificationData = {
         ...notification,
@@ -701,7 +705,7 @@ const App: React.FC = () => {
       audioService.playSoundEffect('quest_complete');
     }
   }, []);
-  
+
   const [colorTheme, setColorTheme] = useState('default');
   const [weatherEffect, setWeatherEffect] = useState<'snow' | 'rain' | 'sandstorm' | 'none'>(() => {
     // Load from localStorage
@@ -710,7 +714,7 @@ const App: React.FC = () => {
       if (saved && ['snow', 'rain', 'sandstorm', 'none'].includes(saved)) {
         return saved as 'snow' | 'rain' | 'sandstorm' | 'none';
       }
-    } catch (e) {}
+    } catch (e) { }
     return 'snow';
   });
 
@@ -738,7 +742,7 @@ const App: React.FC = () => {
       try {
         if ((window as any).cancelIdleCallback && handle) (window as any).cancelIdleCallback(handle);
         else clearTimeout(handle as number);
-      } catch {}
+      } catch { }
     };
   }, []);
 
@@ -754,14 +758,14 @@ const App: React.FC = () => {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
-  
+
   const [weatherIntensity, setWeatherIntensity] = useState<'light' | 'normal' | 'heavy' | 'blizzard'>(() => {
     try {
       const saved = localStorage.getItem('aetherius:weatherIntensity');
       if (saved && ['light', 'normal', 'heavy', 'blizzard'].includes(saved)) {
         return saved as 'light' | 'normal' | 'heavy' | 'blizzard';
       }
-    } catch (e) {}
+    } catch (e) { }
     return 'normal';
   });
 
@@ -769,14 +773,14 @@ const App: React.FC = () => {
   React.useEffect(() => {
     try {
       localStorage.setItem('aetherius:weatherEffect', weatherEffect);
-    } catch (e) {}
+    } catch (e) { }
   }, [weatherEffect]);
-  
+
   // Save weather intensity preference
   React.useEffect(() => {
     try {
       localStorage.setItem('aetherius:weatherIntensity', weatherIntensity);
-    } catch (e) {}
+    } catch (e) { }
   }, [weatherIntensity]);
 
   // Apply theme variables (light / default)
@@ -911,10 +915,55 @@ const App: React.FC = () => {
     remainingXP: number;
     archetype?: string;
     previousXP: number;
+    // Reward fields
+    rewardChoice?: 'gold' | 'chest' | null;
+    rewardGoldAmount?: number | null;
+    chestItems?: any[] | null;
   }>(null);
 
   // If a player cancels a level-up, we keep it available so they can apply it later from the hero page
   const [availableLevelUps, setAvailableLevelUps] = useState<Record<string, { charId: string; charName: string; newLevel: number; remainingXP: number; archetype?: string; previousXP: number }>>({});
+
+  // Persist available level-ups across refreshes so players don't lose postponed level ups
+  const LEVELUP_STORAGE_KEY = 'aetherius_available_levelups_v1';
+
+  // Load persisted available level-ups on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LEVELUP_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          setAvailableLevelUps(prev => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load available level-ups from localStorage', e);
+    }
+  }, []);
+
+  // Save available level-ups whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEVELUP_STORAGE_KEY, JSON.stringify(availableLevelUps));
+    } catch (e) {
+      console.warn('Failed to persist available level-ups', e);
+    }
+  }, [availableLevelUps]);
+
+  // Prune any persisted available level-ups that no longer match loaded characters
+  useEffect(() => {
+    if (!characters || characters.length === 0) return;
+    const ids = new Set((characters || []).map(c => c.id));
+    setAvailableLevelUps(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(k => {
+        if (!ids.has(k)) { delete next[k]; changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [characters]);
 
   // Companions modal state
   const [companionsModalOpen, setCompanionsModalOpen] = useState(false);
@@ -922,10 +971,10 @@ const App: React.FC = () => {
 
   // Achievement system state
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
-  const [achievementState, setAchievementState] = useState<AchievementState>({ 
-    unlockedAchievements: {}, 
+  const [achievementState, setAchievementState] = useState<AchievementState>({
+    unlockedAchievements: {},
     notifiedAchievements: new Set(),
-    stats: getDefaultAchievementStats() 
+    stats: getDefaultAchievementStats()
   });
   const [achievementsLoaded, setAchievementsLoaded] = useState(false);
   const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
@@ -1011,9 +1060,17 @@ const App: React.FC = () => {
     return out;
   };
 
-  // Toast notification helper
+  // Toast notification helper (with short-term dedupe to prevent duplicate messages)
+  const lastToastTimestamps = React.useRef<Record<string, number>>({});
   const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', opts?: { color?: string; stat?: string; amount?: number }) => {
-    // (no-change) helper kept here for context; Bonfire uses same toast flow
+    // Debounce identical messages within 800ms to avoid duplicate toasts caused by duplicate calls
+    try {
+      const key = `${type}:${message}`;
+      const now = Date.now();
+      const prev = lastToastTimestamps.current[key] || 0;
+      if (now - prev < 800) return; // skip duplicate
+      lastToastTimestamps.current[key] = now;
+    } catch (e) { /* best-effort dedupe */ }
 
     const id = uniqueId();
     setToastMessages(prev => {
@@ -1031,12 +1088,12 @@ const App: React.FC = () => {
     // CRITICAL: Always clear companions and status effects when character changes to prevent carryover
     setCompanions([]);
     setStatusEffects([]); // Clear status effects when switching characters
-    
+
     // Only load companions if we have both user and character selected
     if (!currentUser?.uid || !currentCharacterId) return;
-    
+
     const key = `aetherius:companions:${currentUser.uid}:${currentCharacterId}`;
-    
+
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
@@ -1071,12 +1128,12 @@ const App: React.FC = () => {
     // Persist companions per-character when possible
     // Only persist companions if we have both user and character selected
     if (!currentUser?.uid || !currentCharacterId) return;
-    
+
     const key = `aetherius:companions:${currentUser.uid}:${currentCharacterId}`;
-    
+
     // Filter companions to only include those for current character (safety check)
     const characterCompanions = companions.filter(c => c.characterId === currentCharacterId);
-    
+
     try {
       localStorage.setItem(key, JSON.stringify(characterCompanions));
     } catch (err) {
@@ -1097,13 +1154,13 @@ const App: React.FC = () => {
   useEffect(() => {
     // Clear dynamic event state when character changes
     setDynamicEventState(null);
-    
+
     if (!currentUser?.uid || !currentCharacterId) return;
-    
+
     // Find the character from the loaded characters array
     const character = characters.find(c => c.id === currentCharacterId);
     if (!character) return; // Wait until character is loaded
-    
+
     (async () => {
       try {
         // Try loading from Firebase first
@@ -1208,7 +1265,7 @@ const App: React.FC = () => {
     } catch (e) {
       // ignore
     }
-    return () => { try { delete (window as any).openCompanions; delete (window as any).cancelLevelUp; delete (window as any).availableLevelUps; } catch {} };
+    return () => { try { delete (window as any).openCompanions; delete (window as any).cancelLevelUp; delete (window as any).availableLevelUps; } catch { } };
   }, [openCompanions, availableLevelUps]);
 
   // Map stat to a representative color (hex)
@@ -1223,7 +1280,7 @@ const App: React.FC = () => {
   };
 
   // Try to parse vitals-like effects from a consumable item (food/drink)
-  const parseConsumableVitals = (item: any) : Array<{ stat: 'health' | 'magicka' | 'stamina'; amount: number }> => {
+  const parseConsumableVitals = (item: any): Array<{ stat: 'health' | 'magicka' | 'stamina'; amount: number }> => {
     const out: Array<{ stat: 'health' | 'magicka' | 'stamina'; amount: number }> = [];
     if (!item) return out;
     // 1) explicit numeric damage and subtype
@@ -1481,7 +1538,7 @@ const App: React.FC = () => {
         const newBuffer = (prev + lower).slice(-7); // Keep last 7 characters
         if (newBuffer.includes('console')) {
           // Prevent the final keypress from being applied to the newly-focused console input
-          try { e.preventDefault(); } catch (err) {}
+          try { e.preventDefault(); } catch (err) { }
           setShowConsole(true);
           return '';
         }
@@ -1572,7 +1629,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const theme = COLOR_THEMES.find(t => t.id === colorTheme) || COLOR_THEMES[0];
     const root = document.documentElement;
-    
+
     // Apply theme colors to CSS variables
     root.style.setProperty('--skyrim-dark', theme.colors.background);
     root.style.setProperty('--skyrim-paper', theme.colors.paper);
@@ -1659,7 +1716,7 @@ const App: React.FC = () => {
       setCurrentUser(user);
       // Update feature flags with current user for admin checks
       setFeatureFlagUser(user?.uid || null);
-      
+
       if (user) {
         try {
           // Initialize Firestore (must happen before any queries)
@@ -1719,7 +1776,7 @@ const App: React.FC = () => {
           const normalizedCharacters = (userCharacters || []).map((c: any) => {
             const time = c?.time && typeof c.time === 'object' ? c.time : INITIAL_CHARACTER_TEMPLATE.time;
             const needs = c?.needs && typeof c.needs === 'object' ? c.needs : INITIAL_CHARACTER_TEMPLATE.needs;
-            
+
             // --- XP/Level normalization for legacy characters ---
             // Old system: level was manually set by player (not tied to XP)
             // New system: level is derived from total XP
@@ -1730,16 +1787,16 @@ const App: React.FC = () => {
             const xpRequiredForCurrentLevel = getTotalXPForLevel(currentLevel);
             let normalizedXP = currentXP;
             let xpWasNormalized = false;
-            
+
             if (currentXP < xpRequiredForCurrentLevel) {
               // Legacy character: XP doesn't match level. Normalize XP to match level baseline.
               normalizedXP = xpRequiredForCurrentLevel;
               xpWasNormalized = true;
             }
-            
+
             // Ensure character has all default skills (adds missing skills introduced in new releases)
             const defaultSkills = (SKYRIM_SKILLS || []).map(s => s.name);
-            const mergedSkills = Array.isArray(c.skills) ? [ ...c.skills ] : [];
+            const mergedSkills = Array.isArray(c.skills) ? [...c.skills] : [];
             for (const sk of defaultSkills) {
               if (!mergedSkills.some(ms => ms.name === sk)) {
                 // Default level for missing skills is taken from SKYRIM_SKILLS
@@ -1806,22 +1863,22 @@ const App: React.FC = () => {
             // ignore and fall back to localStorage loaded companions
             console.warn('Could not load companions from Firestore, using local copies if available.');
           }
-          
+
           // Restore last selected character and tab from localStorage
           // BUT only if this is a page refresh, not a fresh login
           try {
             const isFreshLogin = sessionStorage.getItem('aetherius:freshLogin') === '1';
-            
+
             // Clear the fresh login marker after checking
             if (isFreshLogin) {
               sessionStorage.removeItem('aetherius:freshLogin');
             }
-            
+
             // Only restore character on page refresh, not on fresh login
             if (!isFreshLogin) {
               const lastCharId = localStorage.getItem(`aetherius:lastCharacter:${user.uid}`);
               const lastTab = localStorage.getItem(`aetherius:lastTab:${user.uid}`);
-              
+
               // Only restore if the character still exists
               if (lastCharId && normalizedCharacters.some((c: Character) => c.id === lastCharId)) {
                 setCurrentCharacterId(lastCharId);
@@ -1847,7 +1904,7 @@ const App: React.FC = () => {
             console.warn('Error on logout:', error);
           }
         }
-        
+
         setProfiles([]);
         setCharacters([]);
         setItems([]);
@@ -1878,29 +1935,29 @@ const App: React.FC = () => {
   );
 
   // ===== DYNAMIC EVENTS HANDLERS =====
-  
+
   // Helper to get game time in hours for event expiration
-  const currentGameTimeHours = activeCharacter?.time 
-    ? getGameTimeInHours(activeCharacter.time) 
+  const currentGameTimeHours = activeCharacter?.time
+    ? getGameTimeInHours(activeCharacter.time)
     : 0;
 
   // Handle starting a dynamic event
   const handleStartDynamicEvent = useCallback((event: DynamicEvent) => {
     if (!dynamicEventState || !activeCharacter) return;
-    
+
     // Check if event is already active (prevent duplicate starts)
     if (event.status === 'active') {
       showToast(`Event "${event.name}" is already active`, 'info');
       return;
     }
-    
+
     // Check if player meets level requirement
     const playerLvl = activeCharacter.level || 1;
     if (playerLvl < event.levelRequirement) {
       showToast(`You must be level ${event.levelRequirement} to start this event`, 'warning');
       return;
     }
-    
+
     // Check if already at max active events
     const activeCount = dynamicEventState.activeEvents.filter(
       e => e.status === 'active'
@@ -1909,11 +1966,11 @@ const App: React.FC = () => {
       showToast('You already have 5 active events. Complete or wait for some to expire.', 'warning');
       return;
     }
-    
+
     // Start the event
     const updatedState = startEvent(dynamicEventState, event.id);
     setDynamicEventState(updatedState);
-    
+
     showEventNotification({
       type: 'new-event',
       title: 'Event Started',
@@ -1922,9 +1979,9 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       dismissed: false,
     });
-    
+
     showToast(`Event started: ${event.name}`, 'success');
-    
+
     // Create a quest for tracking
     const difficultyMap: Record<number, 'trivial' | 'easy' | 'medium' | 'hard' | 'legendary'> = {
       1: 'easy',
@@ -1934,7 +1991,7 @@ const App: React.FC = () => {
       5: 'hard',
       6: 'legendary',
     };
-    
+
     handleGameUpdate({
       narrative: { title: 'Event Started', content: `You've begun: ${event.name}` },
       newQuests: [{
@@ -1946,7 +2003,7 @@ const App: React.FC = () => {
         difficulty: difficultyMap[event.levelTier] || 'medium',
       }]
     });
-    
+
     // Combat-type events should trigger CombatModal immediately
     const combatEventTypes = ['combat', 'dragon', 'bandit', 'rescue', 'escort'];
     if (combatEventTypes.includes(event.type)) {
@@ -1973,13 +2030,13 @@ const App: React.FC = () => {
         console.warn('[handleStartDynamicEvent] Failed to start combat from event:', e);
       }
     }
-    
+
     // Treasure events should trigger lockpicking minigame
     if (event.type === 'treasure') {
       // Map level tier to lock difficulty
       const difficultyMap: Record<number, LockDifficulty> = {
         1: 'novice',
-        2: 'apprentice', 
+        2: 'apprentice',
         3: 'adept',
         4: 'expert',
         5: 'master',
@@ -1990,7 +2047,7 @@ const App: React.FC = () => {
       setLockpickingOpen(true);
       showToast(`You found a locked chest: ${event.name}`, 'info');
     }
-    
+
     // Shrine events should open blessing modal
     if (event.type === 'shrine') {
       setBlessingShrineName(event.name || 'Divine Shrine');
@@ -1998,7 +2055,7 @@ const App: React.FC = () => {
       setBlessingModalOpen(true);
       showToast(`You approach ${event.name}...`, 'info');
     }
-    
+
     // Merchant events should open the shop
     if (event.type === 'merchant') {
       setMerchantEventId(event.id);
@@ -2011,23 +2068,23 @@ const App: React.FC = () => {
   // Handle completing a dynamic event
   const handleCompleteDynamicEvent = useCallback((eventId: string) => {
     if (!dynamicEventState || !activeCharacter) return;
-    
+
     const event = dynamicEventState.activeEvents.find(e => e.id === eventId);
-    
+
     if (!event) {
       showToast('Event not found', 'error');
       return;
     }
-    
+
     // Complete the event
     const result = completeEvent(dynamicEventState, eventId, activeCharacter.time);
     if (!result) {
       showToast('Failed to complete event', 'error');
       return;
     }
-    
+
     setDynamicEventState(result.updatedState);
-    
+
     // Show completion notification
     showEventNotification({
       type: 'event-complete',
@@ -2037,21 +2094,21 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       dismissed: false,
     });
-    
+
     // Apply rewards
     handleGameUpdate({
       xpChange: event.rewards.xp?.max || event.rewards.xp?.min || 0,
       goldChange: event.rewards.gold?.max || event.rewards.gold?.min || 0,
       narrative: { title: 'Event Completed', content: `You have completed: ${event.name}` },
     });
-    
+
     showToast(`Event completed: ${event.name}`, 'success');
-    
+
     // Handle notifications from result
     result.notifications.forEach(notif => {
       showEventNotification(notif);
     });
-    
+
     // Check if chain was completed
     if (event.chainId) {
       const chain = dynamicEventState.eventChains.find(c => c.id === event.chainId);
@@ -2071,7 +2128,7 @@ const App: React.FC = () => {
   // Check for expired events periodically
   useEffect(() => {
     if (!dynamicEventState || !activeCharacter) return;
-    
+
     const interval = setInterval(() => {
       const gameTimeHrs = getGameTimeInHours(activeCharacter.time);
       const result = processExpiredEvents(dynamicEventState, gameTimeHrs);
@@ -2080,16 +2137,16 @@ const App: React.FC = () => {
         showToast(`${result.expiredEvents.length} event(s) have expired`, 'warning');
       }
     }, 60000); // Check every minute
-    
+
     return () => clearInterval(interval);
   }, [dynamicEventState, activeCharacter?.time, showToast]);
 
   // Generate new events on level up when tier is completed
   const checkAndGenerateNewEvents = useCallback(async (newLevel: number) => {
     if (!dynamicEventState || !activeCharacter) return;
-    
+
     const { shouldGenerate, reason, newTier } = shouldGenerateNewEvents(dynamicEventState, activeCharacter);
-    
+
     if (shouldGenerate && newTier) {
       showEventNotification({
         type: 'tier-unlock',
@@ -2099,7 +2156,7 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         dismissed: false,
       });
-      
+
       // Update tier progress
       setDynamicEventState(prev => {
         if (!prev) return prev;
@@ -2122,71 +2179,92 @@ const App: React.FC = () => {
   // Auto-evaluate achievements when the character or achievement stats change (e.g., on load or level-up)
   useEffect(() => {
     if (!activeCharacter || !achievementsLoaded) return;
-    setAchievementState(prev => {
-      const { newlyUnlocked, updatedState } = checkAchievements(prev, activeCharacter, activeCharacter?.id);
-      if (newlyUnlocked && newlyUnlocked.length > 0) {
-        achievementNotificationQueueRef.current.push(...newlyUnlocked);
-        // Mark these achievements as notified (namespace with character id), but support legacy global keys
-        const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
-        // Also add legacy ids for backwards compat when older saves used un-namespaced keys
-        const legacyNotified = newlyUnlocked.map(a => a.id);
-        const markedState = markAchievementsNotified(updatedState, [...notifiedIds, ...legacyNotified]);
-        // Trigger immediate notification display if none showing
-        if (achievementNotification === null) {
-          const next = achievementNotificationQueueRef.current.shift();
-          if (next) {
-            setAchievementNotification(next);
-            audioService.playSoundEffect('quest_complete');
-          }
-        }
-        return markedState;
-      }
-      return updatedState;
+
+    // Compute per-character stats for evaluation
+    const perCharStats = auditStatsFromGameData(getDefaultAchievementStats(), activeCharacter, {
+      quests: getCharacterQuests(),
+      inventory: getCharacterItems(),
+      companions: companions.filter(c => c.characterId === activeCharacter.id),
+      // transactions/playTime can be added when available
     });
-  }, [activeCharacter, achievementState.stats, achievementsLoaded]);
+
+    // Run the check using the current achievement state but with the freshly computed stats
+    const { newlyUnlocked, updatedState } = checkAchievements({ ...achievementState, stats: perCharStats }, activeCharacter, activeCharacter?.id);
+
+    // If there are newly unlocked achievements, update state and queue notifications
+    if (newlyUnlocked && newlyUnlocked.length > 0) {
+      achievementNotificationQueueRef.current.push(...newlyUnlocked);
+      const notifiedIds = newlyUnlocked.map(a => `${activeCharacter?.id}:${a.id}`);
+      const legacyNotified = newlyUnlocked.map(a => a.id);
+      const markedState = markAchievementsNotified(updatedState, [...notifiedIds, ...legacyNotified]);
+
+      // Only set state if it would actually change to avoid triggering re-render loops
+      setAchievementState(prev => {
+        // Quick identity check: if prev and markedState are referentially equal, skip
+        if (prev === markedState) return prev;
+        return markedState;
+      });
+
+      // Trigger immediate notification display if none showing
+      if (achievementNotification === null) {
+        const next = achievementNotificationQueueRef.current.shift();
+        if (next) {
+          setAchievementNotification(next);
+          audioService.playSoundEffect('quest_complete');
+        }
+      }
+
+      return;
+    }
+
+    // If nothing unlocked, only update the stats object if it actually changed
+    if (JSON.stringify(perCharStats) !== JSON.stringify(achievementState.stats)) {
+      setAchievementState(prev => ({ ...prev, stats: perCharStats }));
+    }
+  }, [activeCharacter, achievementState.stats, achievementsLoaded, achievementNotification]);
 
   const updateCharacter = useCallback((field: keyof Character, value: any) => {
-      // If someone directly sets `level`, treat it as a level-up when increasing the level
-      if (field === 'level') {
-        setCharacters(prev => prev.map(c => {
-          if (c.id !== currentCharacterId) return c;
-          const oldLevel = c.level || 0;
-          const newLevel = Number(value) || 0;
-          if (newLevel > oldLevel) {
-            // Default choice on manual level bump: increase health and restore all vitals
-            return applyLevelUpToCharacter(c, newLevel, c.experience || 0, 'health');
-          }
-          return { ...c, level: newLevel };
-        }));
-      } else {
-        setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
-      }
-
-      // If we're updating learnedSpells, ensure the local storage copy is kept in sync so
-      // learned spells survive reloads even before a cloud save occurs.
-      try {
-        if (field === 'learnedSpells' && currentCharacterId && Array.isArray(value)) {
-          const existing = getLearnedSpellIds(currentCharacterId);
-          const union = Array.from(new Set([...(existing || []), ...value]));
-          // Persist to local storage (silent on failure)
-          try { storage.setItem(`aetherius:spells:${currentCharacterId}`, JSON.stringify(union)); } catch (e) { /* ignore */ }
+    // If someone directly sets `level`, treat it as a level-up when increasing the level
+    if (field === 'level') {
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+        const oldLevel = c.level || 0;
+        const newLevel = Number(value) || 0;
+        if (newLevel > oldLevel) {
+          // Default choice on manual level bump: increase health and restore all vitals
+          return applyLevelUpToCharacter(c, newLevel, c.experience || 0, 'health');
         }
-      } catch (e) {
-        // ignore storage sync failures
-      }
+        return { ...c, level: newLevel };
+      }));
+    } else {
+      setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, [field]: value } : c));
+    }
 
-      if (currentCharacterId) {
-        setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
+    // If we're updating learnedSpells, ensure the local storage copy is kept in sync so
+    // learned spells survive reloads even before a cloud save occurs.
+    try {
+      if (field === 'learnedSpells' && currentCharacterId && Array.isArray(value)) {
+        const existing = getLearnedSpellIds(currentCharacterId);
+        const union = Array.from(new Set([...(existing || []), ...value]));
+        // Persist to local storage (silent on failure)
+        try { storage.setItem(`aetherius:spells:${currentCharacterId}`, JSON.stringify(union)); } catch (e) { /* ignore */ }
       }
+    } catch (e) {
+      // ignore storage sync failures
+    }
+
+    if (currentCharacterId) {
+      setDirtyEntities(prev => new Set([...prev, currentCharacterId]));
+    }
   }, [currentCharacterId]);
 
   // Check achievements and update stats
   const updateAchievementStats = useCallback((updates: Partial<AchievementStats>) => {
     if (!activeCharacter) return;
-    
+
     setAchievementState(prev => {
       const newStats = { ...prev.stats };
-      
+
       // Apply numeric updates (add to existing values)
       Object.entries(updates).forEach(([key, value]) => {
         if (typeof value === 'number' && typeof newStats[key as keyof AchievementStats] === 'number') {
@@ -2236,7 +2314,7 @@ const App: React.FC = () => {
   // Handle collecting achievement reward
   const handleCollectAchievementReward = useCallback((achievementId: string) => {
     if (!activeCharacter) return;
-    
+
     const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
     if (!achievement) return;
 
@@ -2245,7 +2323,7 @@ const App: React.FC = () => {
     setAchievementState(prev => {
       const unlocked = prev.unlockedAchievements[key];
       if (!unlocked || unlocked.collected) return prev;
-      
+
       return {
         ...prev,
         unlockedAchievements: {
@@ -2277,8 +2355,8 @@ const App: React.FC = () => {
     }
     if (reward.item) {
       // Normalize free-form achievement item to a valid InventoryItem shape
-      const ALLOWED_TYPES: InventoryItem['type'][] = ['weapon','apparel','potion','ingredient','misc','key','food','drink','camping'];
-      const ALLOWED_RARITIES: NonNullable<InventoryItem['rarity']>[] = ['common','uncommon','rare','mythic','epic','legendary'];
+      const ALLOWED_TYPES: InventoryItem['type'][] = ['weapon', 'apparel', 'potion', 'ingredient', 'misc', 'key', 'food', 'drink', 'camping'];
+      const ALLOWED_RARITIES: NonNullable<InventoryItem['rarity']>[] = ['common', 'uncommon', 'rare', 'mythic', 'epic', 'legendary'];
       const rawType = (reward.item.type || '').toString().toLowerCase();
       const rawRarity = (reward.item.rarity || '').toString().toLowerCase();
       const itemType = (ALLOWED_TYPES.includes(rawType as any) ? rawType : 'misc') as InventoryItem['type'];
@@ -2364,7 +2442,7 @@ const App: React.FC = () => {
       // Determine initial music based on character's current state
       const hour = char.time?.hour ?? 12;
       const isNight = hour >= 20 || hour < 5;
-      
+
       // Start with exploration or night music (will queue if not ready)
       const initialTrack = isNight ? 'night' : 'exploration';
       playMusic(initialTrack, true);
@@ -2389,7 +2467,7 @@ const App: React.FC = () => {
           // Clean up any items with zero or negative quantity (data integrity fix)
           const validItems = itemsForChar.filter(item => (item.quantity || 0) > 0);
           const invalidItems = itemsForChar.filter(item => (item.quantity || 0) <= 0);
-          
+
           if (invalidItems.length > 0) {
             console.warn(`🧹 Cleaning up ${invalidItems.length} zero-quantity ghost item(s) from inventory:`, invalidItems.map(i => `${i.name} x${i.quantity}`));
             // Delete the invalid items from Firestore in the background
@@ -2399,7 +2477,7 @@ const App: React.FC = () => {
               });
             }
           }
-          
+
           setItems(validItems);
         }
       } catch (e) {
@@ -2441,14 +2519,14 @@ const App: React.FC = () => {
   // Update user settings (voice, audio, etc.) and persist to Firebase
   const updateUserSettings = async (updates: Partial<UserSettings>) => {
     if (!currentUser?.uid) return;
-    
+
     const uid = currentUser.uid as string;
     const next: UserSettings = {
       ...(userSettings || {}),
       ...updates,
     };
     setUserSettings(next);
-    
+
     try {
       await saveUserSettings(uid, next);
     } catch (e) {
@@ -2459,7 +2537,7 @@ const App: React.FC = () => {
   // Debounced Firestore saves for dirty entities
   useEffect(() => {
     if (!currentUser) return;
-    
+
     const timer = setTimeout(async () => {
       if (dirtyEntities.size === 0) return;
 
@@ -2471,7 +2549,7 @@ const App: React.FC = () => {
           if (char) {
             await saveCharacter(currentUser.uid, char);
             // record last cloud save for UI feedback
-            try { setLastCloudSaveAt(Date.now()); setLastCloudSavedCharacterId(entityId); } catch (e) {}
+            try { setLastCloudSaveAt(Date.now()); setLastCloudSavedCharacterId(entityId); } catch (e) { }
             continue;
           }
 
@@ -2517,29 +2595,29 @@ const App: React.FC = () => {
 
   // Actions
   const handleUpdateCharacter = (characterId: string, newName: string) => {
-      setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, name: newName } : c));
-      setDirtyEntities(prev => new Set([...prev, characterId]));
+    setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, name: newName } : c));
+    setDirtyEntities(prev => new Set([...prev, characterId]));
   };
 
   // Delete a single character
   const handleDeleteCharacter = async (characterId: string) => {
     if (!currentUser) return;
-    
+
     try {
       // Delete from Firestore (this will also delete related items, quests, journal, and story)
       await deleteCharacter(currentUser.uid, characterId);
-      
+
       // Update local state - remove character and all related data
       setCharacters(prev => prev.filter(c => c.id !== characterId));
       setItems(prev => prev.filter(i => i.characterId !== characterId));
       setQuests(prev => prev.filter(q => q.characterId !== characterId));
       setJournalEntries(prev => prev.filter(j => j.characterId !== characterId));
       setStoryChapters(prev => prev.filter(s => s.characterId !== characterId));
-      
+
       // Ensure any companions tied to this character are removed locally and remotely
       try {
         // Remove per-character localStorage key
-        try { localStorage.removeItem(`aetherius:companions:${currentUser.uid}:${characterId}`); } catch {}
+        try { localStorage.removeItem(`aetherius:companions:${currentUser.uid}:${characterId}`); } catch { }
 
         // Clean up global fallback list by removing entries for the deleted character
         try {
@@ -2573,22 +2651,22 @@ const App: React.FC = () => {
   // Mark character as dead or resurrect (deathCause = null means resurrect)
   const handleMarkCharacterDead = async (characterId: string, deathCause: string | null) => {
     if (!currentUser) return;
-    
+
     const isDead = deathCause !== null;
     const updates: Partial<Character> = {
       isDead,
       deathDate: isDead ? new Date().toISOString() : undefined,
       deathCause: isDead ? deathCause : undefined
     };
-    
+
     // Update local state
-    setCharacters(prev => prev.map(c => 
-      c.id === characterId 
+    setCharacters(prev => prev.map(c =>
+      c.id === characterId
         ? { ...c, ...updates }
         : c
     ));
     setDirtyEntities(prev => new Set([...prev, characterId]));
-    
+
     // Save to Firestore
     try {
       const char = characters.find(c => c.id === characterId);
@@ -2603,7 +2681,7 @@ const App: React.FC = () => {
   // Manual Save Handler - Forces immediate Firestore flush
   const handleManualSave = async () => {
     if (!currentUser) return;
-    
+
     // Check if offline - queue changes instead
     if (!navigator.onLine) {
       setSaveStatus('offline');
@@ -2615,7 +2693,7 @@ const App: React.FC = () => {
       setTimeout(() => setSaveMessage(null), 3000);
       return;
     }
-    
+
     setIsSaving(true);
     setSaveStatus('saving');
     try {
@@ -2629,7 +2707,7 @@ const App: React.FC = () => {
         storyChapters,
         profiles
       );
-      
+
       setSaveStatus('saved');
       setLastSaved(new Date());
       setSaveMessage('✓ All data saved successfully!');
@@ -2679,7 +2757,7 @@ const App: React.FC = () => {
       } catch (e) {
         console.warn('Failed to auto-create default profile on register (non-critical):', e);
       }
-      
+
       // Save user metadata for easier tracking in database (non-blocking)
       saveUserMetadata({
         uid: userCredential.user.uid,
@@ -2790,42 +2868,42 @@ const App: React.FC = () => {
   // Login/Register Screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-skyrim-dark flex items-center justify-center p-4">
-        <div className="bg-skyrim-paper rounded-lg shadow-2xl p-8 max-w-md w-full border border-skyrim-border">
-          <h1 className="text-4xl font-serif font-bold text-skyrim-gold text-center mb-8 tracking-widest">SKYRIM</h1>
-          <p className="text-skyrim-text text-center mb-6">Welcome to Aetherius</p>
-          
+      <div className="min-h-screen bg-black/90 flex items-center justify-center p-4">
+        <div className="glass-panel rounded-xl shadow-2xl p-8 max-w-md w-full border border-zinc-700/50">
+          <h1 className="text-4xl font-serif font-bold text-skyrim-gold text-center mb-8 tracking-widest">{t('auth.welcomeTitle')}</h1>
+          <p className="text-skyrim-text text-center mb-6">{t('auth.welcomeSubtitle')}</p>
+
           {authError && (
             <div className="bg-red-900/30 border border-red-700 rounded p-4 mb-4 text-red-200 text-sm">
               {authError}
             </div>
           )}
-          
+
           {authMode === 'login' ? (
             // LOGIN FORM
             <div className="space-y-4">
-              <input 
+              <input
                 type="email"
-                placeholder="Email"
+                placeholder={t('auth.email')}
                 className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLogin(loginEmail, loginPassword)}
               />
-              <input 
+              <input
                 type="password"
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLogin(loginEmail, loginPassword)}
               />
-              
-              <button 
+
+              <button
                 onClick={() => handleLogin(loginEmail, loginPassword)}
                 className="w-full bg-skyrim-gold text-skyrim-dark font-bold py-2 rounded hover:bg-yellow-400 transition-colors"
               >
-                Login
+                {t('auth.login')}
               </button>
 
               <div className="relative flex items-center my-4">
@@ -2834,29 +2912,29 @@ const App: React.FC = () => {
                 <div className="flex-grow border-t border-skyrim-border"></div>
               </div>
 
-              <button 
+              <button
                 onClick={handleGuestLogin}
                 className="w-full bg-gray-700 text-gray-200 font-bold py-2 rounded hover:bg-gray-600 transition-colors border border-skyrim-border"
               >
-                🎮 Continue as Guest
+                🎮 {t('auth.guestLogin')}
               </button>
               <p className="text-gray-500 text-xs text-center">
                 Guest data is saved but may be lost if you clear browser data
               </p>
-              
+
               <div className="text-center space-y-2">
                 <button
                   onClick={() => { setAuthMode('forgot'); setAuthError(null); setResetEmailSent(false); }}
                   className="text-gray-400 hover:text-skyrim-gold text-sm transition-colors"
                 >
-                  Forgot your password?
+                  {t('auth.forgotPassword')}
                 </button>
                 <div>
                   <button
                     onClick={() => { setAuthMode('register'); setAuthError(null); }}
                     className="text-skyrim-gold hover:text-yellow-400 text-sm transition-colors"
                   >
-                    Don't have an account? <span className="underline">Register here</span>
+                    {t('auth.noAccount')} <span className="underline">{t('auth.register')}</span>
                   </button>
                 </div>
               </div>
@@ -2864,35 +2942,35 @@ const App: React.FC = () => {
           ) : authMode === 'register' ? (
             // REGISTER FORM
             <div className="space-y-4">
-              <input 
+              <input
                 type="text"
                 placeholder="Name / Nickname"
                 className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
                 value={loginUsername}
                 onChange={(e) => setLoginUsername(e.target.value)}
               />
-              <input 
+              <input
                 type="email"
                 placeholder="Email"
                 className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
               />
-              <input 
+              <input
                 type="password"
                 placeholder="Password (min 6 characters)"
                 className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
               />
-              
-              <button 
+
+              <button
                 onClick={() => handleRegister(loginEmail, loginPassword, loginUsername)}
                 className="w-full bg-skyrim-gold text-skyrim-dark font-bold py-2 rounded hover:bg-yellow-400 transition-colors"
               >
                 Register
               </button>
-              
+
               <div className="text-center">
                 <button
                   onClick={() => { setAuthMode('login'); setAuthError(null); }}
@@ -2923,7 +3001,7 @@ const App: React.FC = () => {
                   <p className="text-gray-400 text-sm text-center mb-4">
                     Enter your email address and we'll send you a link to reset your password.
                   </p>
-                  <input 
+                  <input
                     type="email"
                     placeholder="Email"
                     className="w-full px-4 py-2 bg-skyrim-dark/50 border border-skyrim-border rounded text-skyrim-text placeholder-gray-500 focus:outline-none focus:border-skyrim-gold"
@@ -2931,14 +3009,14 @@ const App: React.FC = () => {
                     onChange={(e) => setLoginEmail(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleForgotPassword(loginEmail)}
                   />
-                  
-                  <button 
+
+                  <button
                     onClick={() => handleForgotPassword(loginEmail)}
                     className="w-full bg-skyrim-gold text-skyrim-dark font-bold py-2 rounded hover:bg-yellow-400 transition-colors"
                   >
                     Send Reset Link
                   </button>
-                  
+
                   <div className="text-center">
                     <button
                       onClick={() => { setAuthMode('login'); setAuthError(null); }}
@@ -2957,207 +3035,207 @@ const App: React.FC = () => {
   }
 
   const handleCreateCharacter = (profileId: string, name: string, archetype: string, race: string, gender: string, fullDetails?: GeneratedCharacterData) => {
-      const charId = uniqueId();
-      
-      // 1. Base Character
-      const newChar: Character = {
-          id: charId,
-          profileId,
-          name,
-          race: race || 'Nord',
-          gender: gender || 'Male',
-          archetype: archetype || 'Warrior',
-          ...INITIAL_CHARACTER_TEMPLATE,
-          ...fullDetails,
-          gold: fullDetails?.startingGold || 0,
-          lastPlayed: Date.now()
+    const charId = uniqueId();
+
+    // 1. Base Character
+    const newChar: Character = {
+      id: charId,
+      profileId,
+      name,
+      race: race || 'Nord',
+      gender: gender || 'Male',
+      archetype: archetype || 'Warrior',
+      ...INITIAL_CHARACTER_TEMPLATE,
+      ...fullDetails,
+      gold: fullDetails?.startingGold || 0,
+      lastPlayed: Date.now()
+    };
+    setCharacters([...characters, newChar]);
+    setDirtyEntities(prev => new Set([...prev, charId]));
+
+    // Ensure newly created character starts with no companions (explicitly initialize per-character companions)
+    try {
+      setCompanions([]);
+      // Initialize an empty per-character localStorage key so fallback won't leak global companions
+      if (currentUser?.uid) {
+        try { localStorage.setItem(`aetherius:companions:${currentUser.uid}:${charId}`, JSON.stringify([])); } catch { }
+        try { saveUserCompanions(currentUser.uid, [], charId); } catch (e) { /* ignore remote failures */ }
+      }
+    } catch (e) { /* ignore */ }
+
+    // --- Start the universal main quest line for world-building ---
+    try {
+      const mainQuests = instantiateQuestChain(UNIVERSAL_MAIN, charId);
+      setQuests(prev => [...prev, ...mainQuests]);
+      mainQuests.forEach(q => setDirtyEntities(prev => new Set([...prev, q.id])));
+
+      // Prologue story & journal entries for flavour
+      const prologue = {
+        id: uniqueId(),
+        characterId: charId,
+        title: 'Prologue: The Rift Appears',
+        content: 'A strange tear in the sky was seen by villagers, and a low hum persists at night. The land seems unsettled. Your first steps are to investigate this omen.',
+        date: '4E 201',
+        summary: 'A dark omen revealed',
+        createdAt: Date.now()
       };
-      setCharacters([...characters, newChar]);
-      setDirtyEntities(prev => new Set([...prev, charId]));
+      setStoryChapters(prev => [...prev, prologue]);
+      setDirtyEntities(prev => new Set([...prev, prologue.id]));
 
-      // Ensure newly created character starts with no companions (explicitly initialize per-character companions)
-      try {
-        setCompanions([]);
-        // Initialize an empty per-character localStorage key so fallback won't leak global companions
-        if (currentUser?.uid) {
-          try { localStorage.setItem(`aetherius:companions:${currentUser.uid}:${charId}`, JSON.stringify([])); } catch {}
-          try { saveUserCompanions(currentUser.uid, [], charId); } catch (e) { /* ignore remote failures */ }
-        }
-      } catch (e) { /* ignore */ }
+      const journalEntry = {
+        id: uniqueId(),
+        characterId: charId,
+        date: '4E 201',
+        title: 'A Strange Night',
+        content: 'You remember a night when the stars shifted and a cold wind blew from the hills. Something watched from afar.'
+      };
+      setJournalEntries(prev => [...prev, journalEntry]);
+      setDirtyEntities(prev => new Set([...prev, journalEntry.id]));
 
-      // --- Start the universal main quest line for world-building ---
-      try {
-        const mainQuests = instantiateQuestChain(UNIVERSAL_MAIN, charId);
-        setQuests(prev => [...prev, ...mainQuests]);
-        mainQuests.forEach(q => setDirtyEntities(prev => new Set([...prev, q.id])));
-
-        // Prologue story & journal entries for flavour
-        const prologue = {
-          id: uniqueId(),
-          characterId: charId,
-          title: 'Prologue: The Rift Appears',
-          content: 'A strange tear in the sky was seen by villagers, and a low hum persists at night. The land seems unsettled. Your first steps are to investigate this omen.',
-          date: '4E 201',
-          summary: 'A dark omen revealed',
-          createdAt: Date.now()
-        };
-        setStoryChapters(prev => [...prev, prologue]);
-        setDirtyEntities(prev => new Set([...prev, prologue.id]));
-
-        const journalEntry = {
-          id: uniqueId(),
-          characterId: charId,
-          date: '4E 201',
-          title: 'A Strange Night',
-          content: 'You remember a night when the stars shifted and a cold wind blew from the hills. Something watched from afar.'
-        };
-        setJournalEntries(prev => [...prev, journalEntry]);
-        setDirtyEntities(prev => new Set([...prev, journalEntry.id]));
-
-        // Mark quest locations as discovered for map context (lightweight, randomized coordinates)
-        const discovered = mainQuests.filter(q => q.location).map(q => ({
-          name: q.location!,
-          type: 'landmark' as any,
-          x: Math.floor(Math.random() * 86) + 7,
-          y: Math.floor(Math.random() * 86) + 7,
-          description: q.description
-        }));
-        if (discovered.length) {
-          setCharacters(prev => prev.map(c => c.id === charId ? ({ ...c, discoveredLocations: discovered } as any) : c));
-        }
-      } catch (e) {
-        console.warn('Failed to start main quest chain for character', e);
+      // Mark quest locations as discovered for map context (lightweight, randomized coordinates)
+      const discovered = mainQuests.filter(q => q.location).map(q => ({
+        name: q.location!,
+        type: 'landmark' as any,
+        x: Math.floor(Math.random() * 86) + 7,
+        y: Math.floor(Math.random() * 86) + 7,
+        description: q.description
+      }));
+      if (discovered.length) {
+        setCharacters(prev => prev.map(c => c.id === charId ? ({ ...c, discoveredLocations: discovered } as any) : c));
       }
+    } catch (e) {
+      console.warn('Failed to start main quest chain for character', e);
+    }
 
-        // 2. Inventory - validate incoming items against defined set and apply stats
-        if (fullDetails?.inventory) {
-          const validatedMap = new Map<string, InventoryItem>();
-          for (const i of fullDetails.inventory) {
-            const name = (i.name || '').trim();
-            const type = (i.type as InventoryItem['type']) || 'misc';
+    // 2. Inventory - validate incoming items against defined set and apply stats
+    if (fullDetails?.inventory) {
+      const validatedMap = new Map<string, InventoryItem>();
+      for (const i of fullDetails.inventory) {
+        const name = (i.name || '').trim();
+        const type = (i.type as InventoryItem['type']) || 'misc';
 
-            // Allow free-form misc items
-            if (type === 'misc') {
-              const key = `${name.toLowerCase()}|misc`;
-              const existing = validatedMap.get(key);
-              if (existing) {
-                existing.quantity += i.quantity || 1;
-              } else {
-                validatedMap.set(key, {
-                  id: uniqueId(),
-                  characterId: charId,
-                  name,
-                  type,
-                  description: i.description || '',
-                  quantity: i.quantity || 1,
-                  equipped: !!(i as any).equipped,
-                  createdAt: Date.now()
-                } as InventoryItem);
-              }
-              continue;
-            }
+        // Allow free-form misc items
+        if (type === 'misc') {
+          const key = `${name.toLowerCase()}|misc`;
+          const existing = validatedMap.get(key);
+          if (existing) {
+            existing.quantity += i.quantity || 1;
+          } else {
+            validatedMap.set(key, {
+              id: uniqueId(),
+              characterId: charId,
+              name,
+              type,
+              description: i.description || '',
+              quantity: i.quantity || 1,
+              equipped: !!(i as any).equipped,
+              createdAt: Date.now()
+            } as InventoryItem);
+          }
+          continue;
+        }
 
-            // For core items (weapons / apparel) ensure they exist in defined sets
-            if (shouldHaveStats(type) && !isValidCoreItem(name, type)) {
-              // Skip invalid core items (keep console log for debugging)
-              console.warn('Skipping invalid starting item for character:', name, type);
-              continue;
-            }
+        // For core items (weapons / apparel) ensure they exist in defined sets
+        if (shouldHaveStats(type) && !isValidCoreItem(name, type)) {
+          // Skip invalid core items (keep console log for debugging)
+          console.warn('Skipping invalid starting item for character:', name, type);
+          continue;
+        }
 
-            // Merge duplicates by name+type
-            const key = `${name.toLowerCase()}|${type}`;
-            const stats = shouldHaveStats(type) ? getItemStats(name, type) : {};
-            const existing = validatedMap.get(key);
-            if (existing) {
-              existing.quantity += i.quantity || 1;
-            } else {
-              // Determine default slot where applicable
-              const itemLike: InventoryItem = {
-                id: uniqueId(),
-                characterId: charId,
-                name,
-                type: type as any,
-                description: i.description || '',
-                quantity: i.quantity || 1,
-                equipped: !!(i as any).equipped,
-                createdAt: Date.now(),
-                ...stats
-              } as InventoryItem;
+        // Merge duplicates by name+type
+        const key = `${name.toLowerCase()}|${type}`;
+        const stats = shouldHaveStats(type) ? getItemStats(name, type) : {};
+        const existing = validatedMap.get(key);
+        if (existing) {
+          existing.quantity += i.quantity || 1;
+        } else {
+          // Determine default slot where applicable
+          const itemLike: InventoryItem = {
+            id: uniqueId(),
+            characterId: charId,
+            name,
+            type: type as any,
+            description: i.description || '',
+            quantity: i.quantity || 1,
+            equipped: !!(i as any).equipped,
+            createdAt: Date.now(),
+            ...stats
+          } as InventoryItem;
 
-              // Attempt to assign a default equipment slot for weapons/apparel
-              try {
-                const slot = getDefaultSlotForItem(itemLike);
-                if (slot) itemLike.slot = slot;
-              } catch (e) {
-                // ignore slot assignment errors
-              }
-
-              validatedMap.set(key, itemLike);
-            }
+          // Attempt to assign a default equipment slot for weapons/apparel
+          try {
+            const slot = getDefaultSlotForItem(itemLike);
+            if (slot) itemLike.slot = slot;
+          } catch (e) {
+            // ignore slot assignment errors
           }
 
-          const itemsToAdd = Array.from(validatedMap.values());
-          if (itemsToAdd.length > 0) {
-            setItems(prev => [...prev, ...itemsToAdd as any]);
-            itemsToAdd.forEach(item => setDirtyEntities(prev => new Set([...prev, item.id])));
-          }
+          validatedMap.set(key, itemLike);
         }
-
-      // 3. Quests
-      if (fullDetails?.quests) {
-          const newQuests: CustomQuest[] = fullDetails.quests.map(q => ({
-              id: uniqueId(),
-              characterId: charId,
-              title: q.title,
-              description: q.description,
-              location: q.location,
-              dueDate: q.dueDate,
-              objectives: [],
-              status: 'active',
-              createdAt: Date.now()
-          }));
-          setQuests(prev => [...prev, ...newQuests]);
-          newQuests.forEach(quest => {
-            setDirtyEntities(prev => new Set([...prev, quest.id]));
-          });
       }
 
-      // 4. Journal
-      if (fullDetails?.journalEntries) {
-          const newEntries = fullDetails.journalEntries.map(e => ({
-              id: uniqueId(),
-              characterId: charId,
-              date: "4E 201",
-              title: e.title,
-              content: e.content
-          }));
-          setJournalEntries(prev => [...prev, ...newEntries as any]);
-          newEntries.forEach(entry => {
-            setDirtyEntities(prev => new Set([...prev, entry.id]));
-          });
+      const itemsToAdd = Array.from(validatedMap.values());
+      if (itemsToAdd.length > 0) {
+        setItems(prev => [...prev, ...itemsToAdd as any]);
+        itemsToAdd.forEach(item => setDirtyEntities(prev => new Set([...prev, item.id])));
       }
+    }
 
-      // 5. Story
-      if (fullDetails?.openingStory) {
-          const chapter: StoryChapter = {
-              id: uniqueId(),
-              characterId: charId,
-              title: fullDetails.openingStory.title,
-              content: fullDetails.openingStory.content,
-              date: "4E 201",
-              summary: "The beginning.",
-              createdAt: Date.now()
-          };
-          setStoryChapters(prev => [...prev, chapter]);
-          setDirtyEntities(prev => new Set([...prev, chapter.id]));
-      }
+    // 3. Quests
+    if (fullDetails?.quests) {
+      const newQuests: CustomQuest[] = fullDetails.quests.map(q => ({
+        id: uniqueId(),
+        characterId: charId,
+        title: q.title,
+        description: q.description,
+        location: q.location,
+        dueDate: q.dueDate,
+        objectives: [],
+        status: 'active',
+        createdAt: Date.now()
+      }));
+      setQuests(prev => [...prev, ...newQuests]);
+      newQuests.forEach(quest => {
+        setDirtyEntities(prev => new Set([...prev, quest.id]));
+      });
+    }
+
+    // 4. Journal
+    if (fullDetails?.journalEntries) {
+      const newEntries = fullDetails.journalEntries.map(e => ({
+        id: uniqueId(),
+        characterId: charId,
+        date: "4E 201",
+        title: e.title,
+        content: e.content
+      }));
+      setJournalEntries(prev => [...prev, ...newEntries as any]);
+      newEntries.forEach(entry => {
+        setDirtyEntities(prev => new Set([...prev, entry.id]));
+      });
+    }
+
+    // 5. Story
+    if (fullDetails?.openingStory) {
+      const chapter: StoryChapter = {
+        id: uniqueId(),
+        characterId: charId,
+        title: fullDetails.openingStory.title,
+        content: fullDetails.openingStory.content,
+        date: "4E 201",
+        summary: "The beginning.",
+        createdAt: Date.now()
+      };
+      setStoryChapters(prev => [...prev, chapter]);
+      setDirtyEntities(prev => new Set([...prev, chapter.id]));
+    }
   };
 
 
 
   const updateStoryChapter = (updatedChapter: StoryChapter) => {
-      setStoryChapters(prev => prev.map(c => c.id === updatedChapter.id ? updatedChapter : c));
-      setDirtyEntities(prev => new Set([...prev, updatedChapter.id]));
+    setStoryChapters(prev => prev.map(c => c.id === updatedChapter.id ? updatedChapter : c));
+    setDirtyEntities(prev => new Set([...prev, updatedChapter.id]));
   };
 
   // Delete a story chapter from Firestore
@@ -3185,14 +3263,14 @@ const App: React.FC = () => {
   // === SURVIVAL & SHOP HANDLERS ===
 
   // Check for camping gear in inventory
-  const hasCampingGear = items.some(i => 
-    i.characterId === currentCharacterId && 
+  const hasCampingGear = items.some(i =>
+    i.characterId === currentCharacterId &&
     (i.quantity || 0) > 0 &&
     ((i.name || '').toLowerCase().includes('camping kit') || (i.name || '').toLowerCase().includes('tent'))
   );
-  
-  const hasBedroll = items.some(i => 
-    i.characterId === currentCharacterId && 
+
+  const hasBedroll = items.some(i =>
+    i.characterId === currentCharacterId &&
     (i.quantity || 0) > 0 &&
     (i.name || '').toLowerCase().includes('bedroll')
   );
@@ -3219,7 +3297,7 @@ const App: React.FC = () => {
     } else if (options.type === 'inn') {
       fatigueReduction = 50;
     }
-    
+
     // Scale by hours (base is 8 hours)
     const scaledReduction = Math.round(fatigueReduction * (options.hours / 8));
 
@@ -3270,10 +3348,10 @@ const App: React.FC = () => {
   // Eat a specific item - uses dynamic nutrition values
   const handleEatItem = (item: InventoryItem) => {
     if (!currentCharacterId || !activeCharacter) return;
-    
+
     // Play eating sound
     audioService.playSoundEffect('eat');
-    
+
     const nutrition = getFoodNutrition(item.name);
     // Attempt to parse vitals-like effects from the item (some foods may heal)
     const parsed = parseConsumableVitals(item);
@@ -3296,8 +3374,8 @@ const App: React.FC = () => {
     handleGameUpdate({
       transactionId: `eat_${uniqueId()}`,
       timeAdvanceMinutes: 10,
-      needsChange: { 
-        hunger: -nutrition.hungerReduction, 
+      needsChange: {
+        hunger: -nutrition.hungerReduction,
         thirst: -nutrition.thirstReduction,
         ...(nutrition.fatigueReduction ? { fatigue: -nutrition.fatigueReduction } : {})
       },
@@ -3326,10 +3404,10 @@ const App: React.FC = () => {
   // Drink a specific item - uses dynamic nutrition values
   const handleDrinkItem = (item: InventoryItem) => {
     if (!currentCharacterId || !activeCharacter) return;
-    
+
     // Play drinking sound
     audioService.playSoundEffect('drink');
-    
+
     const nutrition = getDrinkNutrition(item.name);
     // Try to parse potential vitals from drink (some special drinks affect vitals)
     const parsed = parseConsumableVitals(item);
@@ -3343,7 +3421,7 @@ const App: React.FC = () => {
     handleGameUpdate({
       transactionId: `drink_${uniqueId()}`,
       timeAdvanceMinutes: 5,
-      needsChange: { 
+      needsChange: {
         thirst: -nutrition.thirstReduction,
         hunger: -nutrition.hungerReduction,
         ...(nutrition.fatigueReduction ? { fatigue: -nutrition.fatigueReduction } : {})
@@ -3375,7 +3453,7 @@ const App: React.FC = () => {
     if (item.type === 'potion') {
       // Play potion drinking sound
       audioService.playSoundEffect('drink_potion');
-      
+
       const resolved = resolvePotionEffect(item);
 
       // If resolver produced a stat-based effect, apply vitals change
@@ -3406,72 +3484,13 @@ const App: React.FC = () => {
           }
         }
 
-      // Non-stat potions: handle known special effects by keyword
+        // Non-stat potions: no longer supported. Consume item and warn the player.
       } else {
-        const name = (item.name || '').toLowerCase();
-        const desc = (item.description || '').toLowerCase();
-
-        // Cure disease / poison
-        if (name.includes('cure') && (name.includes('disease') || desc.includes('disease'))) {
-          handleGameUpdate({ 
-            transactionId: `potion_cure_disease_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(`Cured diseases.`, 'success');
-        } else if (name.includes('cure') && (name.includes('poison') || desc.includes('poison'))) {
-          handleGameUpdate({
-            transactionId: `potion_cure_poison_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(`Cured poison.`, 'success');
-
-        // Invisibility
-        } else if (name.includes('invis') || name.includes('invisibility') || desc.includes('invisible')) {
-          const durationMatch = desc.match(/(\d+)\s*(seconds|second|s)/);
-          const duration = durationMatch ? Number(durationMatch[1]) : 30;
-          const effect = {
-            id: `potion_invis_${Date.now()}`,
-            name: 'Invisibility',
-            type: 'buff' as const,
-            icon: '👁️‍🗨️',
-            duration,
-            description: `Invisible for ${duration} seconds.`,
-            effects: [] as any[],
-          };
-          setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({ 
-            transactionId: `potion_invis_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }] 
-          });
-          showToast(`You are invisible for ${duration} seconds.`, 'success');
-
-        // Resistances (e.g., Resist Fire 50% for 60 seconds)
-        } else if (name.includes('resist') || desc.includes('resist')) {
-          const pctMatch = desc.match(/(\d+)%/);
-          const secondsMatch = desc.match(/(\d+)\s*(seconds|second|s)/);
-          const pct = pctMatch ? Number(pctMatch[1]) : undefined;
-          const seconds = secondsMatch ? Number(secondsMatch[1]) : 60;
-          const which = desc.includes('fire') ? 'fire' : desc.includes('frost') ? 'frost' : desc.includes('shock') ? 'shock' : 'unknown';
-          const effect = {
-            id: `potion_resist_${which}_${Date.now()}`,
-            name: `Resist ${which}`,
-            type: 'buff' as const,
-            icon: '🛡️',
-            duration: seconds,
-            description: pct ? `Resist ${pct}% ${which} for ${seconds}s` : `Resist ${which} for ${seconds}s`,
-            effects: pct ? [{ stat: which, modifier: pct }] as any[] : [] as any[],
-          };
-          setStatusEffects(prev => [...prev, effect as any]);
-          handleGameUpdate({
-            transactionId: `potion_resist_${uniqueId()}`,
-            removedItems: [{ name: item.name, quantity: 1 }]
-          });
-          showToast(effect.description, 'success');
-
-        } else {
-          console.error('[app] Potion stat unresolved for', item.name, 'reason=', resolved.reason);
-          showToast(`The effect of ${item.name} is unclear and it has no effect.`, 'warning');
-        }
+        handleGameUpdate({
+          transactionId: `potion_${uniqueId()}`,
+          removedItems: [{ name: item.name, quantity: 1 }]
+        });
+        showToast(`The effect of ${item.name} is no longer supported and it has been consumed.`, 'warning');
       }
 
     } else if (item.type === 'food') {
@@ -3514,7 +3533,7 @@ const App: React.FC = () => {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Shop purchase handler
@@ -3525,7 +3544,7 @@ const App: React.FC = () => {
       showToast('Not enough gold!', 'error');
       return;
     }
-    
+
     // Get stats for weapons and armor
     const stats = shouldHaveStats(shopItem.type) ? getItemStats(shopItem.name, shopItem.type) : {};
     // Determine equipment slot for items like jewelry
@@ -3540,11 +3559,11 @@ const App: React.FC = () => {
           type: shopItem.type,
           description: shopItem.description,
           quantity: 1,
-          ...( { value: shopItem.price, slot } as any),
+          ...({ value: shopItem.price, slot } as any),
           ...stats,
           ...(stats.damage ? { baseDamage: stats.damage } : {}),
           ...(stats.armor ? { baseArmor: stats.armor } : {}),
-          ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
+          ...((shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {}),
           __forceCreate: true,
           createdAt: Date.now()
         });
@@ -3561,9 +3580,9 @@ const App: React.FC = () => {
         type: shopItem.type,
         description: shopItem.description,
         quantity,
-        ...( { value: shopItem.price, slot } as any ),
+        ...({ value: shopItem.price, slot } as any),
         ...stats,
-        ...( (shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {} ),
+        ...((shopItem as any).rarity ? { rarity: (shopItem as any).rarity } : {}),
       } as any]
     });
   };
@@ -3604,7 +3623,7 @@ const App: React.FC = () => {
   // ============================================================================
   // CHARACTER EXPORT / IMPORT HANDLERS
   // ============================================================================
-  
+
   const handleExportJSON = () => {
     if (!activeCharacter) return;
     setShowExportModal(true);
@@ -3622,7 +3641,7 @@ const App: React.FC = () => {
     story: StoryChapter[];
   }) => {
     if (!currentUser) return;
-    
+
     // Generate new IDs to avoid conflicts
     const newCharacterId = uuidv4();
     const importedCharacter: Character = {
@@ -3745,45 +3764,45 @@ const App: React.FC = () => {
   };
 
   const getCharacterItems = () => characterItems;
-  
+
   const setCharacterItems = (newCharItemsOrUpdater: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
-      const currentCharItems = items.filter((i: any) => i.characterId === currentCharacterId);
-      
-      // Support both direct array and functional updater patterns
-      const newCharItems = typeof newCharItemsOrUpdater === 'function' 
-        ? newCharItemsOrUpdater(currentCharItems)
-        : newCharItemsOrUpdater;
-      
-      const others = items.filter((i: any) => i.characterId !== currentCharacterId);
-      const taggedItems = newCharItems.map(i => ({ ...i, characterId: currentCharacterId }));
-      
-      // Find deleted items (items in current state but not in new state)
-      const newItemIds = new Set(newCharItems.map(i => i.id));
-      const deletedItems = currentCharItems.filter(i => !newItemIds.has(i.id));
-      
-      // Delete removed items from Firestore
-      if (currentUser && deletedItems.length > 0) {
-        deletedItems.forEach(item => {
-          void deleteInventoryItem(currentUser.uid, item.id).catch(err => {
-            console.error('Failed to delete item from Firestore:', err);
-          });
+    const currentCharItems = items.filter((i: any) => i.characterId === currentCharacterId);
+
+    // Support both direct array and functional updater patterns
+    const newCharItems = typeof newCharItemsOrUpdater === 'function'
+      ? newCharItemsOrUpdater(currentCharItems)
+      : newCharItemsOrUpdater;
+
+    const others = items.filter((i: any) => i.characterId !== currentCharacterId);
+    const taggedItems = newCharItems.map(i => ({ ...i, characterId: currentCharacterId }));
+
+    // Find deleted items (items in current state but not in new state)
+    const newItemIds = new Set(newCharItems.map(i => i.id));
+    const deletedItems = currentCharItems.filter(i => !newItemIds.has(i.id));
+
+    // Delete removed items from Firestore
+    if (currentUser && deletedItems.length > 0) {
+      deletedItems.forEach(item => {
+        void deleteInventoryItem(currentUser.uid, item.id).catch(err => {
+          console.error('Failed to delete item from Firestore:', err);
         });
-      }
-      
-      setItems([...others, ...taggedItems]);
-      taggedItems.forEach(item => {
-        setDirtyEntities(prev => new Set([...prev, item.id]));
       });
+    }
+
+    setItems([...others, ...taggedItems]);
+    taggedItems.forEach(item => {
+      setDirtyEntities(prev => new Set([...prev, item.id]));
+    });
   };
 
   const getCharacterQuests = () => quests.filter(q => q.characterId === currentCharacterId);
   const setCharacterQuests = (newQuests: CustomQuest[]) => {
-      const others = quests.filter(q => q.characterId !== currentCharacterId);
-      const tagged = newQuests.map(q => ({ ...q, characterId: currentCharacterId }));
-      setQuests([...others, ...tagged]);
-      tagged.forEach(quest => {
-        setDirtyEntities(prev => new Set([...prev, quest.id]));
-      });
+    const others = quests.filter(q => q.characterId !== currentCharacterId);
+    const tagged = newQuests.map(q => ({ ...q, characterId: currentCharacterId }));
+    setQuests([...others, ...tagged]);
+    tagged.forEach(quest => {
+      setDirtyEntities(prev => new Set([...prev, quest.id]));
+    });
   };
 
   const handleDeleteQuest = async (questId: string) => {
@@ -3798,7 +3817,7 @@ const App: React.FC = () => {
   // Handle quest completion from QuestLog (manual completion)
   const handleQuestComplete = (quest: any, xpReward: number, goldReward: number) => {
     if (!currentCharacterId || !activeCharacter) return;
-    
+
     // Apply XP and gold rewards via handleGameUpdate so level-up check is triggered
     handleGameUpdate({
       xpChange: xpReward,
@@ -3807,7 +3826,7 @@ const App: React.FC = () => {
 
     // Increment quest completion stat for achievements
     updateAchievementStats({ questsCompleted: 1 });
-    
+
     // Show quest notification
     showQuestNotification({
       type: 'quest-completed',
@@ -3815,14 +3834,14 @@ const App: React.FC = () => {
       xpAwarded: xpReward,
       goldAwarded: goldReward,
     });
-    
+
     // Sometimes give item rewards based on quest difficulty and player level
     const shouldGiveItem = Math.random() < 0.35; // 35% chance for item reward
     if (shouldGiveItem && quest.difficulty) {
       const playerLevel = activeCharacter.level || 1;
       const difficultyMultiplier = { trivial: 0, easy: 0.2, medium: 0.4, hard: 0.6, legendary: 0.8 }[quest.difficulty as string] || 0.3;
       const itemChance = difficultyMultiplier + (playerLevel * 0.02);
-      
+
       if (Math.random() < itemChance) {
         // Determine rarity based on level and difficulty
         let rarity: 'common' | 'uncommon' | 'rare' | 'epic' = 'common';
@@ -3830,17 +3849,17 @@ const App: React.FC = () => {
         if (playerLevel >= 20 && rarityRoll > 0.7) rarity = 'epic';
         else if (playerLevel >= 10 && rarityRoll > 0.5) rarity = 'rare';
         else if (playerLevel >= 5 && rarityRoll > 0.3) rarity = 'uncommon';
-        
+
         // Generate a reward item
         const itemTypes = ['weapon', 'apparel'];
         const itemType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
         const weapons = ['Iron Sword', 'Steel Sword', 'Dwarven Mace', 'Orcish Axe', 'Glass Dagger', 'Ebony Blade'];
         const apparel = ['Iron Helmet', 'Steel Armor', 'Leather Boots', 'Hide Gauntlets', 'Glass Shield', 'Ebony Armor'];
-        
+
         const itemList = itemType === 'weapon' ? weapons : apparel;
         const itemIndex = Math.min(Math.floor(playerLevel / 5), itemList.length - 1);
         const itemName = itemList[itemIndex];
-        
+
         const rewardItem = {
           name: itemName,
           type: itemType,
@@ -3849,7 +3868,7 @@ const App: React.FC = () => {
           rarity,
           equipped: false,
         };
-        
+
         handleGameUpdate({ newItems: [rewardItem as any] });
         showToast(`Quest reward: ${rarity} ${itemName}!`, 'success');
       }
@@ -3889,15 +3908,15 @@ const App: React.FC = () => {
   };
 
   const getCharacterStory = () => storyChapters.filter(s => s.characterId === currentCharacterId);
-  
+
   const getCharacterJournal = () => journalEntries.filter((j: any) => j.characterId === currentCharacterId);
   const setCharacterJournal = (newEntries: JournalEntry[]) => {
-      const others = journalEntries.filter((j: any) => j.characterId !== currentCharacterId);
-      const tagged = newEntries.map(e => ({ ...e, characterId: currentCharacterId }));
-      setJournalEntries([...others, ...tagged]);
-      tagged.forEach(entry => {
-        setDirtyEntities(prev => new Set([...prev, entry.id]));
-      });
+    const others = journalEntries.filter((j: any) => j.characterId !== currentCharacterId);
+    const tagged = newEntries.map(e => ({ ...e, characterId: currentCharacterId }));
+    setJournalEntries([...others, ...tagged]);
+    tagged.forEach(entry => {
+      setDirtyEntities(prev => new Set([...prev, entry.id]));
+    });
   };
 
   // Dungeon reward handler
@@ -3971,874 +3990,874 @@ const App: React.FC = () => {
 
   // AI Game Master Integration
   const handleGameUpdate = (updates: GameStateUpdate) => {
-      if (!currentCharacterId || !activeCharacter) return;
+    if (!currentCharacterId || !activeCharacter) return;
 
-      const hasAnyUpdate = Boolean(
-        updates?.narrative ||
-          (updates?.newQuests && updates.newQuests.length) ||
-          (updates?.updateQuests && updates.updateQuests.length) ||
-          (updates?.newItems && updates.newItems.length) ||
-          (updates?.removedItems && updates.removedItems.length) ||
-          updates?.statUpdates ||
-          typeof updates?.goldChange === 'number' ||
-          typeof updates?.xpChange === 'number' ||
-          typeof updates?.timeAdvanceMinutes === 'number' ||
-          (updates?.needsChange && Object.keys(updates.needsChange).length) ||
-          (updates?.characterUpdates && Object.keys(updates.characterUpdates).length) ||
-          (updates?.vitalsChange && Object.keys(updates.vitalsChange).length)
-      );
-      // Filter duplicate transactions (e.g., combat rewards already applied)
-      let processedUpdates = updates as any;
-      if (updates.transactionId) {
-        const { filteredUpdate, wasFiltered } = filterDuplicateTransactions(updates as any);
-        processedUpdates = filteredUpdate;
-      }
+    const hasAnyUpdate = Boolean(
+      updates?.narrative ||
+      (updates?.newQuests && updates.newQuests.length) ||
+      (updates?.updateQuests && updates.updateQuests.length) ||
+      (updates?.newItems && updates.newItems.length) ||
+      (updates?.removedItems && updates.removedItems.length) ||
+      updates?.statUpdates ||
+      typeof updates?.goldChange === 'number' ||
+      typeof updates?.xpChange === 'number' ||
+      typeof updates?.timeAdvanceMinutes === 'number' ||
+      (updates?.needsChange && Object.keys(updates.needsChange).length) ||
+      (updates?.characterUpdates && Object.keys(updates.characterUpdates).length) ||
+      (updates?.vitalsChange && Object.keys(updates.vitalsChange).length)
+    );
+    // Filter duplicate transactions (e.g., combat rewards already applied)
+    let processedUpdates = updates as any;
+    if (updates.transactionId) {
+      const { filteredUpdate, wasFiltered } = filterDuplicateTransactions(updates as any);
+      processedUpdates = filteredUpdate;
+    }
 
-      if (!hasAnyUpdate) return;
+    if (!hasAnyUpdate) return;
 
-      // 0a. Character detail updates (hero sheet fields)
-      // Use the processed updates (duplicate filtering may have removed some fields)
-      updates = processedUpdates;
+    // 0a. Character detail updates (hero sheet fields)
+    // Use the processed updates (duplicate filtering may have removed some fields)
+    updates = processedUpdates;
 
-      if (updates.characterUpdates && Object.keys(updates.characterUpdates).length) {
-        setCharacters(prev => prev.map(c => {
-          if (c.id !== currentCharacterId) return c;
-          const updatedChar = { ...c };
-          const cu = updates.characterUpdates!;
-          // Merge completedCombats if provided (helps persist combat completion across sessions)
-          if (cu.completedCombats && Array.isArray(cu.completedCombats) && cu.completedCombats.length) {
-            const existing = new Set(updatedChar.completedCombats || []);
-            cu.completedCombats.forEach((id: string) => existing.add(id));
-            updatedChar.completedCombats = Array.from(existing);
-          }
-          if (cu.identity !== undefined) updatedChar.identity = cu.identity;
-          if (cu.psychology !== undefined) updatedChar.psychology = cu.psychology;
-          if (cu.breakingPoint !== undefined) updatedChar.breakingPoint = cu.breakingPoint;
-          if (cu.moralCode !== undefined) updatedChar.moralCode = cu.moralCode;
-          if (cu.allowedActions !== undefined) updatedChar.allowedActions = cu.allowedActions;
-          if (cu.forbiddenActions !== undefined) updatedChar.forbiddenActions = cu.forbiddenActions;
-          if (cu.fears !== undefined) updatedChar.fears = cu.fears;
-          if (cu.weaknesses !== undefined) updatedChar.weaknesses = cu.weaknesses;
-          if (cu.talents !== undefined) updatedChar.talents = cu.talents;
-          if (cu.magicApproach !== undefined) updatedChar.magicApproach = cu.magicApproach;
-          if (cu.factionAllegiance !== undefined) updatedChar.factionAllegiance = cu.factionAllegiance;
-          if (cu.worldview !== undefined) updatedChar.worldview = cu.worldview;
-          if (cu.daedricPerception !== undefined) updatedChar.daedricPerception = cu.daedricPerception;
-          if (cu.forcedBehavior !== undefined) updatedChar.forcedBehavior = cu.forcedBehavior;
-          if (cu.longTermEvolution !== undefined) updatedChar.longTermEvolution = cu.longTermEvolution;
-          if (cu.backstory !== undefined) updatedChar.backstory = cu.backstory;
-          setDirtyEntities(d => new Set([...d, c.id]));
-          return updatedChar;
-        }));
-      }
-
-      // 0. Time & Needs (progression)
-      const timeAdvance = Math.trunc(Number(updates.timeAdvanceMinutes || 0));
-      const explicitNeedsChange = updates.needsChange || {};
-
-      if (timeAdvance !== 0 || (explicitNeedsChange && Object.keys(explicitNeedsChange).length)) {
-        // Predict next needs immediately so we can enforce penalties and forced-rest rules.
-        try {
-          const currentTimeSnap = (activeCharacter as any).time || INITIAL_CHARACTER_TEMPLATE.time;
-          const currentNeedsSnap = (activeCharacter as any).needs || INITIAL_CHARACTER_TEMPLATE.needs;
-          const hungerFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.hungerPerMinute);
-          const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
-          const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
-          const nextNeedsSnap = {
-            hunger: clamp(
-              Number(currentNeedsSnap.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
-              0,
-              100
-            ),
-            thirst: clamp(
-              Number(currentNeedsSnap.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
-              0,
-              100
-            ),
-            fatigue: clamp(
-              Number(currentNeedsSnap.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
-              0,
-              100
-            ),
-          };
-
-          const { forcedRest, effects: survivalEffects } = computeSurvivalEffects(nextNeedsSnap);
-
-          // Update status effects (survival effects are derived; preserve other effects).
-          setStatusEffects(prev => {
-            const nonSurvival = (prev || []).filter(e => !String(e.id || '').startsWith('survival_'));
-            return [...nonSurvival, ...survivalEffects];
-          });
-
-          // Forced rest: auto-open Bonfire to compel a rest choice.
-          // Only trigger for CRITICAL fatigue (100), not for hunger/thirst combo
-          // Don't trigger if we just rested (cooldown) or if bonfire is already open
-          // Also skip if this update itself is a rest action (negative fatigue change)
-          const restCooldownActive = Date.now() - lastRestTimestampRef.current < REST_COOLDOWN_MS;
-          const forcedRestCooldownActive = Date.now() - lastForcedRestRef.current < FORCED_REST_COOLDOWN_MS;
-          const isRestAction = Number((explicitNeedsChange as any).fatigue || 0) < 0;
-          // Only force rest when fatigue is critical (100), not based on hunger+thirst
-          const shouldForceRest = nextNeedsSnap.fatigue >= SURVIVAL_THRESHOLDS.critical;
-          
-          if (shouldForceRest && !restOpen && !restCooldownActive && !forcedRestCooldownActive && !isRestAction) {
-            try {
-              lastForcedRestRef.current = Date.now();
-              const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
-              openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });
-              showToast('You are collapsing from exhaustion. Rest is mandatory.', 'warning');
-            } catch (e) {
-              // If Bonfire fails to open for any reason, at least warn.
-              showToast('You are collapsing from exhaustion. Find rest immediately.', 'warning');
-            }
-          }
-        } catch (e) {
-          // Do not block progression on UI-only survival effect failures.
+    if (updates.characterUpdates && Object.keys(updates.characterUpdates).length) {
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+        const updatedChar = { ...c };
+        const cu = updates.characterUpdates!;
+        // Merge completedCombats if provided (helps persist combat completion across sessions)
+        if (cu.completedCombats && Array.isArray(cu.completedCombats) && cu.completedCombats.length) {
+          const existing = new Set(updatedChar.completedCombats || []);
+          cu.completedCombats.forEach((id: string) => existing.add(id));
+          updatedChar.completedCombats = Array.from(existing);
         }
+        if (cu.identity !== undefined) updatedChar.identity = cu.identity;
+        if (cu.psychology !== undefined) updatedChar.psychology = cu.psychology;
+        if (cu.breakingPoint !== undefined) updatedChar.breakingPoint = cu.breakingPoint;
+        if (cu.moralCode !== undefined) updatedChar.moralCode = cu.moralCode;
+        if (cu.allowedActions !== undefined) updatedChar.allowedActions = cu.allowedActions;
+        if (cu.forbiddenActions !== undefined) updatedChar.forbiddenActions = cu.forbiddenActions;
+        if (cu.fears !== undefined) updatedChar.fears = cu.fears;
+        if (cu.weaknesses !== undefined) updatedChar.weaknesses = cu.weaknesses;
+        if (cu.talents !== undefined) updatedChar.talents = cu.talents;
+        if (cu.magicApproach !== undefined) updatedChar.magicApproach = cu.magicApproach;
+        if (cu.factionAllegiance !== undefined) updatedChar.factionAllegiance = cu.factionAllegiance;
+        if (cu.worldview !== undefined) updatedChar.worldview = cu.worldview;
+        if (cu.daedricPerception !== undefined) updatedChar.daedricPerception = cu.daedricPerception;
+        if (cu.forcedBehavior !== undefined) updatedChar.forcedBehavior = cu.forcedBehavior;
+        if (cu.longTermEvolution !== undefined) updatedChar.longTermEvolution = cu.longTermEvolution;
+        if (cu.backstory !== undefined) updatedChar.backstory = cu.backstory;
+        setDirtyEntities(d => new Set([...d, c.id]));
+        return updatedChar;
+      }));
+    }
 
+    // 0. Time & Needs (progression)
+    const timeAdvance = Math.trunc(Number(updates.timeAdvanceMinutes || 0));
+    const explicitNeedsChange = updates.needsChange || {};
+
+    if (timeAdvance !== 0 || (explicitNeedsChange && Object.keys(explicitNeedsChange).length)) {
+      // Predict next needs immediately so we can enforce penalties and forced-rest rules.
+      try {
+        const currentTimeSnap = (activeCharacter as any).time || INITIAL_CHARACTER_TEMPLATE.time;
+        const currentNeedsSnap = (activeCharacter as any).needs || INITIAL_CHARACTER_TEMPLATE.needs;
+        const hungerFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.hungerPerMinute);
+        const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
+        const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
+        const nextNeedsSnap = {
+          hunger: clamp(
+            Number(currentNeedsSnap.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
+            0,
+            100
+          ),
+          thirst: clamp(
+            Number(currentNeedsSnap.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
+            0,
+            100
+          ),
+          fatigue: clamp(
+            Number(currentNeedsSnap.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
+            0,
+            100
+          ),
+        };
+
+        const { forcedRest, effects: survivalEffects } = computeSurvivalEffects(nextNeedsSnap, t);
+
+        // Update status effects (survival effects are derived; preserve other effects).
+        setStatusEffects(prev => {
+          const nonSurvival = (prev || []).filter(e => !String(e.id || '').startsWith('survival_'));
+          return [...nonSurvival, ...survivalEffects];
+        });
+
+        // Forced rest: auto-open Bonfire to compel a rest choice.
+        // Only trigger for CRITICAL fatigue (100), not for hunger/thirst combo
+        // Don't trigger if we just rested (cooldown) or if bonfire is already open
+        // Also skip if this update itself is a rest action (negative fatigue change)
+        const restCooldownActive = Date.now() - lastRestTimestampRef.current < REST_COOLDOWN_MS;
+        const forcedRestCooldownActive = Date.now() - lastForcedRestRef.current < FORCED_REST_COOLDOWN_MS;
+        const isRestAction = Number((explicitNeedsChange as any).fatigue || 0) < 0;
+        // Only force rest when fatigue is critical (100), not based on hunger+thirst
+        const shouldForceRest = nextNeedsSnap.fatigue >= SURVIVAL_THRESHOLDS.critical;
+
+        if (shouldForceRest && !restOpen && !restCooldownActive && !forcedRestCooldownActive && !isRestAction) {
+          try {
+            lastForcedRestRef.current = Date.now();
+            const hours = Math.max(1, Math.min(12, Math.ceil(Math.max(3, nextNeedsSnap.fatigue >= 100 ? 6 : 4))));
+            openBonfireMenu({ type: hasCampingGear ? 'camp' : 'outside', hours });
+            showToast('You are collapsing from exhaustion. Rest is mandatory.', 'warning');
+          } catch (e) {
+            // If Bonfire fails to open for any reason, at least warn.
+            showToast('You are collapsing from exhaustion. Find rest immediately.', 'warning');
+          }
+        }
+      } catch (e) {
+        // Do not block progression on UI-only survival effect failures.
+      }
+
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+
+        const currentTime = (c as any).time || INITIAL_CHARACTER_TEMPLATE.time;
+        const currentNeeds = (c as any).needs || INITIAL_CHARACTER_TEMPLATE.needs;
+
+        const nextTime = timeAdvance !== 0 ? addMinutesToTime(currentTime, timeAdvance) : currentTime;
+
+        // Passive needs increase from time passing
+        const hungerFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.hungerPerMinute);
+        const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
+        const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
+
+        // Round to 1 decimal place to avoid floating point precision issues
+        const roundNeed = (n: number) => Math.round(n * 10) / 10;
+
+        const nextNeeds = {
+          hunger: roundNeed(clamp(
+            Number(currentNeeds.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
+            0,
+            100
+          )),
+          thirst: roundNeed(clamp(
+            Number(currentNeeds.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
+            0,
+            100
+          )),
+          fatigue: roundNeed(clamp(
+            Number(currentNeeds.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
+            0,
+            100
+          )),
+        };
+
+        setDirtyEntities(d => new Set([...d, c.id]));
+        return { ...c, time: nextTime, needs: nextNeeds };
+      }));
+    }
+
+    // 1. Narrative -> Story Chapter
+    if (updates.narrative) {
+      const chapter: StoryChapter = {
+        id: uniqueId(),
+        characterId: currentCharacterId,
+        title: updates.narrative.title,
+        content: updates.narrative.content,
+        date: "4E 201",
+        summary: updates.narrative.title,
+        createdAt: Date.now()
+      };
+      setStoryChapters(prev => [...prev, chapter]);
+      setDirtyEntities(prev => new Set([...prev, chapter.id]));
+    }
+
+    // 2. New Quests (with rewards)
+    if (updates.newQuests) {
+      const addedQuests = updates.newQuests.map(q => ({
+        id: uniqueId(),
+        characterId: currentCharacterId,
+        title: q.title,
+        description: q.description,
+        location: q.location,
+        dueDate: q.dueDate,
+        objectives: (q.objectives || []).map(o => ({
+          id: uniqueId(),
+          description: o.description,
+          completed: Boolean(o.completed)
+        })),
+        status: 'active' as const,
+        createdAt: Date.now(),
+        // Store quest rewards and type
+        questType: q.questType || 'side',
+        difficulty: q.difficulty || 'medium',
+        xpReward: q.xpReward || 50,
+        goldReward: q.goldReward || 100
+      }));
+      setQuests(prev => [...prev, ...addedQuests]);
+      addedQuests.forEach(quest => {
+        setDirtyEntities(prev => new Set([...prev, quest.id]));
+        // Show Skyrim-style quest notification
+        showQuestNotification({
+          type: 'quest-started',
+          questTitle: quest.title,
+        });
+      });
+    }
+
+    // 3. Update Quests (with reward application)
+    if (updates.updateQuests) {
+      let totalXpFromQuests = 0;
+      let totalGoldFromQuests = 0;
+      const questNotificationsToShow: Array<Omit<QuestNotification, 'id'>> = [];
+
+      setQuests(prev => prev.map(q => {
+        if (q.characterId !== currentCharacterId) return q;
+        const update = updates.updateQuests?.find(u => u.title.toLowerCase() === q.title.toLowerCase());
+        if (update) {
+          setDirtyEntities(prev => new Set([...prev, q.id]));
+          // If quest is completed, mark all objectives as completed too
+          const updatedObjectives = update.status === 'completed'
+            ? q.objectives.map(obj => ({ ...obj, completed: true }))
+            : q.objectives;
+
+          // Apply quest rewards when completed
+          let xpReward = 0;
+          let goldReward = 0;
+          if (update.status === 'completed') {
+            // Use rewards from update, or fall back to quest's stored rewards
+            xpReward = update.xpAwarded ?? q.xpReward ?? 0;
+            goldReward = update.goldAwarded ?? q.goldReward ?? 0;
+            totalXpFromQuests += xpReward;
+            totalGoldFromQuests += goldReward;
+          }
+
+          // Queue Skyrim-style quest notification
+          const notificationType = update.status === 'completed' ? 'quest-completed'
+            : update.status === 'failed' ? 'quest-failed'
+              : 'quest-updated';
+          questNotificationsToShow.push({
+            type: notificationType,
+            questTitle: q.title,
+            xpAwarded: update.status === 'completed' ? xpReward : undefined,
+            goldAwarded: update.status === 'completed' ? goldReward : undefined,
+          });
+
+          return {
+            ...q,
+            status: update.status,
+            objectives: updatedObjectives,
+            completedAt: (update.status === 'completed' || update.status === 'failed') ? Date.now() : undefined
+          };
+        }
+        return q;
+      }));
+
+      // Show quest notifications (staggered so they don't all appear at once)
+      questNotificationsToShow.forEach((notif, index) => {
+        setTimeout(() => showQuestNotification(notif), index * 300);
+      });
+
+      // Apply accumulated quest gold rewards directly (XP will be deferred to trigger level-up check)
+      if (totalGoldFromQuests > 0) {
         setCharacters(prev => prev.map(c => {
           if (c.id !== currentCharacterId) return c;
-
-          const currentTime = (c as any).time || INITIAL_CHARACTER_TEMPLATE.time;
-          const currentNeeds = (c as any).needs || INITIAL_CHARACTER_TEMPLATE.needs;
-
-          const nextTime = timeAdvance !== 0 ? addMinutesToTime(currentTime, timeAdvance) : currentTime;
-
-          // Passive needs increase from time passing
-          const hungerFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.hungerPerMinute);
-          const thirstFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.thirstPerMinute);
-          const fatigueFromTime = calcNeedFromTime(timeAdvance, NEED_RATES.fatiguePerMinute);
-
-          // Round to 1 decimal place to avoid floating point precision issues
-          const roundNeed = (n: number) => Math.round(n * 10) / 10;
-          
-          const nextNeeds = {
-            hunger: roundNeed(clamp(
-              Number(currentNeeds.hunger || 0) + hungerFromTime + Number((explicitNeedsChange as any).hunger || 0),
-              0,
-              100
-            )),
-            thirst: roundNeed(clamp(
-              Number(currentNeeds.thirst || 0) + thirstFromTime + Number((explicitNeedsChange as any).thirst || 0),
-              0,
-              100
-            )),
-            fatigue: roundNeed(clamp(
-              Number(currentNeeds.fatigue || 0) + fatigueFromTime + Number((explicitNeedsChange as any).fatigue || 0),
-              0,
-              100
-            )),
-          };
-
           setDirtyEntities(d => new Set([...d, c.id]));
-          return { ...c, time: nextTime, needs: nextNeeds };
+          return { ...c, gold: (c.gold || 0) + totalGoldFromQuests };
         }));
       }
-
-      // 1. Narrative -> Story Chapter
-      if (updates.narrative) {
-          const chapter: StoryChapter = {
-              id: uniqueId(),
-              characterId: currentCharacterId,
-              title: updates.narrative.title,
-              content: updates.narrative.content,
-              date: "4E 201",
-              summary: updates.narrative.title,
-              createdAt: Date.now()
-          };
-          setStoryChapters(prev => [...prev, chapter]);
-          setDirtyEntities(prev => new Set([...prev, chapter.id]));
+      // Show toast for quest rewards
+      if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
+        const parts: string[] = [];
+        if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
+        if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
+        showToast(parts.join('  '), 'success');
+      }
+      // Defer XP to section 6b by adding to xpChange (enables level-up check)
+      if (totalXpFromQuests > 0) {
+        updates = { ...updates, xpChange: (updates.xpChange || 0) + totalXpFromQuests };
       }
 
-      // 2. New Quests (with rewards)
-      if (updates.newQuests) {
-          const addedQuests = updates.newQuests.map(q => ({
-              id: uniqueId(),
-              characterId: currentCharacterId,
-              title: q.title,
-              description: q.description,
-              location: q.location,
-              dueDate: q.dueDate,
-              objectives: (q.objectives || []).map(o => ({
-                id: uniqueId(),
-                description: o.description,
-                completed: Boolean(o.completed)
-              })),
-              status: 'active' as const,
-              createdAt: Date.now(),
-              // Store quest rewards and type
-              questType: q.questType || 'side',
-              difficulty: q.difficulty || 'medium',
-              xpReward: q.xpReward || 50,
-              goldReward: q.goldReward || 100
-          }));
-          setQuests(prev => [...prev, ...addedQuests]);
-          addedQuests.forEach(quest => {
-            setDirtyEntities(prev => new Set([...prev, quest.id]));
-            // Show Skyrim-style quest notification
-            showQuestNotification({
-              type: 'quest-started',
-              questTitle: quest.title,
-            });
-          });
-      }
+      // Track quest completion for achievements
+      const completedCount = (updates.updateQuests || []).filter(u => u.status === 'completed').length;
+      if (completedCount > 0) {
+        // Update achievement stats so quest-based achievements progress
+        updateAchievementStats({ questsCompleted: completedCount });
 
-      // 3. Update Quests (with reward application)
-      if (updates.updateQuests) {
-          let totalXpFromQuests = 0;
-          let totalGoldFromQuests = 0;
-          const questNotificationsToShow: Array<Omit<QuestNotification, 'id'>> = [];
-          
-          setQuests(prev => prev.map(q => {
-              if (q.characterId !== currentCharacterId) return q;
-              const update = updates.updateQuests?.find(u => u.title.toLowerCase() === q.title.toLowerCase());
-              if (update) {
-                  setDirtyEntities(prev => new Set([...prev, q.id]));
-                  // If quest is completed, mark all objectives as completed too
-                  const updatedObjectives = update.status === 'completed' 
-                      ? q.objectives.map(obj => ({ ...obj, completed: true }))
-                      : q.objectives;
-                  
-                  // Apply quest rewards when completed
-                  let xpReward = 0;
-                  let goldReward = 0;
-                  if (update.status === 'completed') {
-                    // Use rewards from update, or fall back to quest's stored rewards
-                    xpReward = update.xpAwarded ?? q.xpReward ?? 0;
-                    goldReward = update.goldAwarded ?? q.goldReward ?? 0;
-                    totalXpFromQuests += xpReward;
-                    totalGoldFromQuests += goldReward;
-                  }
-                  
-                  // Queue Skyrim-style quest notification
-                  const notificationType = update.status === 'completed' ? 'quest-completed' 
-                    : update.status === 'failed' ? 'quest-failed' 
-                    : 'quest-updated';
-                  questNotificationsToShow.push({
-                    type: notificationType,
-                    questTitle: q.title,
-                    xpAwarded: update.status === 'completed' ? xpReward : undefined,
-                    goldAwarded: update.status === 'completed' ? goldReward : undefined,
-                  });
-                  
-                  return { 
-                      ...q, 
-                      status: update.status, 
-                      objectives: updatedObjectives,
-                      completedAt: (update.status === 'completed' || update.status === 'failed') ? Date.now() : undefined
-                  };
-              }
-              return q;
-          }));
-          
-          // Show quest notifications (staggered so they don't all appear at once)
-          questNotificationsToShow.forEach((notif, index) => {
-            setTimeout(() => showQuestNotification(notif), index * 300);
-          });
-          
-          // Apply accumulated quest gold rewards directly (XP will be deferred to trigger level-up check)
-          if (totalGoldFromQuests > 0) {
-            setCharacters(prev => prev.map(c => {
-              if (c.id !== currentCharacterId) return c;
-              setDirtyEntities(d => new Set([...d, c.id]));
-              return { ...c, gold: (c.gold || 0) + totalGoldFromQuests };
-            }));
-          }
-          // Show toast for quest rewards
-          if (totalXpFromQuests > 0 || totalGoldFromQuests > 0) {
-            const parts: string[] = [];
-            if (totalXpFromQuests > 0) parts.push(`+${totalXpFromQuests} XP`);
-            if (totalGoldFromQuests > 0) parts.push(`+${totalGoldFromQuests} Gold`);
-            showToast(parts.join('  '), 'success');
-          }
-          // Defer XP to section 6b by adding to xpChange (enables level-up check)
-          if (totalXpFromQuests > 0) {
-            updates = { ...updates, xpChange: (updates.xpChange || 0) + totalXpFromQuests };
-          }
+        // Check if any completed quests match active dynamic events (by title)
+        // This allows AI-driven quest completion to also complete the associated event
+        if (dynamicEventState) {
+          const completedQuestTitles = (updates.updateQuests || [])
+            .filter(u => u.status === 'completed')
+            .map(u => u.title.toLowerCase());
 
-          // Track quest completion for achievements
-          const completedCount = (updates.updateQuests || []).filter(u => u.status === 'completed').length;
-          if (completedCount > 0) {
-            // Update achievement stats so quest-based achievements progress
-            updateAchievementStats({ questsCompleted: completedCount });
-            
-            // Check if any completed quests match active dynamic events (by title)
-            // This allows AI-driven quest completion to also complete the associated event
-            if (dynamicEventState) {
-              const completedQuestTitles = (updates.updateQuests || [])
-                .filter(u => u.status === 'completed')
-                .map(u => u.title.toLowerCase());
-              
-              const matchingEvents = dynamicEventState.activeEvents.filter(e => {
-                if (e.status !== 'active') return false;
-                const eventTitle = e.name.toLowerCase();
-                // Match by exact title or if quest title contains event name
-                return completedQuestTitles.some(qt => 
-                  qt === eventTitle || 
-                  qt.includes(eventTitle) || 
-                  eventTitle.includes(qt)
-                );
-              });
-              
-              // Complete matching events (deferred to avoid state conflicts)
-              setTimeout(() => {
-                matchingEvents.forEach(event => {
-                  handleCompleteDynamicEvent(event.id);
-                });
-              }, 100);
-            }
-          }
-      }
-
-      // 4. New Items
-      if (updates.newItems) {
-           setItems(prev => {
-             const next = [...prev];
-             for (const i of updates.newItems || []) {
-               const rawItem = sanitizeInventoryItem(i as Partial<InventoryItem>);
-               const name = (rawItem.name || '').trim();
-               if (!name) continue;
-
-               // Enrich item with stats from itemStats.ts if damage/armor not provided
-               // This ensures AI-generated items like "Bandit's Axe" get proper stats
-               const itemType = rawItem.type || 'misc';
-               if (shouldHaveStats(itemType) && rawItem.damage === undefined && rawItem.armor === undefined) {
-                 const stats = getItemStats(name, itemType);
-                 if (stats.damage !== undefined) rawItem.damage = stats.damage;
-                 if (stats.armor !== undefined) rawItem.armor = stats.armor;
-                 if (stats.value !== undefined && rawItem.value === undefined) rawItem.value = stats.value;
-               }
-               
-               // Ensure all items have a value (gold) for selling/displaying
-               if (rawItem.value === undefined || rawItem.value === null || rawItem.value <= 0) {
-                 rawItem.value = estimateItemValue(name, itemType, rawItem.rarity as string);
-               }
-
-               const forceCreate = (i as any).__forceCreate === true;
-
-               if (forceCreate) {
-                 // Create unique item entity without name-merging
-                 const added = sanitizeInventoryItem({
-                   id: (i as any).id || uniqueId(),
-                   characterId: currentCharacterId,
-                   name,
-                   type: rawItem.type || 'misc',
-                   subtype: rawItem.subtype,
-                   description: rawItem.description || '',
-                   quantity: Math.max(1, Number(rawItem.quantity || 1)),
-                   equipped: rawItem.equipped ?? false,
-                   equippedBy: rawItem.equippedBy ?? null,
-                   armor: rawItem.armor,
-                   damage: rawItem.damage,
-                   value: rawItem.value,
-                   slot: rawItem.slot,
-                   rarity: rawItem.rarity,
-                 }) as InventoryItem;
-                 next.push(added);
-                 setDirtyEntities(d => new Set([...d, added.id]));
-                 continue;
-               }
-
-               const idx = next.findIndex(it => {
-                 if (it.characterId !== currentCharacterId) return false;
-                 if (((it.name || '').trim().toLowerCase()) !== name.toLowerCase()) return false;
-                 if (String(it.rarity || '').toLowerCase() !== String(rawItem.rarity || '').toLowerCase()) return false;
-                 // Also require upgrade/damage/armor to match exactly to avoid merging upgraded or enchanted items
-                 const itUpgrade = Number(it.upgradeLevel || 0);
-                 const rawUpgrade = Number(rawItem.upgradeLevel || 0);
-                 if (itUpgrade !== rawUpgrade) return false;
-                 const itDamage = Number(it.damage || 0);
-                 const rawDamage = Number(rawItem.damage || 0);
-                 if (itDamage !== rawDamage) return false;
-                 const itArmor = Number(it.armor || 0);
-                 const rawArmor = Number(rawItem.armor || 0);
-                 if (itArmor !== rawArmor) return false;
-                 return true;
-               });
-
-               const addQty = Math.max(1, Number(rawItem.quantity || 1));
-
-               // If forceCreate, always create a unique entry
-               if (forceCreate) {
-                 const added = sanitizeInventoryItem({
-                   id: (i as any).id || uniqueId(),
-                   characterId: currentCharacterId,
-                   name,
-                   type: rawItem.type || 'misc',
-                   subtype: rawItem.subtype,
-                   description: rawItem.description || '',
-                   quantity: addQty,
-                   equipped: rawItem.equipped ?? false,
-                   equippedBy: rawItem.equippedBy ?? null,
-                   armor: rawItem.armor,
-                   damage: rawItem.damage,
-                   value: rawItem.value,
-                   slot: rawItem.slot,
-                   rarity: rawItem.rarity,
-                 }) as InventoryItem;
-                 next.push(added);
-                 setDirtyEntities(d => new Set([...d, added.id]));
-                 continue;
-               }
-
-               // Default behavior: only merge into existing stacks when the incoming
-               // quantity is greater than 1 or the item is explicitly stackable.
-               // Singletons (quantity === 1) should create unique inventory entries
-               // so items like weapons/armor don't collapse into a stack.
-               const NON_STACKABLE_TYPES = ['weapon', 'apparel'];
-               let isStackable = Boolean((rawItem as any).stackable) || addQty > 1;
-               // Treat known equipment types as non-stackable by default unless explicitly marked stackable
-               if (NON_STACKABLE_TYPES.includes(String(rawItem.type || '').toLowerCase()) && !(rawItem as any).stackable) {
-                 isStackable = false;
-               }
-
-               if (isStackable) {
-                 if (idx >= 0) {
-                   const existing = next[idx];
-                   const updated = sanitizeInventoryItem({
-                     ...existing,
-                     quantity: (existing.quantity || 0) + addQty,
-                     description: existing.description || rawItem.description || '',
-                     type: existing.type || rawItem.type || 'misc',
-                     subtype: existing.subtype || rawItem.subtype,
-                     armor: existing.armor ?? rawItem.armor,
-                     damage: existing.damage ?? rawItem.damage,
-                     value: existing.value ?? rawItem.value,
-                     rarity: existing.rarity ?? rawItem.rarity,
-                     // Preserve or apply equipped state and ownership when provided in the update
-                     equipped: rawItem.equipped ?? existing.equipped ?? false,
-                     equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
-                     slot: existing.slot ?? rawItem.slot,
-                   }) as InventoryItem;
-                   next[idx] = updated;
-                   setDirtyEntities(d => new Set([...d, updated.id]));
-                 } else {
-                   const added = sanitizeInventoryItem({
-                     id: uniqueId(),
-                     characterId: currentCharacterId,
-                     name,
-                     type: rawItem.type || 'misc',
-                     subtype: rawItem.subtype,
-                     description: rawItem.description || '',
-                     quantity: addQty,
-                     equipped: rawItem.equipped ?? false,
-                     equippedBy: rawItem.equippedBy ?? null,
-                     armor: rawItem.armor,
-                     damage: rawItem.damage,
-                     value: rawItem.value,
-                     slot: rawItem.slot,
-                     rarity: rawItem.rarity,
-                   }) as InventoryItem;
-                   next.push(added);
-                   setDirtyEntities(d => new Set([...d, added.id]));
-                 }
-               } else {
-                 // Non-stackable singletons: create a unique record per incoming item
-                 const added = sanitizeInventoryItem({
-                   id: (i as any).id || uniqueId(),
-                   characterId: currentCharacterId,
-                   name,
-                   type: rawItem.type || 'misc',
-                   subtype: rawItem.subtype,
-                   description: rawItem.description || '',
-                   quantity: 1,
-                   equipped: rawItem.equipped ?? false,
-                   equippedBy: rawItem.equippedBy ?? null,
-                   armor: rawItem.armor,
-                   damage: rawItem.damage,
-                   value: rawItem.value,
-                   slot: rawItem.slot,
-                   rarity: rawItem.rarity,
-                 }) as InventoryItem;
-                 next.push(added);
-                 setDirtyEntities(d => new Set([...d, added.id]));
-               }
-             }
-             return next;
-           });
-      }
-
-      // 4a. Updated items by id (preserve id and replace matching entries)
-      // Items with quantity <= 0 are treated as deletions to prevent "x0" ghost items
-      if ((updates as any).updatedItems) {
-        setItems(prev => {
-          const next = [...prev];
-          for (const u of (updates as any).updatedItems || []) {
-            const id = (u as any).id;
-            if (!id) continue;
-            const idx = next.findIndex(it => it.id === id && it.characterId === currentCharacterId);
-            const sanitized = sanitizeInventoryItem(u as Partial<InventoryItem>) as InventoryItem;
-            
-            // Treat zero or negative quantity as deletion
-            if ((sanitized.quantity || 0) <= 0) {
-              if (idx >= 0) {
-                const [removed] = next.splice(idx, 1);
-                if (currentUser?.uid) {
-                  void deleteInventoryItem(currentUser.uid, removed.id).catch(err => {
-                    console.warn('Failed to delete zero-quantity inventory item from Firestore:', err);
-                  });
-                }
-              }
-              continue;
-            }
-            
-            if (idx >= 0) {
-              next[idx] = { ...next[idx], ...sanitized } as InventoryItem;
-              setDirtyEntities(d => new Set([...d, next[idx].id]));
-            } else {
-              // If not present, push as new (respect id)
-              const added = { ...sanitized, id: id, characterId: currentCharacterId } as InventoryItem;
-              next.push(added);
-              setDirtyEntities(d => new Set([...d, added.id]));
-            }
-          }
-          return next;
-        });
-      }
-
-      // 4b. Removed Items
-      if (updates.removedItems) {
-        setItems(prev => {
-          const next = [...prev];
-          for (const r of updates.removedItems || []) {
-            const name = (r.name || '').trim();
-            if (!name) continue;
-
-            const idx = next.findIndex(it =>
-              it.characterId === currentCharacterId &&
-              (it.name || '').trim().toLowerCase() === name.toLowerCase()
+          const matchingEvents = dynamicEventState.activeEvents.filter(e => {
+            if (e.status !== 'active') return false;
+            const eventTitle = e.name.toLowerCase();
+            // Match by exact title or if quest title contains event name
+            return completedQuestTitles.some(qt =>
+              qt === eventTitle ||
+              qt.includes(eventTitle) ||
+              eventTitle.includes(qt)
             );
-            if (idx < 0) continue;
+          });
 
-            const existing = next[idx];
-            const removeQty = Math.max(1, Number(r.quantity || 1));
-            const newQty = (existing.quantity || 0) - removeQty;
+          // Complete matching events (deferred to avoid state conflicts)
+          setTimeout(() => {
+            matchingEvents.forEach(event => {
+              handleCompleteDynamicEvent(event.id);
+            });
+          }, 100);
+        }
+      }
+    }
 
-            if (newQty > 0) {
-              const updated = { ...existing, quantity: newQty };
+    // 4. New Items
+    if (updates.newItems) {
+      setItems(prev => {
+        const next = [...prev];
+        for (const i of updates.newItems || []) {
+          const rawItem = sanitizeInventoryItem(i as Partial<InventoryItem>);
+          const name = (rawItem.name || '').trim();
+          if (!name) continue;
+
+          // Enrich item with stats from itemStats.ts if damage/armor not provided
+          // This ensures AI-generated items like "Bandit's Axe" get proper stats
+          const itemType = rawItem.type || 'misc';
+          if (shouldHaveStats(itemType) && rawItem.damage === undefined && rawItem.armor === undefined) {
+            const stats = getItemStats(name, itemType);
+            if (stats.damage !== undefined) rawItem.damage = stats.damage;
+            if (stats.armor !== undefined) rawItem.armor = stats.armor;
+            if (stats.value !== undefined && rawItem.value === undefined) rawItem.value = stats.value;
+          }
+
+          // Ensure all items have a value (gold) for selling/displaying
+          if (rawItem.value === undefined || rawItem.value === null || rawItem.value <= 0) {
+            rawItem.value = estimateItemValue(name, itemType, rawItem.rarity as string);
+          }
+
+          const forceCreate = (i as any).__forceCreate === true;
+
+          if (forceCreate) {
+            // Create unique item entity without name-merging
+            const added = sanitizeInventoryItem({
+              id: (i as any).id || uniqueId(),
+              characterId: currentCharacterId,
+              name,
+              type: rawItem.type || 'misc',
+              subtype: rawItem.subtype,
+              description: rawItem.description || '',
+              quantity: Math.max(1, Number(rawItem.quantity || 1)),
+              equipped: rawItem.equipped ?? false,
+              equippedBy: rawItem.equippedBy ?? null,
+              armor: rawItem.armor,
+              damage: rawItem.damage,
+              value: rawItem.value,
+              slot: rawItem.slot,
+              rarity: rawItem.rarity,
+            }) as InventoryItem;
+            next.push(added);
+            setDirtyEntities(d => new Set([...d, added.id]));
+            continue;
+          }
+
+          const idx = next.findIndex(it => {
+            if (it.characterId !== currentCharacterId) return false;
+            if (((it.name || '').trim().toLowerCase()) !== name.toLowerCase()) return false;
+            if (String(it.rarity || '').toLowerCase() !== String(rawItem.rarity || '').toLowerCase()) return false;
+            // Also require upgrade/damage/armor to match exactly to avoid merging upgraded or enchanted items
+            const itUpgrade = Number(it.upgradeLevel || 0);
+            const rawUpgrade = Number(rawItem.upgradeLevel || 0);
+            if (itUpgrade !== rawUpgrade) return false;
+            const itDamage = Number(it.damage || 0);
+            const rawDamage = Number(rawItem.damage || 0);
+            if (itDamage !== rawDamage) return false;
+            const itArmor = Number(it.armor || 0);
+            const rawArmor = Number(rawItem.armor || 0);
+            if (itArmor !== rawArmor) return false;
+            return true;
+          });
+
+          const addQty = Math.max(1, Number(rawItem.quantity || 1));
+
+          // If forceCreate, always create a unique entry
+          if (forceCreate) {
+            const added = sanitizeInventoryItem({
+              id: (i as any).id || uniqueId(),
+              characterId: currentCharacterId,
+              name,
+              type: rawItem.type || 'misc',
+              subtype: rawItem.subtype,
+              description: rawItem.description || '',
+              quantity: addQty,
+              equipped: rawItem.equipped ?? false,
+              equippedBy: rawItem.equippedBy ?? null,
+              armor: rawItem.armor,
+              damage: rawItem.damage,
+              value: rawItem.value,
+              slot: rawItem.slot,
+              rarity: rawItem.rarity,
+            }) as InventoryItem;
+            next.push(added);
+            setDirtyEntities(d => new Set([...d, added.id]));
+            continue;
+          }
+
+          // Default behavior: only merge into existing stacks when the incoming
+          // quantity is greater than 1 or the item is explicitly stackable.
+          // Singletons (quantity === 1) should create unique inventory entries
+          // so items like weapons/armor don't collapse into a stack.
+          const NON_STACKABLE_TYPES = ['weapon', 'apparel'];
+          let isStackable = Boolean((rawItem as any).stackable) || addQty > 1;
+          // Treat known equipment types as non-stackable by default unless explicitly marked stackable
+          if (NON_STACKABLE_TYPES.includes(String(rawItem.type || '').toLowerCase()) && !(rawItem as any).stackable) {
+            isStackable = false;
+          }
+
+          if (isStackable) {
+            if (idx >= 0) {
+              const existing = next[idx];
+              const updated = sanitizeInventoryItem({
+                ...existing,
+                quantity: (existing.quantity || 0) + addQty,
+                description: existing.description || rawItem.description || '',
+                type: existing.type || rawItem.type || 'misc',
+                subtype: existing.subtype || rawItem.subtype,
+                armor: existing.armor ?? rawItem.armor,
+                damage: existing.damage ?? rawItem.damage,
+                value: existing.value ?? rawItem.value,
+                rarity: existing.rarity ?? rawItem.rarity,
+                // Preserve or apply equipped state and ownership when provided in the update
+                equipped: rawItem.equipped ?? existing.equipped ?? false,
+                equippedBy: rawItem.equippedBy ?? existing.equippedBy ?? null,
+                slot: existing.slot ?? rawItem.slot,
+              }) as InventoryItem;
               next[idx] = updated;
               setDirtyEntities(d => new Set([...d, updated.id]));
             } else {
+              const added = sanitizeInventoryItem({
+                id: uniqueId(),
+                characterId: currentCharacterId,
+                name,
+                type: rawItem.type || 'misc',
+                subtype: rawItem.subtype,
+                description: rawItem.description || '',
+                quantity: addQty,
+                equipped: rawItem.equipped ?? false,
+                equippedBy: rawItem.equippedBy ?? null,
+                armor: rawItem.armor,
+                damage: rawItem.damage,
+                value: rawItem.value,
+                slot: rawItem.slot,
+                rarity: rawItem.rarity,
+              }) as InventoryItem;
+              next.push(added);
+              setDirtyEntities(d => new Set([...d, added.id]));
+            }
+          } else {
+            // Non-stackable singletons: create a unique record per incoming item
+            const added = sanitizeInventoryItem({
+              id: (i as any).id || uniqueId(),
+              characterId: currentCharacterId,
+              name,
+              type: rawItem.type || 'misc',
+              subtype: rawItem.subtype,
+              description: rawItem.description || '',
+              quantity: 1,
+              equipped: rawItem.equipped ?? false,
+              equippedBy: rawItem.equippedBy ?? null,
+              armor: rawItem.armor,
+              damage: rawItem.damage,
+              value: rawItem.value,
+              slot: rawItem.slot,
+              rarity: rawItem.rarity,
+            }) as InventoryItem;
+            next.push(added);
+            setDirtyEntities(d => new Set([...d, added.id]));
+          }
+        }
+        return next;
+      });
+    }
+
+    // 4a. Updated items by id (preserve id and replace matching entries)
+    // Items with quantity <= 0 are treated as deletions to prevent "x0" ghost items
+    if ((updates as any).updatedItems) {
+      setItems(prev => {
+        const next = [...prev];
+        for (const u of (updates as any).updatedItems || []) {
+          const id = (u as any).id;
+          if (!id) continue;
+          const idx = next.findIndex(it => it.id === id && it.characterId === currentCharacterId);
+          const sanitized = sanitizeInventoryItem(u as Partial<InventoryItem>) as InventoryItem;
+
+          // Treat zero or negative quantity as deletion
+          if ((sanitized.quantity || 0) <= 0) {
+            if (idx >= 0) {
               const [removed] = next.splice(idx, 1);
               if (currentUser?.uid) {
                 void deleteInventoryItem(currentUser.uid, removed.id).catch(err => {
-                  console.warn('Failed to delete inventory item from Firestore:', err);
+                  console.warn('Failed to delete zero-quantity inventory item from Firestore:', err);
                 });
               }
             }
+            continue;
           }
-          return next;
+
+          if (idx >= 0) {
+            next[idx] = { ...next[idx], ...sanitized } as InventoryItem;
+            setDirtyEntities(d => new Set([...d, next[idx].id]));
+          } else {
+            // If not present, push as new (respect id)
+            const added = { ...sanitized, id: id, characterId: currentCharacterId } as InventoryItem;
+            next.push(added);
+            setDirtyEntities(d => new Set([...d, added.id]));
+          }
+        }
+        return next;
+      });
+    }
+
+    // 4b. Removed Items
+    if (updates.removedItems) {
+      setItems(prev => {
+        const next = [...prev];
+        for (const r of updates.removedItems || []) {
+          const name = (r.name || '').trim();
+          if (!name) continue;
+
+          const idx = next.findIndex(it =>
+            it.characterId === currentCharacterId &&
+            (it.name || '').trim().toLowerCase() === name.toLowerCase()
+          );
+          if (idx < 0) continue;
+
+          const existing = next[idx];
+          const removeQty = Math.max(1, Number(r.quantity || 1));
+          const newQty = (existing.quantity || 0) - removeQty;
+
+          if (newQty > 0) {
+            const updated = { ...existing, quantity: newQty };
+            next[idx] = updated;
+            setDirtyEntities(d => new Set([...d, updated.id]));
+          } else {
+            const [removed] = next.splice(idx, 1);
+            if (currentUser?.uid) {
+              void deleteInventoryItem(currentUser.uid, removed.id).catch(err => {
+                console.warn('Failed to delete inventory item from Firestore:', err);
+              });
+            }
+          }
+        }
+        return next;
+      });
+    }
+
+    // 5. Stats
+    if (updates.statUpdates) {
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+        setDirtyEntities(prev => new Set([...prev, c.id]));
+        return {
+          ...c,
+          stats: { ...c.stats, ...updates.statUpdates }
+        };
+      }));
+    }
+
+    // 5b. Skill gains from narrative or events (e.g., story chapters contributing to skills)
+    if (updates.skillGains && updates.skillGains.length) {
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+        const updatedSkills = (c.skills || []).map(s => {
+          const gain = updates.skillGains?.find(g => (g.skill || '').toLowerCase() === (s.name || '').toLowerCase());
+          if (!gain) return s;
+          const nextLevel = clamp(Number(s.level || 0) + Number(gain.amount || 0), 0, 100);
+          return { ...s, level: nextLevel };
         });
-      }
+        setDirtyEntities(d => new Set([...d, c.id]));
+        return { ...c, skills: updatedSkills };
+      }));
+    }
 
-      // 5. Stats
-      if (updates.statUpdates) {
-          setCharacters(prev => prev.map(c => {
-              if (c.id !== currentCharacterId) return c;
-              setDirtyEntities(prev => new Set([...prev, c.id]));
-              return {
-                  ...c,
-                  stats: { ...c.stats, ...updates.statUpdates }
-              };
-          }));
-      }
+    // 5b. Vitals (currentHealth, currentMagicka, currentStamina) changes from adventure
+    if (updates.vitalsChange && Object.keys(updates.vitalsChange).length) {
+      setCharacters(prev => prev.map(c => {
+        if (c.id !== currentCharacterId) return c;
+        setDirtyEntities(prev => new Set([...prev, c.id]));
 
-      // 5b. Skill gains from narrative or events (e.g., story chapters contributing to skills)
-      if (updates.skillGains && updates.skillGains.length) {
+        const currentVitals = c.currentVitals || {
+          currentHealth: c.stats.health,
+          currentMagicka: c.stats.magicka,
+          currentStamina: c.stats.stamina
+        };
+
+        const newVitals = {
+          currentHealth: Math.max(0, Math.min(c.stats.health, (currentVitals.currentHealth ?? c.stats.health) + (updates.vitalsChange?.currentHealth ?? 0))),
+          currentMagicka: Math.max(0, Math.min(c.stats.magicka, (currentVitals.currentMagicka ?? c.stats.magicka) + (updates.vitalsChange?.currentMagicka ?? 0))),
+          currentStamina: Math.max(0, Math.min(c.stats.stamina, (currentVitals.currentStamina ?? c.stats.stamina) + (updates.vitalsChange?.currentStamina ?? 0)))
+        };
+
+        return {
+          ...c,
+          currentVitals: newVitals
+        };
+      }));
+    }
+
+    // 5d. New status effects to add (buffs/debuffs)
+    if (updates.statusEffects && updates.statusEffects.length) {
+      const normalized = updates.statusEffects.map((s: any) => normalizeStatusEffect(s || {}, `status_${uniqueId()}`));
+      setStatusEffects(prev => [...prev, ...normalized]);
+      normalized.forEach((effect: any) => {
+        showToast(effect.description || `Effect applied: ${effect.name}`, 'success');
+      });
+    }
+
+    // 5c. Combat Start - Initialize turn-based combat
+    if (updates.combatStart && updates.combatStart.enemies?.length) {
+      const combatData = updates.combatStart;
+      // Filter companions to only include those belonging to the current character
+      const activeCompanions = companions.filter(c => c.characterId === currentCharacterId);
+      // Scale AI-generated enemies to player level for balanced encounters
+      const playerLevel = activeCharacter?.level || 1;
+      const scaledEnemies = (combatData.enemies as CombatEnemy[]).map((enemy: CombatEnemy) => {
+        // Target level: player level ± 2, minimum 1
+        const targetLevel = Math.max(1, playerLevel + Math.floor(Math.random() * 5) - 2);
+        const levelScale = targetLevel / Math.max(1, enemy.level || 1);
+        return {
+          ...enemy,
+          level: targetLevel,
+          maxHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
+          currentHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
+          damage: Math.max(5, Math.floor((enemy.damage || 10) * levelScale)),
+          armor: Math.max(0, Math.floor((enemy.armor || 5) * levelScale)),
+          xpReward: Math.max(10, Math.floor((enemy.xpReward || 20) * levelScale)),
+          goldReward: enemy.goldReward ? Math.max(5, Math.floor(enemy.goldReward * levelScale)) : undefined,
+        };
+      });
+      const initializedCombat = initializeCombat(
+        scaledEnemies,
+        combatData.location,
+        combatData.ambush ?? false,
+        combatData.fleeAllowed ?? true,
+        combatData.surrenderAllowed ?? false,
+        activeCompanions // include only current character's companions who will join if behavior indicates
+      );
+      setCombatState(initializedCombat);
+
+      // Switch to combat music
+      updateMusicForContext({ inCombat: true, mood: 'tense' });
+    }
+
+    // 6. Gold
+    if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
+      if (!updates._alreadyAppliedLocally) {
         setCharacters(prev => prev.map(c => {
           if (c.id !== currentCharacterId) return c;
-          const updatedSkills = (c.skills || []).map(s => {
-            const gain = updates.skillGains?.find(g => (g.skill || '').toLowerCase() === (s.name || '').toLowerCase());
-            if (!gain) return s;
-            const nextLevel = clamp(Number(s.level || 0) + Number(gain.amount || 0), 0, 100);
-            return { ...s, level: nextLevel };
-          });
-          setDirtyEntities(d => new Set([...d, c.id]));
-          return { ...c, skills: updatedSkills };
+          setDirtyEntities(prev => new Set([...prev, c.id]));
+          return { ...c, gold: (c.gold || 0) + (updates.goldChange || 0) };
         }));
+      } else {
+        // Already applied locally by caller (defensive apply); still mark dirty for persistence
+        setDirtyEntities(prev => new Set([...prev, currentCharacterId!]));
       }
+    }
 
-      // 5b. Vitals (currentHealth, currentMagicka, currentStamina) changes from adventure
-      if (updates.vitalsChange && Object.keys(updates.vitalsChange).length) {
-          setCharacters(prev => prev.map(c => {
-              if (c.id !== currentCharacterId) return c;
-              setDirtyEntities(prev => new Set([...prev, c.id]));
-              
-              const currentVitals = c.currentVitals || {
-                currentHealth: c.stats.health,
-                currentMagicka: c.stats.magicka,
-                currentStamina: c.stats.stamina
-              };
-              
-              const newVitals = {
-                currentHealth: Math.max(0, Math.min(c.stats.health, (currentVitals.currentHealth ?? c.stats.health) + (updates.vitalsChange?.currentHealth ?? 0))),
-                currentMagicka: Math.max(0, Math.min(c.stats.magicka, (currentVitals.currentMagicka ?? c.stats.magicka) + (updates.vitalsChange?.currentMagicka ?? 0))),
-                currentStamina: Math.max(0, Math.min(c.stats.stamina, (currentVitals.currentStamina ?? c.stats.stamina) + (updates.vitalsChange?.currentStamina ?? 0)))
-              };
-              
-              return {
-                  ...c,
-                  currentVitals: newVitals
-              };
-          }));
-      }
+    // 6b. XP with Level-Up Check (using escalating XP requirements)
+    if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
+      // If a level-up is already pending, don't queue another until resolved
+      if (!pendingLevelUp) {
+        setCharacters(prev => prev.map(c => {
+          if (c.id !== currentCharacterId) return c;
+          setDirtyEntities(prev => new Set([...prev, c.id]));
 
-      // 5d. New status effects to add (buffs/debuffs)
-      if (updates.statusEffects && updates.statusEffects.length) {
-        const normalized = updates.statusEffects.map((s: any) => ({ id: s.id || `status_${uniqueId()}`, ...s }));
-        setStatusEffects(prev => [...prev, ...normalized]);
-        normalized.forEach((effect: any) => {
-          showToast(effect.description || `Effect applied: ${effect.name}`, 'success');
-        });
-      }
+          // If caller already applied XP locally, avoid double-adding
+          const delta = updates._alreadyAppliedLocally ? 0 : (updates.xpChange || 0);
+          const newXP = (c.experience || 0) + delta;
+          const currentLevel = c.level || 1;
+          const xpForNextLevel = getXPForNextLevel(currentLevel);
+          const xpProgress = getXPProgress(newXP, currentLevel);
 
-      // 5c. Combat Start - Initialize turn-based combat
-      if (updates.combatStart && updates.combatStart.enemies?.length) {
-        const combatData = updates.combatStart;
-        // Filter companions to only include those belonging to the current character
-        const activeCompanions = companions.filter(c => c.characterId === currentCharacterId);
-        // Scale AI-generated enemies to player level for balanced encounters
-        const playerLevel = activeCharacter?.level || 1;
-        const scaledEnemies = (combatData.enemies as CombatEnemy[]).map((enemy: CombatEnemy) => {
-          // Target level: player level ± 2, minimum 1
-          const targetLevel = Math.max(1, playerLevel + Math.floor(Math.random() * 5) - 2);
-          const levelScale = targetLevel / Math.max(1, enemy.level || 1);
-          return {
-            ...enemy,
-            level: targetLevel,
-            maxHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
-            currentHealth: Math.max(30, Math.floor((enemy.maxHealth || 50) * levelScale)),
-            damage: Math.max(5, Math.floor((enemy.damage || 10) * levelScale)),
-            armor: Math.max(0, Math.floor((enemy.armor || 5) * levelScale)),
-            xpReward: Math.max(10, Math.floor((enemy.xpReward || 20) * levelScale)),
-            goldReward: enemy.goldReward ? Math.max(5, Math.floor(enemy.goldReward * levelScale)) : undefined,
-          };
-        });
-        const initializedCombat = initializeCombat(
-          scaledEnemies,
-          combatData.location,
-          combatData.ambush ?? false,
-          combatData.fleeAllowed ?? true,
-          combatData.surrenderAllowed ?? false,
-          activeCompanions // include only current character's companions who will join if behavior indicates
-        );
-        setCombatState(initializedCombat);
-        
-        // Switch to combat music
-        updateMusicForContext({ inCombat: true, mood: 'tense' });
-      }
+          // Check if we leveled up (XP progress >= required for next level)
+          if (xpProgress.current >= xpForNextLevel) {
+            const newLevel = currentLevel + 1;
+            const remainingXP = newXP; // Keep total XP
 
-      // 6. Gold
-      if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
-         if (!updates._alreadyAppliedLocally) {
-           setCharacters(prev => prev.map(c => {
-                if (c.id !== currentCharacterId) return c;
-                setDirtyEntities(prev => new Set([...prev, c.id]));
-                return { ...c, gold: (c.gold || 0) + (updates.goldChange || 0) };
-           }));
-         } else {
-           // Already applied locally by caller (defensive apply); still mark dirty for persistence
-           setDirtyEntities(prev => new Set([...prev, currentCharacterId!]));
-         }
-      }
+            // Avoid race-conditions where multiple xpChange updates in quick succession queue the same level up twice.
+            if (!levelUpQueuedRef.current) {
+              levelUpQueuedRef.current = true;
 
-      // 6b. XP with Level-Up Check (using escalating XP requirements)
-      if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
-        // If a level-up is already pending, don't queue another until resolved
-        if (!pendingLevelUp) {
-          setCharacters(prev => prev.map(c => {
-            if (c.id !== currentCharacterId) return c;
-            setDirtyEntities(prev => new Set([...prev, c.id]));
+              // Save pending level up to prompt user for choice
+              setPendingLevelUp({
+                charId: c.id,
+                charName: c.name,
+                newLevel,
+                remainingXP,
+                archetype: c.archetype,
+                previousXP: c.experience || 0,
+              });
 
-            // If caller already applied XP locally, avoid double-adding
-            const delta = updates._alreadyAppliedLocally ? 0 : (updates.xpChange || 0);
-            const newXP = (c.experience || 0) + delta;
-            const currentLevel = c.level || 1;
-            const xpForNextLevel = getXPForNextLevel(currentLevel);
-            const xpProgress = getXPProgress(newXP, currentLevel);
+              // Show Skyrim-style level up notification
+              showLevelUpNotification(c.name, newLevel);
 
-                  // Check if we leveled up (XP progress >= required for next level)
-            if (xpProgress.current >= xpForNextLevel) {
-              const newLevel = currentLevel + 1;
-              const remainingXP = newXP; // Keep total XP
-
-              // Avoid race-conditions where multiple xpChange updates in quick succession queue the same level up twice.
-              if (!levelUpQueuedRef.current) {
-                levelUpQueuedRef.current = true;
-
-                // Save pending level up to prompt user for choice
-                setPendingLevelUp({
-                  charId: c.id,
-                  charName: c.name,
-                  newLevel,
-                  remainingXP,
-                  archetype: c.archetype,
-                  previousXP: c.experience || 0,
-                });
-
-                // Show Skyrim-style level up notification
-                showLevelUpNotification(c.name, newLevel);
-
-                // Informally record XP gain but do not auto-apply level or stat bonuses
-                setSaveMessage(`🎉 ${c.name} earned enough experience to level up — confirm to apply.`);
-                setTimeout(() => setSaveMessage(null), 3500);
-              }
-
-              return { ...c, experience: newXP };
+              // Informally record XP gain but do not auto-apply level or stat bonuses
+              setSaveMessage(`🎉 ${c.name} earned enough experience to level up — confirm to apply.`);
+              setTimeout(() => setSaveMessage(null), 3500);
             }
 
             return { ...c, experience: newXP };
-          }));
-        } else {
-          // If already pending, simply add XP to character so progress is not lost
-          setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, experience: (c.experience || 0) + (updates.xpChange || 0) } : c));
-        }
+          }
+
+          return { ...c, experience: newXP };
+        }));
+      } else {
+        // If already pending, simply add XP to character so progress is not lost
+        setCharacters(prev => prev.map(c => c.id === currentCharacterId ? { ...c, experience: (c.experience || 0) + (updates.xpChange || 0) } : c));
       }
+    }
 
-      // 7. Auto-Journal
-      const title =
-        updates.narrative?.title ||
-        (updates.newQuests?.length ? 'New Quest' : undefined) ||
-        (updates.updateQuests?.length ? 'Quest Update' : undefined) ||
-        (updates.newItems?.length || updates.removedItems?.length ? 'Supplies & Spoils' : undefined) ||
-        (typeof updates.goldChange === 'number' && updates.goldChange !== 0 ? 'Coin & Debts' : undefined) ||
-        (typeof updates.xpChange === 'number' && updates.xpChange !== 0 ? 'Lessons Learned' : undefined) ||
-        (updates.statUpdates ? 'Condition' : undefined) ||
-        (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0 ? 'Time Passes' : undefined) ||
-        (updates.needsChange ? 'Survival' : undefined) ||
-        'Field Notes';
+    // 7. Auto-Journal
+    const title =
+      updates.narrative?.title ||
+      (updates.newQuests?.length ? 'New Quest' : undefined) ||
+      (updates.updateQuests?.length ? 'Quest Update' : undefined) ||
+      (updates.newItems?.length || updates.removedItems?.length ? 'Supplies & Spoils' : undefined) ||
+      (typeof updates.goldChange === 'number' && updates.goldChange !== 0 ? 'Coin & Debts' : undefined) ||
+      (typeof updates.xpChange === 'number' && updates.xpChange !== 0 ? 'Lessons Learned' : undefined) ||
+      (updates.statUpdates ? 'Condition' : undefined) ||
+      (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0 ? 'Time Passes' : undefined) ||
+      (updates.needsChange ? 'Survival' : undefined) ||
+      'Field Notes';
 
-      const lines: string[] = [];
+    const lines: string[] = [];
 
-      if (updates.narrative?.content) {
-        lines.push(`I remember it like this:\n${updates.narrative.content.trim()}`);
-      }
+    if (updates.narrative?.content) {
+      lines.push(`I remember it like this:\n${updates.narrative.content.trim()}`);
+    }
 
-      const changes: string[] = [];
+    const changes: string[] = [];
 
-      if (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0) {
-        const mins = Math.abs(Math.trunc(updates.timeAdvanceMinutes));
-        const hrs = Math.floor(mins / 60);
-        const rem = mins % 60;
-        const dur = hrs > 0 ? `${hrs}h${rem ? ` ${rem}m` : ''}` : `${rem}m`;
-        changes.push(`Time passed: ${dur}.`);
+    if (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0) {
+      const mins = Math.abs(Math.trunc(updates.timeAdvanceMinutes));
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      const dur = hrs > 0 ? `${hrs}h${rem ? ` ${rem}m` : ''}` : `${rem}m`;
+      changes.push(`Time passed: ${dur}.`);
 
-        // Use the *new* time if we can derive it, otherwise a best-effort.
-        const nextTime = addMinutesToTime((activeCharacter as any).time || INITIAL_CHARACTER_TEMPLATE.time, updates.timeAdvanceMinutes);
-        changes.push(`It is now ${formatTime(nextTime)}.`);
+      // Use the *new* time if we can derive it, otherwise a best-effort.
+      const nextTime = addMinutesToTime((activeCharacter as any).time || INITIAL_CHARACTER_TEMPLATE.time, updates.timeAdvanceMinutes);
+      changes.push(`It is now ${formatTime(nextTime)}.`);
 
-        const hungerInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.hungerPerMinute);
-        const thirstInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.thirstPerMinute);
-        const fatigueInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.fatiguePerMinute);
-        const parts: string[] = [];
-        if (hungerInc) parts.push(`hunger +${hungerInc}`);
-        if (thirstInc) parts.push(`thirst +${thirstInc}`);
-        if (fatigueInc) parts.push(`fatigue +${fatigueInc}`);
-        if (parts.length) changes.push(`As the minutes wore on, I felt it: ${parts.join(', ')}.`);
-      }
+      const hungerInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.hungerPerMinute);
+      const thirstInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.thirstPerMinute);
+      const fatigueInc = calcNeedFromTime(updates.timeAdvanceMinutes, NEED_RATES.fatiguePerMinute);
+      const parts: string[] = [];
+      if (hungerInc) parts.push(`hunger +${hungerInc}`);
+      if (thirstInc) parts.push(`thirst +${thirstInc}`);
+      if (fatigueInc) parts.push(`fatigue +${fatigueInc}`);
+      if (parts.length) changes.push(`As the minutes wore on, I felt it: ${parts.join(', ')}.`);
+    }
 
-      if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
-        if (updates.goldChange > 0) changes.push(`I gained ${updates.goldChange} gold.`);
-        else changes.push(`I spent ${Math.abs(updates.goldChange)} gold.`);
-      }
-        if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
-        if (updates.xpChange > 0) changes.push(`I gained ${updates.xpChange} experience.`);
-        else changes.push(`I lost ${Math.abs(updates.xpChange)} experience.`);
-      }
+    if (typeof updates.goldChange === 'number' && updates.goldChange !== 0) {
+      if (updates.goldChange > 0) changes.push(`I gained ${updates.goldChange} gold.`);
+      else changes.push(`I spent ${Math.abs(updates.goldChange)} gold.`);
+    }
+    if (typeof updates.xpChange === 'number' && updates.xpChange !== 0) {
+      if (updates.xpChange > 0) changes.push(`I gained ${updates.xpChange} experience.`);
+      else changes.push(`I lost ${Math.abs(updates.xpChange)} experience.`);
+    }
 
-      if (updates.needsChange && Object.keys(updates.needsChange).length) {
-        const parts: string[] = [];
-        const h = Number((updates.needsChange as any).hunger || 0);
-        const t = Number((updates.needsChange as any).thirst || 0);
-        const f = Number((updates.needsChange as any).fatigue || 0);
-        if (h) parts.push(`hunger ${h > 0 ? `+${h}` : `${h}`}`);
-        if (t) parts.push(`thirst ${t > 0 ? `+${t}` : `${t}`}`);
-        if (f) parts.push(`fatigue ${f > 0 ? `+${f}` : `${f}`}`);
-        if (parts.length) changes.push(`My body felt it: ${parts.join(', ')}.`);
-      }
+    if (updates.needsChange && Object.keys(updates.needsChange).length) {
+      const parts: string[] = [];
+      const h = Number((updates.needsChange as any).hunger || 0);
+      const t = Number((updates.needsChange as any).thirst || 0);
+      const f = Number((updates.needsChange as any).fatigue || 0);
+      if (h) parts.push(`hunger ${h > 0 ? `+${h}` : `${h}`}`);
+      if (t) parts.push(`thirst ${t > 0 ? `+${t}` : `${t}`}`);
+      if (f) parts.push(`fatigue ${f > 0 ? `+${f}` : `${f}`}`);
+      if (parts.length) changes.push(`My body felt it: ${parts.join(', ')}.`);
+    }
 
-      if (updates.statUpdates && Object.keys(updates.statUpdates).length) {
-        const statParts: string[] = [];
-        if (typeof updates.statUpdates.health === 'number') statParts.push(`health is now ${updates.statUpdates.health}`);
-        if (typeof updates.statUpdates.magicka === 'number') statParts.push(`magicka is now ${updates.statUpdates.magicka}`);
-        if (typeof updates.statUpdates.stamina === 'number') statParts.push(`stamina is now ${updates.statUpdates.stamina}`);
-        if (statParts.length) changes.push(`My ${statParts.join(', ')}.`);
-      }
+    if (updates.statUpdates && Object.keys(updates.statUpdates).length) {
+      const statParts: string[] = [];
+      if (typeof updates.statUpdates.health === 'number') statParts.push(`health is now ${updates.statUpdates.health}`);
+      if (typeof updates.statUpdates.magicka === 'number') statParts.push(`magicka is now ${updates.statUpdates.magicka}`);
+      if (typeof updates.statUpdates.stamina === 'number') statParts.push(`stamina is now ${updates.statUpdates.stamina}`);
+      if (statParts.length) changes.push(`My ${statParts.join(', ')}.`);
+    }
 
-      if (updates.newItems?.length) {
-        const items = updates.newItems
-          .map(i => {
-            const qty = Math.max(1, Number(i.quantity || 1));
-            return `${qty}× ${String(i.name || '').trim()}`.trim();
-          })
-          .filter(Boolean);
-        if (items.length) changes.push(`I gained ${items.join(', ')}.`);
-      }
+    if (updates.newItems?.length) {
+      const items = updates.newItems
+        .map(i => {
+          const qty = Math.max(1, Number(i.quantity || 1));
+          return `${qty}× ${String(i.name || '').trim()}`.trim();
+        })
+        .filter(Boolean);
+      if (items.length) changes.push(`I gained ${items.join(', ')}.`);
+    }
 
-      if (updates.removedItems?.length) {
-        const items = updates.removedItems
-          .map(i => {
-            const qty = Math.max(1, Number(i.quantity || 1));
-            return `${qty}× ${String(i.name || '').trim()}`.trim();
-          })
-          .filter(Boolean);
-        if (items.length) changes.push(`I used or lost ${items.join(', ')}.`);
-      }
+    if (updates.removedItems?.length) {
+      const items = updates.removedItems
+        .map(i => {
+          const qty = Math.max(1, Number(i.quantity || 1));
+          return `${qty}× ${String(i.name || '').trim()}`.trim();
+        })
+        .filter(Boolean);
+      if (items.length) changes.push(`I used or lost ${items.join(', ')}.`);
+    }
 
-      if (updates.newQuests?.length) {
-        const questSummaries = updates.newQuests
-          .map(q => {
-            const loc = q.location ? ` (${q.location})` : '';
-            const due = q.dueDate ? ` — Due: ${q.dueDate}` : '';
-            const objectives = (q.objectives || []).map(o => `- ${o.description}`).join('\n');
-            const objBlock = objectives ? `\nMy objectives:\n${objectives}` : '';
-            const desc = (q.description || '').trim();
-            return `I accepted a new quest: ${q.title}${loc}${due}.${desc ? `\n${desc}` : ''}${objBlock}`.trim();
-          })
-          .filter(Boolean);
-        if (questSummaries.length) lines.push(questSummaries.join('\n\n'));
-      }
+    if (updates.newQuests?.length) {
+      const questSummaries = updates.newQuests
+        .map(q => {
+          const loc = q.location ? ` (${q.location})` : '';
+          const due = q.dueDate ? ` — Due: ${q.dueDate}` : '';
+          const objectives = (q.objectives || []).map(o => `- ${o.description}`).join('\n');
+          const objBlock = objectives ? `\nMy objectives:\n${objectives}` : '';
+          const desc = (q.description || '').trim();
+          return `I accepted a new quest: ${q.title}${loc}${due}.${desc ? `\n${desc}` : ''}${objBlock}`.trim();
+        })
+        .filter(Boolean);
+      if (questSummaries.length) lines.push(questSummaries.join('\n\n'));
+    }
 
-      if (updates.updateQuests?.length) {
-        const questUpdates = updates.updateQuests
-          .map(q => {
-            if (q.status === 'completed') return `I completed the quest: ${q.title}.`;
-            if (q.status === 'failed') return `I failed the quest: ${q.title}.`;
-            return `I updated my quest: ${q.title}.`;
-          })
-          .filter(Boolean);
-        if (questUpdates.length) changes.push(...questUpdates);
-      }
+    if (updates.updateQuests?.length) {
+      const questUpdates = updates.updateQuests
+        .map(q => {
+          if (q.status === 'completed') return `I completed the quest: ${q.title}.`;
+          if (q.status === 'failed') return `I failed the quest: ${q.title}.`;
+          return `I updated my quest: ${q.title}.`;
+        })
+        .filter(Boolean);
+      if (questUpdates.length) changes.push(...questUpdates);
+    }
 
-      if (changes.length) {
-        lines.push(`\nMy notes:\n- ${changes.join('\n- ')}`);
-      }
+    if (changes.length) {
+      lines.push(`\nMy notes:\n- ${changes.join('\n- ')}`);
+    }
 
-      const entry: JournalEntry = {
-        id: uniqueId(),
-        characterId: currentCharacterId,
-        date: "4E 201",
-        title,
-        content: lines.filter(Boolean).join('\n\n').trim(),
+    const entry: JournalEntry = {
+      id: uniqueId(),
+      characterId: currentCharacterId,
+      date: "4E 201",
+      title,
+      content: lines.filter(Boolean).join('\n\n').trim(),
+    };
+    setJournalEntries(prev => [...prev, entry]);
+    setDirtyEntities(prev => new Set([...prev, entry.id]));
+
+    // 8. Automatic Music Update based on ambient context (only when explicitly provided)
+    // BUT: Don't override if combat was just started in this same update
+    if (updates.ambientContext && !updates.combatStart) {
+      // Check if we're in combat from multiple sources
+      const isInCombat = updates.ambientContext.inCombat
+        || (updates.simulationUpdate?.phaseChange === 'combat')
+        || Boolean(combatState); // Also check existing combat state
+
+      const ambientCtx: AmbientContext = {
+        localeType: updates.ambientContext.localeType,
+        inCombat: isInCombat,
+        mood: updates.ambientContext.mood,
+        timeOfDay: (activeCharacter as any)?.time?.hour ?? 12
       };
-      setJournalEntries(prev => [...prev, entry]);
-      setDirtyEntities(prev => new Set([...prev, entry.id]));
-
-      // 8. Automatic Music Update based on ambient context (only when explicitly provided)
-      // BUT: Don't override if combat was just started in this same update
-      if (updates.ambientContext && !updates.combatStart) {
-        // Check if we're in combat from multiple sources
-        const isInCombat = updates.ambientContext.inCombat 
-          || (updates.simulationUpdate?.phaseChange === 'combat')
-          || Boolean(combatState); // Also check existing combat state
-        
-        const ambientCtx: AmbientContext = {
-          localeType: updates.ambientContext.localeType,
-          inCombat: isInCombat,
-          mood: updates.ambientContext.mood,
-          timeOfDay: (activeCharacter as any)?.time?.hour ?? 12
-        };
-        updateMusicForContext(ambientCtx);
-      }
+      updateMusicForContext(ambientCtx);
+    }
   };
 
   // Expose app context for demo commands (updated on every render)
@@ -4869,31 +4888,53 @@ const App: React.FC = () => {
   const getAIContext = () => {
     if (!activeCharacter) return "";
     return JSON.stringify({
-        character: activeCharacter,
-        inventory: getCharacterItems(),
-        activeQuests: getCharacterQuests().filter(q => q.status === 'active'),
-        recentStory: getCharacterStory().slice(-3)
+      character: activeCharacter,
+      inventory: getCharacterItems(),
+      activeQuests: getCharacterQuests().filter(q => q.status === 'active'),
+      recentStory: getCharacterStory().slice(-3)
     });
   };
 
   // Level-up confirm/cancel handlers
 
-  const confirmLevelUp = (choice: 'health' | 'magicka' | 'stamina') => {
+  const confirmLevelUp = (payload: { attribute: 'health' | 'magicka' | 'stamina'; reward: { type: 'gold'; amount: number } | { type: 'chest'; items: any[] } }) => {
     if (!pendingLevelUp || !currentCharacterId) return;
+    // Prevent double-apply: snapshot pending then clear it immediately so a second call is ignored
     const p = pendingLevelUp;
+    setPendingLevelUp(null);
+    levelUpQueuedRef.current = false; // allow further level-ups to be queued later
+    const { attribute, reward } = payload;
 
     setCharacters(prev => prev.map(c => {
       if (c.id !== p.charId) return c;
-      const updated = applyLevelUpToCharacter(c, p.newLevel, p.remainingXP, choice);
+      const updated = applyLevelUpToCharacter(c, p.newLevel, p.remainingXP, attribute);
       setDirtyEntities(d => new Set([...d, c.id]));
 
-      // Add a journal entry announcing the level up
+      // Apply reward: gold or items
+      if (reward.type === 'gold') {
+        // Use handleGameUpdate pipeline to apply gold
+        handleGameUpdate({ goldChange: reward.amount });
+        // Immediate feedback
+        showToast(`+${reward.amount} Gold`, 'success', { stat: 'gold', amount: reward.amount });
+      } else if (reward.type === 'chest') {
+        const toAdd = (reward.items || []).map(it => ({ name: it.name, type: it.type || 'misc', quantity: it.quantity || 1, rarity: it.rarity }));
+        handleGameUpdate({ newItems: toAdd as any });
+        // Show concise feedback listing names
+        if (toAdd.length > 0) {
+          const names = toAdd.map(t => t.name).slice(0, 3).join(', ');
+          showToast(`Received ${toAdd.length} item(s): ${names}`, 'success');
+        } else {
+          showToast('Chest yielded no items.', 'info');
+        }
+      }
+
+      // Add a journal entry announcing the level up and reward
       const entry: JournalEntry = {
         id: uniqueId(),
         characterId: c.id,
         date: "4E 201",
         title: `Leveled up to ${p.newLevel}`,
-        content: `${c.name} reached level ${p.newLevel} and chose to increase ${choice} by +10. Received 1 perk point.`
+        content: `${c.name} reached level ${p.newLevel} and chose to increase ${attribute} by +10. Received 1 perk point and reward: ${reward.type === 'gold' ? (reward.amount + ' gold') : 'chest items'}.`
       };
       setJournalEntries(prev => [...prev, entry]);
       setDirtyEntities(d => new Set([...d, entry.id]));
@@ -4964,6 +5005,44 @@ const App: React.FC = () => {
     levelUpQueuedRef.current = false;
     setSaveMessage('Level up postponed.');
     setTimeout(() => setSaveMessage(null), 2000);
+  };
+
+  // Called when LevelUpModal is postponing and wants us to persist the selected reward (but not grant)
+  const preparePostponeLevelUp = (payload: { rewardChoice: 'gold' | 'chest' | null; rewardGoldAmount?: number | null; chestItems?: any[] | null }) => {
+    if (!pendingLevelUp) return;
+    setPendingLevelUp(prev => prev ? { ...prev, rewardChoice: payload.rewardChoice ?? null, rewardGoldAmount: payload.rewardGoldAmount ?? null, chestItems: payload.chestItems ?? null } : prev);
+  };
+
+  // Open chest helper for the pending level-up: delegates loot generation to service and persists chest result
+  const openPendingLevelUpChest = async (): Promise<any[]> => {
+    if (!pendingLevelUp) return [];
+    try {
+      const rewardsService = await import('./services/levelUpRewards');
+      // Use app-level item pool (prefers master item templates stored in `items` state)
+      const pool = items || [];
+      const picked = rewardsService.generateChestLoot(pendingLevelUp.newLevel, pool, { count: 1 });
+
+      // If no items found, fallback to granting a small gold stipend so players are not left with empty chests
+      if (!picked || picked.length === 0) {
+        const fallback = Math.max(1, Math.floor(computeGoldReward(pendingLevelUp.newLevel) * 0.5));
+        // Persist as a gold reward so UI reflects a received reward
+        setPendingLevelUp(prev => prev ? { ...prev, chestItems: [], rewardChoice: 'gold', rewardGoldAmount: fallback } : prev);
+        handleGameUpdate({ goldChange: fallback });
+        showToast(`Chest yielded no items — granted ${fallback} gold instead.`, 'info');
+        return [];
+      }
+
+      // Persist chest result into pending state so postponing keeps the chest contents
+      setPendingLevelUp(prev => prev ? { ...prev, chestItems: picked, rewardChoice: 'chest' } : prev);
+      return picked;
+    } catch (e) {
+      // On error, grant a minimal fallback gold and record it
+      const fallback = Math.max(1, Math.floor(computeGoldReward(pendingLevelUp.newLevel) * 0.5));
+      setPendingLevelUp(prev => prev ? { ...prev, chestItems: [], rewardChoice: 'gold', rewardGoldAmount: fallback } : prev);
+      handleGameUpdate({ goldChange: fallback });
+      showToast(`Chest failed to open — granted ${fallback} gold.`, 'info');
+      return [];
+    }
   };
 
 
@@ -5062,7 +5141,7 @@ const App: React.FC = () => {
               continue;
             }
 
-                  // Deduct points for each mastery purchased
+            // Deduct points for each mastery purchased
             pts = Math.max(0, pts - masteryCostResolved * (wantCount || 1));
 
             // increment mastery counter and reset rank to 1 (prestige while preserving prior stat gains)
@@ -5152,11 +5231,11 @@ const App: React.FC = () => {
   // Force-unlock a locked perk by spending 3 perk points (limited uses per character)
   const forceUnlockPerk = (perkId: string) => {
     if (!currentCharacterId) return;
-    
+
     // Validate before state update to avoid toast duplication in React strict mode
     const currentChar = characters.find(c => c.id === currentCharacterId);
     if (!currentChar) return;
-    
+
     const pts = currentChar.perkPoints || 0;
     const forced = currentChar.forcedPerkUnlocks || 0;
     if (pts < 3) {
@@ -5176,7 +5255,7 @@ const App: React.FC = () => {
       showToast && showToast('Perk is already at maximum rank.', 'info');
       return;
     }
-    
+
     setCharacters(prev => prev.map(c => {
       if (c.id !== currentCharacterId) return c;
 
@@ -5205,11 +5284,11 @@ const App: React.FC = () => {
   // Refund all perks - clears all perks and restores spent perk points
   const refundAllPerks = () => {
     if (!currentCharacterId) return;
-    
+
     // Calculate total refund before state update to avoid toast duplication
     const currentChar = characters.find(c => c.id === currentCharacterId);
     if (!currentChar) return;
-    
+
     const perks = currentChar.perks || [];
     let totalRefund = 0;
     for (const p of perks) {
@@ -5222,7 +5301,7 @@ const App: React.FC = () => {
       showToast && showToast('No perks to refund.', 'info');
       return;
     }
-    
+
     setCharacters(prev => prev.map(c => {
       if (c.id !== currentCharacterId) return c;
 
@@ -5239,15 +5318,15 @@ const App: React.FC = () => {
       }
 
       setDirtyEntities(d => new Set([...d, c.id]));
-      return { 
-        ...c, 
-        stats: updatedStats, 
-        perks: [], 
+      return {
+        ...c,
+        stats: updatedStats,
+        perks: [],
         perkPoints: (c.perkPoints || 0) + totalRefund,
         forcedPerkUnlocks: 0  // Reset force unlocks on refund
       } as Character;
     }));
-    
+
     showToast && showToast(`Refunded ${totalRefund} perk point${totalRefund !== 1 ? 's' : ''}!`, 'success');
   };
 
@@ -5313,45 +5392,45 @@ const App: React.FC = () => {
       timeAdvanceMinutes: minutes
     });
 
-    showToast(`Rested for ${Math.floor(minutes/60)}h and recovered vitals.`, 'success');
+    showToast(`Rested for ${Math.floor(minutes / 60)}h and recovered vitals.`, 'success');
   };
 
   // Render Logic
   if (!currentCharacterId) {
-      return (
-        <>
-          <CharacterSelect 
-              profileId={currentProfileId}
-              characters={characters}
-              onCreateCharacter={handleCreateCharacter}
-              onSelectCharacter={async (cid) => {
-                setCurrentCharacterId(cid);
-                if (currentUser) {
-                  await setActiveCharacter(currentUser.uid, cid);
-                }
-              }}
-              onLogout={handleLogout}
-              onUpdateCharacter={handleUpdateCharacter}
-              onDeleteCharacter={handleDeleteCharacter}
-              onMarkCharacterDead={handleMarkCharacterDead}
-              colorTheme={colorTheme}
-              onThemeChange={setColorTheme}
-              weatherEffect={weatherEffect}
-              onWeatherChange={(w) => React.startTransition(() => setWeatherEffect(w))}
+    return (
+      <>
+        <CharacterSelect
+          profileId={currentProfileId}
+          characters={characters}
+          onCreateCharacter={handleCreateCharacter}
+          onSelectCharacter={async (cid) => {
+            setCurrentCharacterId(cid);
+            if (currentUser) {
+              await setActiveCharacter(currentUser.uid, cid);
+            }
+          }}
+          onLogout={handleLogout}
+          onUpdateCharacter={handleUpdateCharacter}
+          onDeleteCharacter={handleDeleteCharacter}
+          onMarkCharacterDead={handleMarkCharacterDead}
+          colorTheme={colorTheme}
+          onThemeChange={setColorTheme}
+          weatherEffect={weatherEffect}
+          onWeatherChange={(w) => React.startTransition(() => setWeatherEffect(w))}
+        />
+        {/* Global Weather Effect on login page (can be disabled via localStorage or prefers-reduced-motion) */}
+        {mountWeather && weatherEffect !== 'none' && effectsEnabled && (
+          <SnowEffect
+            settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }}
+            theme={colorTheme}
+            weatherType={weatherEffect}
           />
-          {/* Global Weather Effect on login page (can be disabled via localStorage or prefers-reduced-motion) */}
-          {mountWeather && weatherEffect !== 'none' && effectsEnabled && (
-            <SnowEffect 
-              settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
-              theme={colorTheme} 
-              weatherType={weatherEffect} 
-            />
-          )} 
-          {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
-            <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
-          )}
-        </>
-      );
+        )}
+        {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
+          <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
+        )}
+      </>
+    );
   }
 
   return (
@@ -5363,7 +5442,7 @@ const App: React.FC = () => {
       aiModel,
       setAiModel,
       isAnonymous: currentUser?.isAnonymous || false,
-      handleExportPDF: () => {}, // TODO: Implement export
+      handleExportPDF: () => { }, // TODO: Implement export
       isExporting: false, // TODO: Implement export state
       handleGenerateProfileImage: async () => {
         if (!activeCharacter) return;
@@ -5393,7 +5472,7 @@ const App: React.FC = () => {
         }
       },
 
-      handleUploadPhoto: () => {}, // TODO: Implement upload
+      handleUploadPhoto: () => { }, // TODO: Implement upload
       // New survival & shop handlers
       handleRestWithOptions,
       handleEatItem,
@@ -5451,11 +5530,14 @@ const App: React.FC = () => {
       openTransformation: () => setTransformationModalOpen(true),
       openHousing: () => setHousingModalOpen(true),
       openAIScribe: () => setAiScribeModalOpen(true),
+      openBugReport: () => setBugReportOpen(true),
     }}>
       <LevelUpModal
         open={Boolean(pendingLevelUp)}
         onClose={cancelLevelUp}
         onConfirm={confirmLevelUp}
+        onOpenChest={openPendingLevelUpChest}
+        onPreparePostpone={preparePostponeLevelUp}
         characterName={pendingLevelUp?.charName || ''}
         newLevel={pendingLevelUp?.newLevel || 1}
         archetype={pendingLevelUp?.archetype}
@@ -5464,9 +5546,9 @@ const App: React.FC = () => {
         open={perkModalOpen}
         onClose={() => setPerkModalOpen(false)}
         character={activeCharacter as any}
-        onConfirm={(perkIds: string[]) => { applyPerks(perkIds); setPerkModalOpen(false); }}
-        onForceUnlock={(id: string) => { forceUnlockPerk(id); setPerkModalOpen(false); }}
-        onRefundAll={() => { refundAllPerks(); setPerkModalOpen(false); }}
+        onConfirm={(perkIds: string[]) => { applyPerks(perkIds); /* keep modal open after applying perks */ }}
+        onForceUnlock={(id: string) => { forceUnlockPerk(id); /* keep modal open */ }}
+        onRefundAll={() => { refundAllPerks(); /* keep modal open to let player continue */ }}
       />
 
       {/* Achievements Modal */}
@@ -5521,7 +5603,7 @@ const App: React.FC = () => {
 
           // If item is currently equipped by player but exists in a stack, allow splitting and give one copy to companion
           if (item.equippedBy === 'player' && (item.quantity || 0) > 1) {
-            const newId = `item_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;
+            const newId = `item_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
             const cloned: any = { ...item, id: newId, quantity: 1, equipped: true, slot: slot || item.slot, equippedBy: companionId, createdAt: Date.now() };
             const originalUpdated = { ...item, quantity: (item.quantity || 1) - 1 };
             // Persist both changes
@@ -5622,100 +5704,82 @@ const App: React.FC = () => {
         {/* Status Indicators */}
         <OfflineIndicator />
         <AutoSaveIndicator status={saveStatus} lastSaved={lastSaved} />
-        
+
         {/* Game Features Sidebar */}
         <GameSidebar />
-        
+
         {(isFeatureEnabled('onboarding') || isFeatureWIP('onboarding')) && (
           <OnboardingModal open={isFeatureEnabled('onboarding') ? onboardingOpen : false} onComplete={completeOnboarding} />
         )}
 
         {/* Navigation Header */}
-        <nav className="fixed top-0 left-0 right-0 bg-skyrim-paper/95 backdrop-blur-md border-b border-skyrim-border z-40 shadow-cheap">
+        <nav className="fixed top-0 left-0 right-0 saas-nav z-40 border-b border-white/5 backdrop-blur-xl bg-black/40">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-2 text-skyrim-gold font-serif font-bold text-xl tracking-widest uppercase cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
-                <Skull size={24} />
-                <span className="hidden md:inline">Skyrim Aetherius</span>
+              <div className="flex items-center gap-2 text-white font-serif font-bold text-xl tracking-tight cursor-pointer shrink-0" onClick={() => setActiveTab(TABS.CHARACTER)}>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Skull size={18} className="text-white" />
+                </div>
+                <span className="hidden md:inline heading-premium">Aetherius</span>
               </div>
-              <div className="flex flex-nowrap items-center gap-1 sm:gap-2 relative overflow-x-auto scrollbar-hide max-w-[calc(100vw-140px)] sm:max-w-none">
+              <div className="flex flex-nowrap items-center gap-1 sm:gap-4 relative">
                 {/* Character Sheet */}
                 <button
                   onClick={() => setActiveTab(TABS.CHARACTER)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                    activeTab === TABS.CHARACTER 
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.CHARACTER ? 'active' : ''}`}
                 >
-                  <User size={14} className="sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Hero</span>
+                  <User size={16} />
+                  <span className="hidden sm:inline">{t('nav.hero')}</span>
                 </button>
 
                 {/* Equipment */}
                 <button
                   onClick={() => setActiveTab(TABS.INVENTORY)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                    activeTab === TABS.INVENTORY 
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.INVENTORY ? 'active' : ''}`}
                 >
-                  <Package size={14} className="sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Inventory</span>
+                  <Package size={16} />
+                  <span className="hidden sm:inline">{t('nav.equipment')}</span>
                 </button>
 
                 {/* Adventure Chat */}
                 <button
                   onClick={() => setActiveTab(TABS.ADVENTURE)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                    activeTab === TABS.ADVENTURE 
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.ADVENTURE ? 'active' : ''}`}
                 >
-                  <Swords size={14} className="sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Adventure</span>
+                  <Swords size={16} />
+                  <span className="hidden sm:inline">{t('nav.adventure')}</span>
                 </button>
 
                 {/* Map */}
                 <button
                   onClick={() => setActiveTab(TABS.MAP)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                    activeTab === TABS.MAP 
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.MAP ? 'active' : ''}`}
                 >
-                  <Compass size={14} className="sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Map</span>
+                  <Compass size={16} />
+                  <span className="hidden sm:inline">{t('nav.map')}</span>
                 </button>
 
                 {/* Quests */}
                 <button
                   onClick={() => setActiveTab(TABS.QUESTS)}
-                  className={`shrink-0 flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded transition-all duration-300 text-xs sm:text-sm md:text-base ${
-                    activeTab === TABS.QUESTS 
-                        ? 'bg-skyrim-gold text-skyrim-dark font-bold' 
-                        : 'text-skyrim-text hover:text-skyrim-gold hover:bg-white/5'
-                    }`}
+                  className={`nav-link-saas ${activeTab === TABS.QUESTS ? 'active' : ''}`}
                 >
-                  <Scroll size={14} className="sm:w-4 sm:h-4" />
+                  <Scroll size={16} />
                   <span className="hidden sm:inline">{t('nav.quests')}</span>
                 </button>
 
                 {/* Story Dropdown */}
                 <StoryDropdown activeTab={activeTab} setActiveTab={setActiveTab} />
-                
+
                 {/* Actions Button */}
                 <ActionButton />
-                
+
                 {/* Persistent Level Badge (HUD) */}
                 {activeCharacter && (
                   <div className="ml-2 hidden sm:block relative">
-                    <LevelBadge level={activeCharacter.level} size={40} compact />
+                    <LevelBadge level={activeCharacter.level} size={48} />
                     {availableLevelUps[activeCharacter.id] && (
-                      <div title="Level up available" className="absolute -top-1 -right-1 bg-skyrim-gold text-skyrim-dark rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-skyrim-border">
+                      <div title="Level up available" className="absolute -top-2 -right-2 bg-skyrim-gold text-skyrim-dark rounded-full w-5 h-5 flex items-center justify-center text-[11px] font-bold border border-skyrim-border shadow-cheap" aria-hidden>
                         !
                       </div>
                     )}
@@ -5729,192 +5793,207 @@ const App: React.FC = () => {
 
         {/* Save Message */}
         {saveMessage && (
-          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-bold z-50 transition-all ${
-            saveMessage.includes('✓') 
-              ? 'bg-green-900/80 text-green-200 border border-green-700' 
-              : 'bg-red-900/80 text-red-200 border border-red-700'
-          }`}>
+          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-bold z-50 transition-all ${saveMessage.includes('✓')
+            ? 'bg-green-900/80 text-green-200 border border-green-700'
+            : 'bg-red-900/80 text-red-200 border border-red-700'
+            }`}>
             {saveMessage}
           </div>
         )}
 
         {/* Main Content Area */}
         <main className={`pt-24 ${activeTab === TABS.MAP ? 'px-0' : 'px-2 sm:px-4'} ${(activeTab === TABS.ADVENTURE || activeTab === TABS.MAP) ? 'h-screen overflow-hidden' : 'min-h-screen pb-20'}`}>
-          <div className={`${activeTab === TABS.MAP ? 'w-full h-full' : 'max-w-6xl mx-auto'} animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
-            {activeTab === TABS.CHARACTER && activeCharacter && (
-              <CharacterSheet 
-                character={activeCharacter} 
-                updateCharacter={updateCharacter} 
-                inventory={getCharacterItems()}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                story={getCharacterStory()}
-                onRest={openBonfireMenu}
-                onEat={handleEatItem}
-                onDrink={handleDrinkItem}
-                onUseItem={handleUseItem}
-                hasCampingGear={hasCampingGear}
-                hasBedroll={hasBedroll}
-                onRequestLevelUp={() => requestLevelUp(activeCharacter)}
-                onOpenPerkTree={() => setPerkModalOpen(true)}
-                levelUpAvailable={!!availableLevelUps[activeCharacter.id]}
-              />
-            )}
-            {activeTab === TABS.INVENTORY && activeCharacter && (
-              <Inventory 
-                  items={getCharacterItems()} 
-                  setItems={setCharacterItems} 
-                  gold={activeCharacter.gold || 0} 
-                  setGold={(amt) => updateCharacter('gold', amt)}
-                  maxCarryWeight={getMaxCarryWeight(activeCharacter)}
-                  onUseItem={handleUseItem}
-              />
-            )}
-            {activeTab === TABS.QUESTS && (
-              <QuestLog 
-                quests={getCharacterQuests()} 
-                setQuests={setCharacterQuests} 
-                onDelete={handleDeleteQuest}
-                onQuestComplete={handleQuestComplete}
-              />
-            )}
-            {activeTab === TABS.STORY && (
-              <StoryLog 
-                chapters={getCharacterStory()} 
-                onUpdateChapter={updateStoryChapter}
-                onDeleteChapter={handleDeleteStoryChapter}
-                onAddChapter={(chapter) => setStoryChapters(prev => [...prev, chapter])}
-                onGameUpdate={handleGameUpdate}
-                character={activeCharacter}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                items={getCharacterItems()}
-                userId={currentUser?.uid}
-              />
-            )}
-            {activeTab === TABS.JOURNAL && (
-              <Journal entries={getCharacterJournal()} setEntries={setCharacterJournal} onDeleteEntry={handleDeleteJournalEntry} />
-            )}
-            {activeTab === TABS.ADVENTURE && (
-              <AdventureChat
-                userId={currentUser?.uid}
-                model={aiModel}
-                character={activeCharacter}
-                inventory={getCharacterItems()}
-                quests={getCharacterQuests()}
-                journal={getCharacterJournal()}
-                story={getCharacterStory()}
-                onUpdateState={handleGameUpdate}
-                onEnterDungeon={handleEnterDungeonFromMap}
-                pauseChat={dungeonOpen}
-                chatFontSize={userSettings?.chatFontSize || 'medium'}
-                chatFontWeight={userSettings?.chatFontWeight || 'normal'}
-                onChatSettingsChange={async (settings) => {
-                  if (currentUser?.uid) {
-                    const next: UserSettings = {
-                      ...(userSettings || {}),
-                      chatFontSize: settings.fontSize,
-                      chatFontWeight: settings.fontWeight,
-                    };
-                    setUserSettings(next);
-                    try {
-                      await saveUserSettings(currentUser.uid, next);
-                    } catch (e) {
-                      console.warn('Failed to save chat settings:', e);
-                    }
-                  }
-                }}
-              />
-            )}
-            {activeTab === TABS.MAP && activeCharacter && (
-              <MapPage
-                character={activeCharacter}
-                currentLocation={activeCharacter.currentLocation}
-                visitedLocations={activeCharacter.visitedLocations || []}
-                questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.title }))}
-                discoveredLocations={activeCharacter.discoveredLocations || []}
-                clearedDungeons={activeCharacter.clearedDungeons || []}
-                onEnterDungeon={handleEnterDungeonFromMap}
-                // Dynamic Events Integration
-                dynamicEventState={dynamicEventState || undefined}
-                onStartDynamicEvent={handleStartDynamicEvent}
-                onCompleteDynamicEvent={handleCompleteDynamicEvent}
-                onStartEvent={(ev: MapEvent) => {
-                  showToast(`Event started: ${ev.id}`, 'info');
-                  // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
-                  if (currentCharacterId && shouldStartCombatForEvent(ev)) {
-                    try {
-                      const character = activeCharacter;
-                      const comps = companions.filter(c => c.characterId === currentCharacterId);
-                      const combat = createCombatStateForEvent(ev, character?.level || 1, comps || []);
-                      setCombatState(combat as any);
-                      // Record narrative that combat started from map event
-                      handleGameUpdate({ narrative: `Combat started against ${ev.name}` } as any);
-                      return;
-                    } catch (e) {
-                      console.warn('Failed to start combat from event:', e);
-                    }
-                  }
+          <div className={`${activeTab === TABS.MAP ? 'w-full h-full' : 'max-w-6xl mx-auto'} ${activeTab === TABS.ADVENTURE ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+            <AnimatePresence mode="wait">
+              {activeTab === TABS.CHARACTER && activeCharacter && (
+                <AnimatedPage key="character">
+                  <CharacterSheet
+                    character={activeCharacter}
+                    updateCharacter={updateCharacter}
+                    inventory={getCharacterItems()}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    story={getCharacterStory()}
+                    onRest={openBonfireMenu}
+                    onEat={handleEatItem}
+                    onDrink={handleDrinkItem}
+                    onUseItem={handleUseItem}
+                    hasCampingGear={hasCampingGear}
+                    hasBedroll={hasBedroll}
+                    onRequestLevelUp={() => requestLevelUp(activeCharacter)}
+                    onOpenPerkTree={() => setPerkModalOpen(true)}
+                    levelUpAvailable={!!availableLevelUps[activeCharacter.id]}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.INVENTORY && activeCharacter && (
+                <AnimatedPage key="inventory">
+                  <Inventory
+                    items={getCharacterItems()}
+                    setItems={setCharacterItems}
+                    gold={activeCharacter.gold || 0}
+                    setGold={(amt) => updateCharacter('gold', amt)}
+                    maxCarryWeight={getMaxCarryWeight(activeCharacter)}
+                    onUseItem={handleUseItem}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.QUESTS && (
+                <AnimatedPage key="quests">
+                  <QuestLog
+                    quests={getCharacterQuests()}
+                    setQuests={setCharacterQuests}
+                    onDelete={handleDeleteQuest}
+                    onQuestComplete={handleQuestComplete}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.STORY && (
+                <AnimatedPage key="story">
+                  <StoryLog
+                    chapters={getCharacterStory()}
+                    onUpdateChapter={updateStoryChapter}
+                    onDeleteChapter={handleDeleteStoryChapter}
+                    onAddChapter={(chapter) => setStoryChapters(prev => [...prev, chapter])}
+                    onGameUpdate={handleGameUpdate}
+                    character={activeCharacter}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    items={getCharacterItems()}
+                    userId={currentUser?.uid}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.JOURNAL && (
+                <AnimatedPage key="journal">
+                  <Journal entries={getCharacterJournal()} setEntries={setCharacterJournal} onDeleteEntry={handleDeleteJournalEntry} />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.ADVENTURE && (
+                <AnimatedPage key="adventure" className="h-full">
+                  <AdventureChat
+                    userId={currentUser?.uid}
+                    model={aiModel}
+                    character={activeCharacter}
+                    inventory={getCharacterItems()}
+                    quests={getCharacterQuests()}
+                    journal={getCharacterJournal()}
+                    story={getCharacterStory()}
+                    onUpdateState={handleGameUpdate}
+                    onEnterDungeon={handleEnterDungeonFromMap}
+                    pauseChat={dungeonOpen}
+                    chatFontSize={userSettings?.chatFontSize || 'medium'}
+                    chatFontWeight={userSettings?.chatFontWeight || 'normal'}
+                    onChatSettingsChange={async (settings) => {
+                      if (currentUser?.uid) {
+                        const next: UserSettings = {
+                          ...(userSettings || {}),
+                          chatFontSize: settings.fontSize,
+                          chatFontWeight: settings.fontWeight,
+                        };
+                        setUserSettings(next);
+                        try {
+                          await saveUserSettings(currentUser.uid, next);
+                        } catch (e) {
+                          console.warn('Failed to save chat settings:', e);
+                        }
+                      }
+                    }}
+                  />
+                </AnimatedPage>
+              )}
+              {activeTab === TABS.MAP && activeCharacter && (
+                <AnimatedPage key="map" className="h-full">
+                  <MapPage
+                    character={activeCharacter}
+                    currentLocation={activeCharacter.currentLocation}
+                    visitedLocations={activeCharacter.visitedLocations || []}
+                    questLocations={getCharacterQuests().filter(q => q.location).map(q => ({ name: q.location!, questName: q.title }))}
+                    discoveredLocations={activeCharacter.discoveredLocations || []}
+                    clearedDungeons={activeCharacter.clearedDungeons || []}
+                    onEnterDungeon={handleEnterDungeonFromMap}
+                    // Dynamic Events Integration
+                    dynamicEventState={dynamicEventState || undefined}
+                    onStartDynamicEvent={handleStartDynamicEvent}
+                    onCompleteDynamicEvent={handleCompleteDynamicEvent}
+                    onStartEvent={(ev: MapEvent) => {
+                      showToast(`Event started: ${ev.id}`, 'info');
+                      // If event should spawn combat (dragon/bandit/combat), open the CombatModal directly
+                      if (currentCharacterId && shouldStartCombatForEvent(ev)) {
+                        try {
+                          const character = activeCharacter;
+                          const comps = companions.filter(c => c.characterId === currentCharacterId);
+                          const combat = createCombatStateForEvent(ev, character?.level || 1, comps || []);
+                          setCombatState(combat as any);
+                          // Record narrative that combat started from map event
+                          handleGameUpdate({ narrative: `Combat started against ${ev.name}` } as any);
+                          return;
+                        } catch (e) {
+                          console.warn('Failed to start combat from event:', e);
+                        }
+                      }
 
-                  // Fallback: create an investigation quest
-                  handleGameUpdate({
-                    newQuests: [{
-                      title: `Investigate: ${ev.name}`,
-                      description: ev.description || `${ev.type} event`,
-                      objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
-                      xpReward: ev.rewards?.xp?.min || 25,
-                      goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
-                      difficulty: ev.levelRequirement > 20 ? 'hard' : 'medium'
-                    }]
-                  });
-                }}
-                onStartMission={(mission: MapMission) => {
-                  showToast(`Mission accepted: ${mission.id}`, 'success');
-                  // For some missions, trigger direct combat or a mini-game
-                  if (mission.id === 'mission_dragon_bounty' && currentCharacterId) {
-                    try {
-                      const character = activeCharacter;
-                      const comps = companions.filter(c => c.characterId === currentCharacterId);
-                      const combat = createCombatStateForEvent(mission as any, character?.level || 1, comps || []);
-                      setCombatState(combat as any);
-                      handleGameUpdate({ narrative: `Bounty mission: engaged ${mission.name}` } as any);
-                      return;
-                    } catch (e) {
-                      console.warn('Failed to start bounty combat:', e);
-                    }
-                  }
+                      // Fallback: create an investigation quest
+                      handleGameUpdate({
+                        newQuests: [{
+                          title: `Investigate: ${ev.name}`,
+                          description: ev.description || `${ev.type} event`,
+                          objectives: [{ description: `Investigate ${ev.name}`, completed: false }],
+                          xpReward: ev.rewards?.xp?.min || 25,
+                          goldReward: Math.floor(((ev.rewards?.gold?.min || 20) + (ev.rewards?.gold?.max || 50)) / 2),
+                          difficulty: ev.levelRequirement > 20 ? 'hard' : 'medium'
+                        }]
+                      });
+                    }}
+                    onStartMission={(mission: MapMission) => {
+                      showToast(`Mission accepted: ${mission.id}`, 'success');
+                      // For some missions, trigger direct combat or a mini-game
+                      if (mission.id === 'mission_dragon_bounty' && currentCharacterId) {
+                        try {
+                          const character = activeCharacter;
+                          const comps = companions.filter(c => c.characterId === currentCharacterId);
+                          const combat = createCombatStateForEvent(mission as any, character?.level || 1, comps || []);
+                          setCombatState(combat as any);
+                          handleGameUpdate({ narrative: `Bounty mission: engaged ${mission.name}` } as any);
+                          return;
+                        } catch (e) {
+                          console.warn('Failed to start bounty combat:', e);
+                        }
+                      }
 
-                  // Example interactive mission: open prototype mini-game for "Lost Artifact"
-                  if (mission.id === 'mission_retrieve_artifact') {
-                    setMiniGameMission(mission);
-                    setMiniGameOpen(true);
-                    return;
-                  }
+                      // Example interactive mission: open prototype mini-game for "Lost Artifact"
+                      if (mission.id === 'mission_retrieve_artifact') {
+                        setMiniGameMission(mission);
+                        setMiniGameOpen(true);
+                        return;
+                      }
 
-                  // Default behaviour: create a quest
-                  handleGameUpdate({
-                    newQuests: [{
-                      title: mission.name,
-                      description: mission.objective,
-                      location: mission.locationId,
-                      objectives: [{ description: mission.objective, completed: false }],
-                      xpReward: mission.rewards?.xp?.min || 100,
-                      goldReward: mission.rewards?.gold?.min || 200,
-                      difficulty: mission.difficulty as any || 'moderate',
-                      questType: 'bounty'
-                    }]
-                  });
-                }}
-                showToast={showToast}
-              />
-            )}
+                      // Default behaviour: create a quest
+                      handleGameUpdate({
+                        newQuests: [{
+                          title: mission.name,
+                          description: mission.objective,
+                          location: mission.locationId,
+                          objectives: [{ description: mission.objective, completed: false }],
+                          xpReward: mission.rewards?.xp?.min || 100,
+                          goldReward: mission.rewards?.gold?.min || 200,
+                          difficulty: mission.difficulty as any || 'moderate',
+                          questType: 'bounty'
+                        }]
+                      });
+                    }}
+                    showToast={showToast}
+                  />
+                </AnimatedPage>
+              )}
+            </AnimatePresence>
           </div>
         </main>
 
         {/* AI Game Master */}
-        <AIScribe 
-          contextData={getAIContext()} 
-          onUpdateState={handleGameUpdate} 
+        <AIScribe
+          contextData={getAIContext()}
+          onUpdateState={handleGameUpdate}
           model={aiModel}
           isOpen={aiScribeModalOpen}
           onClose={() => setAiScribeModalOpen(false)}
@@ -5932,7 +6011,7 @@ const App: React.FC = () => {
             story={storyChapters.filter(s => s.characterId === currentCharacterId)}
           />
         )}
-        
+
         <CharacterImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
@@ -5955,39 +6034,61 @@ const App: React.FC = () => {
               setCharacters(prev => prev.map(c => {
                 if (c.id !== currentCharacterId) return c;
                 const existing = (c.clearedDungeons || []).find(d => d.dungeonId === dungeonId);
-                const newCleared = existing 
-                  ? c.clearedDungeons!.map(d => d.dungeonId === dungeonId 
-                      ? { ...d, clearCount: d.clearCount + 1, lastCleared: Date.now() } 
-                      : d)
+                const newCleared = existing
+                  ? c.clearedDungeons!.map(d => d.dungeonId === dungeonId
+                    ? { ...d, clearCount: d.clearCount + 1, lastCleared: Date.now() }
+                    : d)
                   : [...(c.clearedDungeons || []), { dungeonId: dungeonId!, clearCount: 1, lastCleared: Date.now() }];
                 setDirtyEntities(d => new Set([...d, c.id]));
                 return { ...c, clearedDungeons: newCleared };
               }));
+
+              // Show a quest-completed notification for this cleared dungeon
               showQuestNotification({ id: `dungeon_cleared_${uniqueId()}`, title: 'Dungeon Cleared', subtitle: 'You have conquered this dungeon!', type: 'quest-completed' });
-              
-              // Check if any active dynamic event is associated with this dungeon location
+
+              // Check if any active dynamic event is associated with this dungeon location and complete it
               if (dynamicEventState) {
                 const dungeonDef = getDungeonById(dungeonId);
                 const dungeonName = dungeonDef?.name?.toLowerCase() || dungeonId.toLowerCase();
-                
-                // Find matching active events (by location name or dungeon ID)
+
                 const matchingEvents = dynamicEventState.activeEvents.filter(e => {
                   if (e.status !== 'active') return false;
                   const eventLocName = e.location?.name?.toLowerCase() || '';
                   const eventDungeonId = (e as any).dungeonId?.toLowerCase() || '';
-                  return eventLocName.includes(dungeonName) || 
-                         dungeonName.includes(eventLocName) ||
-                         eventDungeonId === dungeonId.toLowerCase() ||
-                         // Combat-type events at dungeon locations should complete
-                         (e.type === 'combat' || e.type === 'bandit' || e.type === 'dragon');
+                  return eventLocName.includes(dungeonName) ||
+                    dungeonName.includes(eventLocName) ||
+                    eventDungeonId === dungeonId.toLowerCase() ||
+                    (e.type === 'combat' || e.type === 'bandit' || e.type === 'dragon');
                 });
-                
+
                 matchingEvents.forEach(event => {
                   handleCompleteDynamicEvent(event.id);
                 });
               }
+
+              // Clear the active dungeon id
+              setDungeonId(null);
             }
-            setDungeonId(null);
+          }}
+
+          onNeedsChange={(delta) => {
+            if (!delta || !currentCharacterId) return;
+            setCharacters(prev => prev.map(c => {
+              if (c.id !== currentCharacterId) return c;
+              const needs = c.needs || { hunger: 0, thirst: 0, fatigue: 0 };
+              const updated = {
+                ...c,
+                needs: {
+                  hunger: Math.max(0, Math.min(100, (needs.hunger || 0) + (delta.hunger || 0))),
+                  thirst: Math.max(0, Math.min(100, (needs.thirst || 0) + (delta.thirst || 0))),
+                  fatigue: Math.max(0, Math.min(100, (needs.fatigue || 0) + (delta.fatigue || 0))),
+                }
+              } as any;
+              setDirtyEntities(d => new Set([...d, c.id]));
+              // Also show a subtle toast
+              showToast?.(`You feel ${delta.fatigue && delta.fatigue > 0 ? 'tired' : ''} ${delta.hunger && delta.hunger > 0 ? 'and hungry' : ''} ${delta.thirst && delta.thirst > 0 ? 'and thirsty' : ''}`.trim(), 'info');
+              return updated;
+            }));
           }}
           onApplyRewards={(rewards) => handleApplyDungeonRewards(rewards)}
           onApplyBuff={(effect) => handleApplyDungeonBuff(effect)}
@@ -6007,7 +6108,7 @@ const App: React.FC = () => {
             // Backwards-compatible: treat as consumable removals
             const toRemove = itemsOrRemoved as Array<{ name: string; quantity: number }>;
             toRemove.forEach(({ name, quantity }) => {
-              setItems(prev => prev.map(it => 
+              setItems(prev => prev.map(it =>
                 it.name === name ? { ...it, quantity: Math.max(0, (it.quantity || 1) - quantity) } : it
               ).filter(it => (it.quantity || 1) > 0));
             });
@@ -6017,7 +6118,7 @@ const App: React.FC = () => {
 
         {/* Combat Modal - Full screen overlay when combat is active */}
         {combatState && activeCharacter && (
-            <CombatModal
+          <CombatModal
             character={activeCharacter}
             inventory={getCharacterItems()}
             initialCombatState={combatState}
@@ -6025,7 +6126,7 @@ const App: React.FC = () => {
             onCombatEnd={(result, rewards, finalVitals, timeAdvanceMinutes, combatResult) => {
               setCombatState(null);
               updateMusicForContext({ inCombat: false, mood: result === 'victory' ? 'triumphant' : 'peaceful' });
-              
+
               // If combat was triggered by a dynamic event, complete it on victory
               if (activeCombatEventId && result === 'victory') {
                 handleCompleteDynamicEvent(activeCombatEventId);
@@ -6040,7 +6141,7 @@ const App: React.FC = () => {
                 const killedDragons = combatState.enemies?.filter(
                   e => e.type === 'dragon' && (e.currentHealth <= 0 || e.combat_state === 'dead')
                 ) || [];
-                
+
                 if (killedDragons.length > 0) {
                   // Absorb souls from all killed dragons
                   killedDragons.forEach(dragon => {
@@ -6048,7 +6149,7 @@ const App: React.FC = () => {
                     setShoutState(soulResult.state);
                     showToast(soulResult.message, 'success');
                   });
-                  
+
                   // Epic dragon kill notification
                   showEventNotification({
                     type: 'event-complete',
@@ -6060,33 +6161,33 @@ const App: React.FC = () => {
                   });
                 }
               }
-              
+
               // Scale combat time: real minutes * COMBAT_TIME_SCALE = in-game minutes
               const scaledTimeAdvance = timeAdvanceMinutes ? Math.round(timeAdvanceMinutes * COMBAT_TIME_SCALE) : undefined;
-              
+
               if (result === 'victory' && rewards) {
                 // NOTE: Loot items are already applied via onInventoryUpdate during finalizeLoot
                 // Do NOT pass newItems here to avoid duplication
-                  // Defensive local apply: update character state immediately so HUD reflects rewards
-                  setCharacters(prev => prev.map(c => {
-                    if (c.id !== currentCharacterId) return c;
-                    return {
-                      ...c,
-                      gold: (c.gold || 0) + ((rewards as any).gold || 0),
-                      experience: (c.experience || 0) + ((rewards as any).xp || 0),
-                      completedCombats: Array.from(new Set([...(c.completedCombats || []), (rewards as any).combatId].filter(Boolean)))
-                    } as Character;
-                  }));
+                // Defensive local apply: update character state immediately so HUD reflects rewards
+                setCharacters(prev => prev.map(c => {
+                  if (c.id !== currentCharacterId) return c;
+                  return {
+                    ...c,
+                    gold: (c.gold || 0) + ((rewards as any).gold || 0),
+                    experience: (c.experience || 0) + ((rewards as any).xp || 0),
+                    completedCombats: Array.from(new Set([...(c.completedCombats || []), (rewards as any).combatId].filter(Boolean)))
+                  } as Character;
+                }));
 
-                  // Now call handleGameUpdate to record transaction and persist; mark as already applied locally
-                  handleGameUpdate({
+                // Now call handleGameUpdate to record transaction and persist; mark as already applied locally
+                handleGameUpdate({
                   narrative: {
                     title: 'Victory!',
                     content: `You have emerged victorious from combat! Gained ${rewards.xp} experience${rewards.gold > 0 ? ` and ${rewards.gold} gold` : ''}. Loot has been collected.`
                   },
-                    xpChange: rewards.xp,
-                    goldChange: rewards.gold,
-                    _alreadyAppliedLocally: true,
+                  xpChange: rewards.xp,
+                  goldChange: rewards.gold,
+                  _alreadyAppliedLocally: true,
                   // newItems intentionally omitted - already applied via onInventoryUpdate to prevent duplication
                   transactionId: (rewards as any).transactionId,
                   characterUpdates: {
@@ -6125,7 +6226,7 @@ const App: React.FC = () => {
                     timestamp: Date.now()
                   };
                   // Lightweight log for telemetry/debug (use promise-style import to avoid top-level await)
-                  import('./services/logger').then(m => m.log.info('reward_applied', telemetry)).catch(() => {});
+                  import('./services/logger').then(m => m.log.info('reward_applied', telemetry)).catch(() => { });
                 } catch (e) {
                   console.warn('Failed to log reward telemetry:', e);
                 }
@@ -6260,19 +6361,19 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               //  - array of { name, quantity } = removed items
               if (Array.isArray(itemsOrRemoved) && itemsOrRemoved.length > 0 && (itemsOrRemoved[0] as any).id) {
                 const arr = itemsOrRemoved as InventoryItem[];
-                
+
                 // Separate items into existing (update) and new (add)
                 const existingIds = new Set(items.filter(it => it.characterId === currentCharacterId).map(it => it.id));
                 const toUpdate: InventoryItem[] = [];
                 const toAdd: InventoryItem[] = [];
-                
+
                 for (const item of arr) {
                   if (existingIds.has(item.id)) {
                     // This item already exists - only update if it actually changed
                     const existing = items.find(it => it.id === item.id);
                     if (existing) {
                       // Check if anything relevant changed (equipped, slot, quantity)
-                      const hasChanged = 
+                      const hasChanged =
                         existing.equipped !== item.equipped ||
                         existing.slot !== item.slot ||
                         existing.equippedBy !== item.equippedBy ||
@@ -6286,7 +6387,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                     toAdd.push({ ...item, characterId: currentCharacterId || '' });
                   }
                 }
-                
+
                 // Apply updates and additions
                 if (toUpdate.length > 0) {
                   handleGameUpdate({ updatedItems: toUpdate } as any);
@@ -6331,9 +6432,9 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 // Apply rewards through canonical update path
                 const goldEarned = result.rewards?.gold || 0;
                 const xpEarned = result.rewards?.xp || 0;
-                handleGameUpdate({ 
-                  narrative: `You emerged victorious from the dungeon! Earned ${goldEarned} gold and ${xpEarned} experience.`, 
-                  xpChange: xpEarned, 
+                handleGameUpdate({
+                  narrative: `You emerged victorious from the dungeon! Earned ${goldEarned} gold and ${xpEarned} experience.`,
+                  xpChange: xpEarned,
                   goldChange: goldEarned,
                   items: result.rewards?.items,
                 } as any);
@@ -6345,7 +6446,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
-        
+
         {/* Lockpicking Minigame for Treasure Events */}
         {lockpickingOpen && activeCharacter && (
           <LockpickingMinigame
@@ -6377,7 +6478,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
-        
+
         {/* Blessing Modal for Shrine Events */}
         <BlessingModal
           open={blessingModalOpen}
@@ -6394,7 +6495,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               return [...withoutBlessings, blessing.effect];
             });
             showToast(`Received: ${blessing.name}`, 'success');
-            
+
             // Complete the shrine event
             if (blessingEventId) {
               handleCompleteDynamicEvent(blessingEventId);
@@ -6402,7 +6503,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             setBlessingEventId(null);
           }}
         />
-        
+
         {/* Merchant Shop Modal for Merchant Events */}
         {merchantShopOpen && activeCharacter && (
           <ShopModal
@@ -6435,6 +6536,15 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 rarity: item.rarity || 'common',
                 equipped: false
               };
+
+              // Support special enchanted shop items (attach enchantment metadata if present)
+              if ((item as any).enchantment) {
+                const ench = (item as any).enchantment;
+                newItem.enchantments = [{ id: ench.enchantmentId, name: ench.enchantmentName, magnitude: ench.magnitude, effect: ench.effect }];
+                newItem.effects = [...(newItem.effects || []), `${ench.enchantmentName}: ${ench.magnitude}`];
+                newItem.value = Math.max(newItem.value || 0, item.price) + Math.max(1, Math.floor(ench.magnitude * 25));
+              }
+
               handleGameUpdate({
                 goldChange: -cost,
                 newItems: [newItem]
@@ -6453,7 +6563,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             characterLevel={activeCharacter.level || 1}
           />
         )}
-        
+
         {/* Level Up Notifications (Skyrim-style) */}
         <LevelUpNotificationOverlay notifications={levelUpNotifications} onDismiss={handleLevelUpNotificationDismiss} />
         {/* Achievement Notification Banner */}
@@ -6482,15 +6592,15 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
         {/* Global Weather Effect */}
         {weatherEffect !== 'none' && effectsEnabled && (
-          <SnowEffect 
-            settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }} 
-            theme={colorTheme} 
-            weatherType={weatherEffect} 
+          <SnowEffect
+            settings={{ intensity: weatherIntensity, enableMouseInteraction: (userSettings?.weatherMouseInteractionEnabled ?? true) }}
+            theme={colorTheme}
+            weatherType={weatherEffect}
           />
         )}
 
         {/* ========== NEW FEATURE MODALS ========== */}
-        
+
         {/* Alchemy Modal */}
         {alchemyModalOpen && activeCharacter && (
           <AlchemyModal
@@ -6511,7 +6621,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
-        
+
         {/* Cooking Modal */}
         {cookingModalOpen && activeCharacter && (
           <CookingModal
@@ -6532,7 +6642,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
-        
+
         {/* Travel Modal */}
         {travelModalOpen && activeCharacter && (
           <TravelModal
@@ -6546,34 +6656,34 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               handleGameUpdate({
                 goldChange: -cost.gold,
               });
-              
+
               // Update character location and discovered locations
               if (currentCharacterId && activeCharacter) {
                 const newGameTime = (activeCharacter.gameTime || 480) + (cost.timeHours * 60);
-                setCharacters(prev => prev.map(c => 
-                  c.id === currentCharacterId 
-                    ? { 
-                        ...c, 
-                        currentLocation: destination.name,
-                        discoveredLocations: [...new Set([...(c.discoveredLocations || []), destination.id])],
-                        gameTime: newGameTime
-                      }
+                setCharacters(prev => prev.map(c =>
+                  c.id === currentCharacterId
+                    ? {
+                      ...c,
+                      currentLocation: destination.name,
+                      discoveredLocations: [...new Set([...(c.discoveredLocations || []), destination.id])],
+                      gameTime: newGameTime
+                    }
                     : c
                 ));
               }
-              
+
               // Check for travel encounter - create a TravelCost object
-              const travelCostObj = { 
-                gold: cost.gold, 
-                timeHours: cost.timeHours, 
-                dangerRating: destination.dangerLevel || 1 
+              const travelCostObj = {
+                gold: cost.gold,
+                timeHours: cost.timeHours,
+                dangerRating: destination.dangerLevel || 1
               };
               const encounter = checkTravelEncounter(travelCostObj, activeCharacter.level || 1);
               if (encounter) {
                 showToast(`Encounter: ${encounter}`, 'warning');
                 // Could trigger combat here if hostile
               }
-              
+
               // Map destination hold to weather region
               const holdToRegion: Record<string, Region> = {
                 'Whiterun': 'whiterun',
@@ -6588,13 +6698,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               };
               const weatherRegion = holdToRegion[destination.hold] || 'whiterun';
               setCurrentWeather(generateWeather(weatherRegion, getGameTimeInHours(activeCharacter.gameTime || 480) % 24));
-              
+
               showToast(`Arrived at ${destination.name}`, 'success');
               setTravelModalOpen(false);
             }}
           />
         )}
-        
+
         {/* Faction Modal */}
         {factionModalOpen && activeCharacter && (
           <FactionModal
@@ -6604,10 +6714,10 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             onJoinFaction={(factionId) => {
               if (currentCharacterId && activeCharacter) {
                 // Update faction reputation to mark as joined
-                setFactionReputation(prev => 
-                  prev.map(rep => 
-                    rep.factionId === factionId 
-                      ? { ...rep, joined: true } 
+                setFactionReputation(prev =>
+                  prev.map(rep =>
+                    rep.factionId === factionId
+                      ? { ...rep, joined: true }
                       : rep
                   )
                 );
@@ -6628,7 +6738,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               // learnShoutWord returns { state, message } — update state and show the message
               setShoutState(result.state);
               showToast(result.message, 'info');
-            }} 
+            }}
             onUnlockWord={(shoutId: string, wordIndex: number) => {
               const result = unlockShoutWord(shoutState, shoutId);
               if (result.success) {
@@ -6683,7 +6793,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 showToast('Item not found', 'error');
                 return;
               }
-              const result = disenchantItem(enchantingState, item, activeCharacter.skills?.Enchanting || 15);
+              // Use the item's enchantment id (first enchantment) when calling disenchant
+              const enchantmentId = (item.enchantments && item.enchantments.length > 0) ? item.enchantments[0].id : '';
+              if (!enchantmentId) {
+                showToast('This item has no enchantments to disenchant.', 'error');
+                return;
+              }
+              const result = disenchantItem(enchantingState, item, enchantmentId);
               if (result.success) {
                 setEnchantingState(result.state);
                 // Remove item from inventory (destroyed in disenchanting)
@@ -6706,6 +6822,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
+
+        {/* Bug Reports modal (persistent tracker) */}
+        {bugReportOpen && (
+          <BugReportModal isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+        )}
+
+
 
         {/* Standing Stones Modal */}
         {standingStonesModalOpen && activeCharacter && (
@@ -6855,7 +6978,16 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               if (result.success) {
                 setTrainingState(result.newState);
                 // Deduct gold and increase skill (update characters array)
-                setCharacters(prev => prev.map(ch => ch.id === (activeCharacter?.id || '') ? { ...ch, gold: (ch.gold || 0) - result.goldCost, skills: { ...(ch.skills || {}), [skillName]: currentSkillLevel + 1 } } : ch));
+                setCharacters(prev => prev.map(ch => {
+                  if (ch.id !== (activeCharacter?.id || '')) return ch;
+                  const updated = { ...ch, gold: (ch.gold || 0) - result.goldCost, skills: { ...(ch.skills || {}), [skillName]: currentSkillLevel + 1 } } as any;
+                  // If training Enchanting, sync enchantingState.enchantingLevel as well so enchant magnitudes increase
+                  if (skillName === 'Enchanting') {
+                    const enchantState = (updated.enchantingState || {});
+                    updated.enchantingState = { ...(enchantState || {}), enchantingLevel: result.newSkillLevel || (currentSkillLevel + 1) };
+                  }
+                  return updated;
+                }));
                 showToast(result.message, 'success');
               } else {
                 showToast(result.message, 'error');
@@ -7024,7 +7156,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             }}
           />
         )}
-        
+
 
 
       </div>

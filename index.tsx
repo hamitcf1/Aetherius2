@@ -4,6 +4,7 @@ import App from './App';
 import { BASE_PATH } from './services/basePath';
 import './styles/rarity.css';
 import './styles/scrollbars.css';
+import './styles/modern.css';
 import { initButtonTooltips } from './utils/buttonTooltips';
 import { LocalizationProvider } from './services/localization';
 

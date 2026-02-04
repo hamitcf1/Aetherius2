@@ -84,7 +84,7 @@ describe('Combat spell visuals', () => {
 
     // Wait for the healing effect to be added to DOM
     await waitFor(() => {
-      expect(container.querySelector('div[style*="linear-gradient(180deg"]')).toBeTruthy();
+      expect(container.innerHTML).toMatch(/linear-gradient\(180deg/i);
     }, { timeout: 2000 });
   });
 
@@ -115,6 +115,43 @@ describe('Combat spell visuals', () => {
 
     await waitFor(() => {
       expect(container.innerHTML).toMatch(/conic-gradient\(from 0deg, rgba\(147, 51, 234, 0.6\)/i);
+    }, { timeout: 2000 });
+  });
+
+  it('shows blood / weapon trail when using a melee attack', async () => {
+    const ctx = makeMinimalCtx();
+
+    // Mock player stats so an ability is present
+    const strike = { id: 'strike1', name: 'Strike', type: 'melee', damage: 12, cost: 10 } as any;
+    const stubbedStats: any = { currentHealth: 100, maxHealth: 100, currentMagicka: 50, maxMagicka: 50, currentStamina: 100, maxStamina: 100, abilities: [strike], abilitiesById: { [strike.id]: strike } };
+    vi.spyOn(combatService, 'calculatePlayerCombatStats').mockReturnValue(stubbedStats as any);
+
+    const { container } = render(
+      <AppContext.Provider value={ctx as any}>
+        <CombatModal character={character as any} inventory={[]} initialCombatState={makeCombatState() as any} onCombatEnd={() => {}} onNarrativeUpdate={() => {}} onInventoryUpdate={() => {}} showToast={() => {}} />
+      </AppContext.Provider>
+    );
+
+    // Activate Physical tab so strike ability is visible
+    const physicalNodes = await screen.findAllByText(/PHYSICAL/i);
+    const physicalTab = physicalNodes[0];
+    fireEvent.click(physicalTab as HTMLElement);
+
+    // Find and click the strike button
+    const strikeNodes = await screen.findAllByText(/Strike/i);
+    const strikeBtn = strikeNodes.map(n => n.closest('button')).find(Boolean) as HTMLElement | undefined;
+    expect(strikeBtn).toBeTruthy();
+    fireEvent.click(strikeBtn!);
+
+    // Choose the enemy card as target
+    const enemyCard = await screen.findByTestId('enemy-card-enemy_e1');
+    expect(enemyCard).toBeTruthy();
+    fireEvent.click(enemyCard);
+
+    // Wait for blood splatter or weapon trail element to appear
+    await waitFor(() => {
+      // Blood uses "bg-red-600" class and weapon trail uses "via-blue-400"
+      expect(container.querySelector('.bg-red-600') || container.querySelector('.via-blue-400')).toBeTruthy();
     }, { timeout: 2000 });
   });
 });

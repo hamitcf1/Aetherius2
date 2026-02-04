@@ -40,22 +40,19 @@ const LevelBadge: React.FC<LevelBadgeProps> = ({ level, size = 64, className = '
 
   useEffect(() => {
     // Listen for global level-up pulses and trigger local pulse animation
+    let t: any = null;
     const handler = (ev: Event) => {
-      try {
-        const ce = ev as CustomEvent;
-        if (!ce?.detail || (ce.detail.level && Number(ce.detail.level) !== Number(level))) {
-          // allow pulse even if level doesn't match — highlights global event
-        }
-      } catch (e) {
-        // ignore
-      }
+      // We intentionally pulse even if the event doesn't include detail for this level
       setPulsing(true);
-      const t = setTimeout(() => setPulsing(false), 1200);
-      return () => clearTimeout(t);
+      if (t) clearTimeout(t);
+      t = setTimeout(() => setPulsing(false), 1200);
     };
 
     window.addEventListener('levelUpPulse', handler as EventListener);
-    return () => window.removeEventListener('levelUpPulse', handler as EventListener);
+    return () => {
+      window.removeEventListener('levelUpPulse', handler as EventListener);
+      if (t) clearTimeout(t);
+    };
   }, [level]);
 
   // Decorative elements vary per tier

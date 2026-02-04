@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sword, Shield, Heart, Sparkles, Package, Map, Users, Settings, MessageSquare, ShoppingBag, Sun, Flame, Snowflake, Volume2, HelpCircle } from 'lucide-react';
+import ModalWrapper from './ModalWrapper';
 
 type OnboardingStep = {
   title: string;
@@ -14,16 +15,6 @@ export function OnboardingModal(props: {
   const { open, onComplete } = props;
   const [stepIndex, setStepIndex] = useState(0);
 
-  // ESC key handler
-  const handleEscape = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') onComplete();
-  }, [onComplete]);
-
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [open, handleEscape]);
 
   const steps: OnboardingStep[] = useMemo(
     () => [
@@ -33,19 +24,19 @@ export function OnboardingModal(props: {
         body: (
           <div className="space-y-4">
             <p className="text-gray-200 font-sans leading-relaxed text-base">
-              Welcome, adventurer! <span className="text-skyrim-gold font-semibold">Aetherius</span> is an AI-powered 
+              Welcome, adventurer! <span className="text-skyrim-gold font-semibold">Aetherius</span> is an AI-powered
               Skyrim roleplay experience where <span className="italic">you</span> are the hero of your own story.
             </p>
             <div className="p-4 bg-gradient-to-r from-skyrim-gold/10 to-transparent border-l-4 border-skyrim-gold rounded-r">
               <p className="text-skyrim-text text-sm font-sans">
-                <span className="font-bold text-skyrim-gold">What is this?</span> This is a text-based RPG where an AI Game Master 
-                narrates your adventures in the world of Skyrim. You type what your character does, and the AI responds 
+                <span className="font-bold text-skyrim-gold">What is this?</span> This is a text-based RPG where an AI Game Master
+                narrates your adventures in the world of Skyrim. You type what your character does, and the AI responds
                 with immersive storytelling.
               </p>
             </div>
             <div className="p-3 bg-skyrim-paper/30 border border-skyrim-border rounded">
               <p className="text-skyrim-text text-sm font-sans">
-                💡 <strong>Tip:</strong> You can skip this tutorial anytime with ESC or clicking outside. 
+                💡 <strong>Tip:</strong> You can skip this tutorial anytime with ESC or clicking outside.
                 Access it again from the Settings menu.
               </p>
             </div>
@@ -63,25 +54,25 @@ export function OnboardingModal(props: {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="p-3 bg-blue-900/20 border border-blue-600/40 rounded">
                 <p className="text-blue-200 text-sm font-sans">
-                  <span className="font-bold">🤖 AI Scribe</span><br/>
+                  <span className="font-bold">🤖 AI Scribe</span><br />
                   Chat with AI to design your character collaboratively. Describe your vision and it will help create the details.
                 </p>
               </div>
               <div className="p-3 bg-green-900/20 border border-green-600/40 rounded">
                 <p className="text-green-200 text-sm font-sans">
-                  <span className="font-bold">✏️ Quick Create</span><br/>
+                  <span className="font-bold">✏️ Quick Create</span><br />
                   Enter a name, choose race/class, and start immediately. Perfect for quick starts.
                 </p>
               </div>
               <div className="p-3 bg-purple-900/20 border border-purple-600/40 rounded">
                 <p className="text-purple-200 text-sm font-sans">
-                  <span className="font-bold">🎲 Full Random</span><br/>
+                  <span className="font-bold">🎲 Full Random</span><br />
                   Let the AI generate a complete character with backstory, personality, and stats.
                 </p>
               </div>
               <div className="p-3 bg-amber-900/20 border border-amber-600/40 rounded">
                 <p className="text-amber-200 text-sm font-sans">
-                  <span className="font-bold">📄 Import Text</span><br/>
+                  <span className="font-bold">📄 Import Text</span><br />
                   Paste existing character info and the AI will parse it into your character sheet.
                 </p>
               </div>
@@ -164,7 +155,7 @@ export function OnboardingModal(props: {
             </div>
             <div className="p-3 bg-amber-900/20 border border-amber-600/40 rounded">
               <p className="text-amber-200 text-xs font-sans">
-                <strong>💰 Important:</strong> Some choices may cost gold. The transaction only happens 
+                <strong>💰 Important:</strong> Some choices may cost gold. The transaction only happens
                 when you select the option, not when previewing.
               </p>
             </div>
@@ -182,25 +173,25 @@ export function OnboardingModal(props: {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="p-3 bg-red-900/20 border border-red-600/40 rounded">
                 <p className="text-red-200 text-sm font-sans">
-                  <span className="font-bold flex items-center gap-1"><Sword size={14}/> Attack</span>
+                  <span className="font-bold flex items-center gap-1"><Sword size={14} /> Attack</span>
                   Use weapons to deal damage. Damage scales with weapon stats and your skills.
                 </p>
               </div>
               <div className="p-3 bg-blue-900/20 border border-blue-600/40 rounded">
                 <p className="text-blue-200 text-sm font-sans">
-                  <span className="font-bold flex items-center gap-1"><Shield size={14}/> Defend</span>
+                  <span className="font-bold flex items-center gap-1"><Shield size={14} /> Defend</span>
                   Block incoming attacks. Reduces damage taken and may stagger enemies.
                 </p>
               </div>
               <div className="p-3 bg-purple-900/20 border border-purple-600/40 rounded">
                 <p className="text-purple-200 text-sm font-sans">
-                  <span className="font-bold flex items-center gap-1"><Sparkles size={14}/> Magic</span>
+                  <span className="font-bold flex items-center gap-1"><Sparkles size={14} /> Magic</span>
                   Cast spells using magicka. Unlock more spells as you progress.
                 </p>
               </div>
               <div className="p-3 bg-green-900/20 border border-green-600/40 rounded">
                 <p className="text-green-200 text-sm font-sans">
-                  <span className="font-bold flex items-center gap-1"><Package size={14}/> Items</span>
+                  <span className="font-bold flex items-center gap-1"><Package size={14} /> Items</span>
                   Use potions and consumables during combat for healing or buffs.
                 </p>
               </div>
@@ -263,20 +254,20 @@ export function OnboardingModal(props: {
             <div className="space-y-3">
               <div className="p-3 bg-skyrim-paper/30 border border-skyrim-border rounded">
                 <p className="text-skyrim-text text-sm font-sans">
-                  <span className="font-bold text-skyrim-gold">🛒 General Store</span><br/>
-                  Buy weapons, armor, potions, food, and camping supplies. 
+                  <span className="font-bold text-skyrim-gold">🛒 General Store</span><br />
+                  Buy weapons, armor, potions, food, and camping supplies.
                   Item availability improves as you level up.
                 </p>
               </div>
               <div className="p-3 bg-skyrim-paper/30 border border-skyrim-border rounded">
                 <p className="text-skyrim-text text-sm font-sans">
-                  <span className="font-bold text-skyrim-gold">⚒️ Blacksmith</span><br/>
+                  <span className="font-bold text-skyrim-gold">⚒️ Blacksmith</span><br />
                   Upgrade your weapons and armor. Improves damage and armor ratings.
                 </p>
               </div>
               <div className="p-3 bg-skyrim-paper/30 border border-skyrim-border rounded">
                 <p className="text-skyrim-text text-sm font-sans">
-                  <span className="font-bold text-skyrim-gold">💰 Selling Items</span><br/>
+                  <span className="font-bold text-skyrim-gold">💰 Selling Items</span><br />
                   Sell unwanted items for gold. Loot enemies and explore to find valuable treasures.
                 </p>
               </div>
@@ -295,19 +286,19 @@ export function OnboardingModal(props: {
             <div className="space-y-3">
               <div className="p-3 bg-purple-900/20 border border-purple-600/40 rounded">
                 <p className="text-purple-200 text-sm font-sans">
-                  <span className="font-bold">⭐ Perk Points</span><br/>
+                  <span className="font-bold">⭐ Perk Points</span><br />
                   Earn 1 perk point per level. Spend them in the Perk Tree to unlock permanent bonuses.
                 </p>
               </div>
               <div className="p-3 bg-blue-900/20 border border-blue-600/40 rounded">
                 <p className="text-blue-200 text-sm font-sans">
-                  <span className="font-bold">📈 Skills</span><br/>
+                  <span className="font-bold">📈 Skills</span><br />
                   Skills improve as you use them. Higher skills unlock better perks and abilities.
                 </p>
               </div>
               <div className="p-3 bg-amber-900/20 border border-amber-600/40 rounded">
                 <p className="text-amber-200 text-sm font-sans">
-                  <span className="font-bold">🔮 Spells</span><br/>
+                  <span className="font-bold">🔮 Spells</span><br />
                   Unlock new spells as you level up. Visit the Spells menu to see available magic.
                 </p>
               </div>
@@ -412,22 +403,16 @@ export function OnboardingModal(props: {
   const progress = ((stepIndex + 1) / steps.length) * 100;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] bg-skyrim-dark/80 backdrop-blur-sm flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Tutorial"
-      onClick={(e) => { if (e.target === e.currentTarget) onComplete(); }}
-    >
+    <ModalWrapper open={open} onClose={onComplete} zIndex="z-[60]" className="backdrop-blur-sm">
       <div className="w-full max-w-2xl bg-skyrim-paper border border-skyrim-border rounded-lg shadow-2xl overflow-hidden">
         {/* Progress bar */}
         <div className="h-1 bg-skyrim-dark">
-          <div 
+          <div
             className="h-full bg-skyrim-gold transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
-        
+
         <div className="p-5 sm:p-6 border-b border-skyrim-border flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             {step.icon}
@@ -490,6 +475,6 @@ export function OnboardingModal(props: {
           )}
         </div>
       </div>
-    </div>
+    </ModalWrapper>
   );
 }

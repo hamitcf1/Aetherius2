@@ -4,6 +4,7 @@ import { PERK_DEFINITIONS, PerkDef } from '../data/perkDefinitions';
 import PERK_BALANCE from '../data/perkBalance';
 import { Perk, Character } from '../types';
 import { Check, Lock, ChevronDown, ChevronRight, Sparkles, Shield, Sword, Heart, Star, RefreshCcw } from 'lucide-react';
+import { useLocalization } from '../services/localization';
 
 interface Props {
   open: boolean;
@@ -14,12 +15,12 @@ interface Props {
   onRefundAll?: () => void;
 }
 
-const SKILL_CATEGORIES: Record<string, { label: string; skills: string[] }> = {
-  attributes: { label: 'Attributes', skills: ['Health', 'Magicka', 'Stamina', 'Luck'] },
-  combat: { label: 'Combat', skills: ['One-Handed', 'Two-Handed', 'Block', 'Archery', 'Combat', 'Unarmed'] },
-  armor: { label: 'Armor', skills: ['Light Armor', 'Heavy Armor'] },
-  magic: { label: 'Magic', skills: ['Destruction', 'Restoration', 'Conjuration'] },
-  stealth: { label: 'Stealth', skills: ['Sneak'] },
+const SKILL_CATEGORIES: Record<string, { skills: string[] }> = {
+  attributes: { skills: ['Health', 'Magicka', 'Stamina', 'Luck'] },
+  combat: { skills: ['One-Handed', 'Two-Handed', 'Block', 'Archery', 'Combat', 'Unarmed'] },
+  armor: { skills: ['Light Armor', 'Heavy Armor'] },
+  magic: { skills: ['Destruction', 'Restoration', 'Conjuration', 'Alteration', 'Illusion'] },
+  stealth: { skills: ['Sneak'] },
 };
 
 function currentPerkRank(char: Character, perkId: string) {
@@ -41,23 +42,42 @@ function prerequisitesMet(char: Character, def: PerkDef) {
   });
 }
 
-function formatRequirement(req: string): string {
-  const parsed = parseRequirement(req);
-  if (parsed.id === 'level') return `Level ${parsed.rank}`;
-  const def = PERK_DEFINITIONS.find(d => d.id === parsed.id);
-  if (def) return parsed.rank > 1 ? `${def.name} Rank ${parsed.rank}` : def.name;
-  return req;
-}
-
 export default function PerkTreeModal({ open, onClose, character, onConfirm, onForceUnlock, onRefundAll }: Props) {
+  const { t } = useLocalization();
   const [selected, setSelected] = useState<string | null>(null);
   const [stagedMap, setStagedMap] = useState<Record<string, number>>({});
   const [stagedMaster, setStagedMaster] = useState<Record<string, boolean>>({});
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ attributes: true, combat: true });
+
+  const STORAGE_KEY_PREFIX = 'aetherius:perkTree:expanded:';
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
+    // Default to all expanded
+    const init: Record<string, boolean> = {};
+    Object.keys(SKILL_CATEGORIES).forEach(k => init[k] = true);
+    return init;
+  });
+
+  // Load per-character persisted state when character changes
+  React.useEffect(() => {
+    try {
+      const charId = character?.id;
+      if (!charId) return;
+      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${charId}`);
+      if (raw) setExpandedCategories(JSON.parse(raw) as Record<string, boolean>);
+    } catch (e) { /* ignore */ }
+  }, [character?.id]);
+
+  // Persist changes per-character
+  React.useEffect(() => {
+    try {
+      const charId = character?.id;
+      if (!charId) return;
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${charId}`, JSON.stringify(expandedCategories));
+    } catch (e) { /* ignore */ }
+  }, [expandedCategories, character?.id]);
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
 
   const defs = useMemo(() => PERK_DEFINITIONS, []);
-  
+
   const perksByCategory = useMemo(() => {
     const grouped: Record<string, PerkDef[]> = {};
     Object.entries(SKILL_CATEGORIES).forEach(([catKey, cat]) => {
@@ -103,22 +123,40 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
     onRefundAll?.();
   };
 
+  const formatRequirement = (req: string): string => {
+    const parsed = parseRequirement(req);
+    if (parsed.id === 'level') return `${t('map.level')} ${parsed.rank}`;
+    // Fetch localized name if possible
+    const localizedName = t(`perks.data.${parsed.id}.name`);
+    // Fallback to definition name if localized key not found/same
+    const def = PERK_DEFINITIONS.find(d => d.id === parsed.id);
+    const name = (localizedName !== `perks.data.${parsed.id}.name` ? localizedName : def?.name) || parsed.id;
+
+    return parsed.rank > 1 ? `${name} ${t('perks.rank')} ${parsed.rank}` : name;
+  };
+
   return (
     <ModalWrapper open={open} onClose={onClose} preventOutsideClose>
       <div className="w-full max-w-[900px] h-[min(85vh,700px)] flex flex-col bg-skyrim-paper rounded border border-skyrim-border overflow-hidden">
         <div className="flex items-center justify-between p-3 border-b border-skyrim-border bg-skyrim-dark/30">
           <h3 className="text-lg font-bold text-skyrim-gold flex items-center gap-2">
-            <Sparkles size={18} /> Perk Tree
+            <Sparkles size={18} /> {t('perks.title')}
           </h3>
           <div className="flex items-center gap-4">
             <div className="text-sm text-skyrim-text">
-              Points: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
+              {t('perks.points')}: <span className="font-bold text-skyrim-gold">{availablePoints}</span>
               {stagedPoints > 0 && <span className="ml-2 text-amber-400">(-{stagedPoints})</span>}
-              {totalSpentOnPerks > 0 && <span className="ml-2 text-blue-300">({totalSpentOnPerks} spent)</span>}
+              {totalSpentOnPerks > 0 && <span className="ml-2 text-blue-300">({totalSpentOnPerks} {t('perks.spent')})</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setExpandedCategories(Object.keys(SKILL_CATEGORIES).reduce((acc: any, k) => (acc[k] = true, acc), {} as Record<string, boolean>))}
+                className="px-2 py-1 text-xs bg-skyrim-paper/20 text-skyrim-text rounded hover:bg-skyrim-paper/30">{t('perks.expandAll')}</button>
+              <button onClick={() => setExpandedCategories(Object.keys(SKILL_CATEGORIES).reduce((acc: any, k) => (acc[k] = false, acc), {} as Record<string, boolean>))}
+                className="px-2 py-1 text-xs bg-skyrim-paper/20 text-skyrim-text rounded hover:bg-skyrim-paper/30">{t('perks.collapseAll')}</button>
             </div>
             {totalSpentOnPerks > 0 && onRefundAll && (
               <button onClick={() => setShowRefundConfirm(true)} className="px-2 py-1 text-xs bg-red-600/20 text-red-300 rounded hover:bg-red-600/30 flex items-center gap-1">
-                <RefreshCcw size={12} /> Refund All
+                <RefreshCcw size={12} /> {t('perks.refund')}
               </button>
             )}
           </div>
@@ -132,18 +170,18 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
               const isExpanded = expandedCategories[catKey];
               const availableCount = perks.filter(p => statusOf(p) === 'available').length;
               const unlockedCount = perks.filter(p => statusOf(p) === 'unlocked').length;
-              
+
               return (
                 <div key={catKey} className="mb-1">
                   <button onClick={() => toggleCategory(catKey)} className="w-full flex items-center justify-between p-2 rounded hover:bg-skyrim-gold/10">
-                    <span className="text-skyrim-gold font-medium">{cat.label}</span>
+                    <span className="text-skyrim-gold font-medium">{t(`perks.categories.${catKey}`)}</span>
                     <div className="flex items-center gap-2">
                       {availableCount > 0 && <span className="text-xs px-1.5 py-0.5 bg-amber-600/30 text-amber-300 rounded">{availableCount}</span>}
                       {unlockedCount > 0 && <span className="text-xs px-1.5 py-0.5 bg-green-600/30 text-green-300 rounded">{unlockedCount}</span>}
                       {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </div>
                   </button>
-                  
+
                   {isExpanded && (
                     <div className="ml-2 space-y-0.5">
                       {perks.map(def => {
@@ -153,7 +191,11 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                         const staged = stagedFor(def.id);
                         const isSelected = selected === def.id;
                         const mastery = (character.perks || []).find(p => p.id === def.id)?.mastery || 0;
-                        
+                        const perRank = def.effect?.type === 'stat' ? (def.effect?.amount || 0) : null;
+                        const currentContribution = perRank ? (perRank * curr) : null;
+                        const locName = t(`perks.data.${def.id}.name`);
+                        const name = locName !== `perks.data.${def.id}.name` ? locName : def.name;
+
                         return (
                           <button key={def.id} onClick={() => setSelected(def.id)}
                             className={`w-full flex items-center justify-between p-1.5 rounded text-left text-sm ${isSelected ? 'bg-skyrim-gold/20 ring-1 ring-skyrim-gold' : 'hover:bg-skyrim-paper/50'}`}>
@@ -161,7 +203,12 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                               <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] ${st === 'unlocked' ? 'bg-green-600/40 text-green-400' : st === 'available' ? 'bg-amber-600/40 text-amber-400' : 'bg-gray-600/40 text-gray-500'}`}>
                                 {st === 'unlocked' ? <Check size={10} /> : st === 'locked' ? <Lock size={10} /> : <Star size={10} />}
                               </span>
-                              <span className={`truncate ${st === 'locked' ? 'text-skyrim-text/50' : ''}`}>{def.name}</span>
+                              <div className="truncate">
+                                <div className={`${st === 'locked' ? 'text-skyrim-text/50' : ''}`}>{name}</div>
+                                {perRank !== null && (
+                                  <div className="text-[10px] text-skyrim-text/60 mt-0.5">+{perRank} {def.effect?.key} / {t('perks.rank').toLowerCase()} • {t('perks.current')} +{currentContribution}</div>
+                                )}
+                              </div>
                               {staged > 0 && <span className="text-xs px-1 bg-skyrim-gold/30 text-skyrim-gold rounded">+{staged}</span>}
                               {mastery > 0 && <span className="text-xs px-1 bg-purple-600/30 text-purple-300 rounded">M{mastery}</span>}
                             </div>
@@ -179,80 +226,99 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
           </div>
 
           <div className="w-1/2 p-4 overflow-y-auto bg-skyrim-dark/10">
-            {selectedDef ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-bold text-skyrim-gold">{selectedDef.name}</h4>
-                  <span className={`text-xs px-2 py-1 rounded ${statusOf(selectedDef) === 'unlocked' ? 'bg-green-600/30 text-green-300' : statusOf(selectedDef) === 'available' ? 'bg-amber-600/30 text-amber-300' : 'bg-gray-600/30 text-gray-400'}`}>{statusOf(selectedDef).toUpperCase()}</span>
-                </div>
-                <div className="text-xs text-skyrim-text/70">{selectedDef.skill}</div>
-                <p className="text-sm text-skyrim-text">{selectedDef.description}</p>
+            {selectedDef ? (() => {
+              const locName = t(`perks.data.${selectedDef.id}.name`);
+              const name = locName !== `perks.data.${selectedDef.id}.name` ? locName : selectedDef.name;
+              const locDesc = t(`perks.data.${selectedDef.id}.description`);
+              const description = locDesc !== `perks.data.${selectedDef.id}.description` ? locDesc : selectedDef.description;
+              const statusLabel = st => {
+                if (st === 'unlocked') return t('map.filter.unlocked');
+                if (st === 'available') return t('spells.learn'); // "Learn" / "Available" equivalent? 
+                // Actually map.filter.unlocked is "Unlocked" (Açık).
+                // PerkTreeModal used Unlocked/Available/Locked.
+                // I'll stick to upper case English key lookups or use statusOf(selectedDef).toUpperCase().
+                // Let's use localized strings for these if possible, or leave as technical terms.
+                // I'll just uppercase the status for now as strict localization for status enums wasn't added specifically.
+                // Wait, I can use: 'UNLOCKED', 'AVAILABLE', 'LOCKED' translations if I added them?
+                // I'll just use English status as UI label for now unless I add generic status keys.
+                return st.toUpperCase();
+              };
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2 bg-skyrim-paper/30 rounded">
-                    <div className="text-skyrim-text/70">Rank</div>
-                    <div className="text-skyrim-gold font-bold">{currentPerkRank(character, selectedDef.id)}/{selectedDef.maxRank || 1}</div>
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-bold text-skyrim-gold">{name}</h4>
+                    <span className={`text-xs px-2 py-1 rounded ${statusOf(selectedDef) === 'unlocked' ? 'bg-green-600/30 text-green-300' : statusOf(selectedDef) === 'available' ? 'bg-amber-600/30 text-amber-300' : 'bg-gray-600/40 text-gray-400'}`}>{statusOf(selectedDef).toUpperCase()}</span>
                   </div>
-                  <div className="p-2 bg-skyrim-paper/30 rounded">
-                    <div className="text-skyrim-text/70">Master Cost</div>
-                    <div className="text-amber-400 font-bold">{selectedDef.masteryCost || 3} pts</div>
-                  </div>
-                </div>
+                  <div className="text-xs text-skyrim-text/70">{selectedDef.skill}</div>
+                  <p className="text-sm text-skyrim-text">{description}</p>
 
-                {selectedDef.effect?.type === 'stat' && (
-                  <div className="p-2 bg-skyrim-paper/20 rounded border border-skyrim-border text-xs">
-                    <span className="text-skyrim-text/70">Per rank: </span>
-                    <span className="text-skyrim-gold">+{selectedDef.effect.amount} {selectedDef.effect.key}</span>
-                    <span className="text-skyrim-text/70 ml-2">| Current: </span>
-                    <span className="text-skyrim-gold">+{(selectedDef.effect.amount || 0) * currentPerkRank(character, selectedDef.id)}</span>
-                  </div>
-                )}
-
-                {statusOf(selectedDef) === 'locked' && selectedDef.requires && (
-                  <div className="p-2 bg-red-900/20 rounded border border-red-800/30 text-xs">
-                    <div className="text-red-400 mb-1">Requires:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedDef.requires.map(r => (
-                        <span key={r} className="px-2 py-0.5 bg-red-900/30 text-red-300 rounded">{formatRequirement(r)}</span>
-                      ))}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 bg-skyrim-paper/30 rounded">
+                      <div className="text-skyrim-text/70">{t('perks.rank')}</div>
+                      <div className="text-skyrim-gold font-bold">{currentPerkRank(character, selectedDef.id)}/{selectedDef.maxRank || 1}</div>
+                    </div>
+                    <div className="p-2 bg-skyrim-paper/30 rounded">
+                      <div className="text-skyrim-text/70">{t('perks.masterCost')}</div>
+                      <div className="text-amber-400 font-bold">{selectedDef.masteryCost || 3} pts</div>
                     </div>
                   </div>
-                )}
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {statusOf(selectedDef) === 'available' && remainingPoints >= 1 && currentPerkRank(character, selectedDef.id) + stagedFor(selectedDef.id) < (selectedDef.maxRank || 1) && (
-                    <button onClick={() => setStagedMap(m => ({ ...m, [selectedDef.id]: (m[selectedDef.id] || 0) + 1 }))}
-                      className="px-3 py-1.5 bg-skyrim-gold text-black rounded font-medium text-sm hover:bg-amber-400">
-                      Stage{stagedFor(selectedDef.id) > 0 ? ` (+${stagedFor(selectedDef.id)})` : ''}
-                    </button>
+                  {selectedDef.effect?.type === 'stat' && (
+                    <div className="p-2 bg-skyrim-paper/20 rounded border border-skyrim-border text-xs">
+                      <span className="text-skyrim-text/70">{t('perks.perRank')} </span>
+                      <span className="text-skyrim-gold">+{selectedDef.effect.amount} {selectedDef.effect.key}</span>
+                      <span className="text-skyrim-text/70 ml-2">| {t('perks.current')} </span>
+                      <span className="text-skyrim-gold">+{(selectedDef.effect.amount || 0) * currentPerkRank(character, selectedDef.id)}</span>
+                    </div>
                   )}
-                  {stagedFor(selectedDef.id) > 0 && (
-                    <button onClick={() => setStagedMap(m => {
-                      const next = { ...m };
-                      next[selectedDef.id] = Math.max(0, (next[selectedDef.id] || 0) - 1);
-                      if (next[selectedDef.id] === 0) delete next[selectedDef.id];
-                      return next;
-                    })} className="px-3 py-1.5 border border-skyrim-gold text-skyrim-gold rounded text-sm hover:bg-skyrim-gold/10">Undo</button>
+
+                  {statusOf(selectedDef) === 'locked' && selectedDef.requires && (
+                    <div className="p-2 bg-red-900/20 rounded border border-red-800/30 text-xs">
+                      <div className="text-red-400 mb-1">{t('perks.requires')}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedDef.requires.map(r => (
+                          <span key={r} className="px-2 py-0.5 bg-red-900/30 text-red-300 rounded">{formatRequirement(r)}</span>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  {currentPerkRank(character, selectedDef.id) >= (selectedDef.maxRank || 1) && !stagedMaster[selectedDef.id] && remainingPoints >= (selectedDef.masteryCost || 3) && (
-                    <button onClick={() => setStagedMaster(s => ({ ...s, [selectedDef.id]: true }))}
-                      className="px-3 py-1.5 bg-purple-600 text-white rounded text-sm hover:bg-purple-500">Master</button>
-                  )}
-                  {stagedMaster[selectedDef.id] && (
-                    <button onClick={() => setStagedMaster(s => ({ ...s, [selectedDef.id]: false }))}
-                      className="px-3 py-1.5 border border-purple-400 text-purple-400 rounded text-sm">Cancel Master</button>
-                  )}
-                  {statusOf(selectedDef) === 'locked' && onForceUnlock && (character.perkPoints || 0) >= 3 && (character.forcedPerkUnlocks || 0) < 3 && (
-                    <button onClick={() => onForceUnlock(selectedDef.id)}
-                      className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-500">Force (3pts)</button>
-                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {statusOf(selectedDef) === 'available' && remainingPoints >= 1 && currentPerkRank(character, selectedDef.id) + stagedFor(selectedDef.id) < (selectedDef.maxRank || 1) && (
+                      <button onClick={() => setStagedMap(m => ({ ...m, [selectedDef.id]: (m[selectedDef.id] || 0) + 1 }))}
+                        className="px-3 py-1.5 bg-skyrim-gold text-black rounded font-medium text-sm hover:bg-amber-400">
+                        {t('perks.stage')}{stagedFor(selectedDef.id) > 0 ? ` (+${stagedFor(selectedDef.id)})` : ''}
+                      </button>
+                    )}
+                    {stagedFor(selectedDef.id) > 0 && (
+                      <button onClick={() => setStagedMap(m => {
+                        const next = { ...m };
+                        next[selectedDef.id] = Math.max(0, (next[selectedDef.id] || 0) - 1);
+                        if (next[selectedDef.id] === 0) delete next[selectedDef.id];
+                        return next;
+                      })} className="px-3 py-1.5 border border-skyrim-gold text-skyrim-gold rounded text-sm hover:bg-skyrim-gold/10">{t('perks.undo')}</button>
+                    )}
+                    {currentPerkRank(character, selectedDef.id) >= (selectedDef.maxRank || 1) && !stagedMaster[selectedDef.id] && remainingPoints >= (selectedDef.masteryCost || 3) && (
+                      <button onClick={() => setStagedMaster(s => ({ ...s, [selectedDef.id]: true }))}
+                        className="px-3 py-1.5 bg-purple-600 text-white rounded text-sm hover:bg-purple-500">{t('perks.master')}</button>
+                    )}
+                    {stagedMaster[selectedDef.id] && (
+                      <button onClick={() => setStagedMaster(s => ({ ...s, [selectedDef.id]: false }))}
+                        className="px-3 py-1.5 border border-purple-400 text-purple-400 rounded text-sm">{t('perks.cancelMaster')}</button>
+                    )}
+                    {statusOf(selectedDef) === 'locked' && onForceUnlock && (character.perkPoints || 0) >= 3 && (character.forcedPerkUnlocks || 0) < 3 && (
+                      <button onClick={() => onForceUnlock(selectedDef.id)}
+                        className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-500">{t('perks.force')} (3pts)</button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
+              );
+            })() : (
               <div className="h-full flex items-center justify-center text-skyrim-text/50">
                 <div className="text-center">
                   <Sparkles size={32} className="mx-auto mb-2 opacity-50" />
-                  <p>Select a perk to view details</p>
+                  <p>{t('perks.selectPrompt')}</p>
                 </div>
               </div>
             )}
@@ -261,11 +327,17 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
 
         <div className="flex items-center justify-between p-3 border-t border-skyrim-border bg-skyrim-dark/30">
           <div className="text-sm text-skyrim-text">
-            {stagedCount > 0 && <span><span className="text-skyrim-gold font-bold">{stagedCount}</span> staged <span className="text-amber-400">({stagedPoints}pts)</span></span>}
+            {stagedCount > 0 && <span><span className="text-skyrim-gold font-bold">{stagedCount}</span> {t('perks.staged')} <span className="text-amber-400">({stagedPoints}pts)</span></span>}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { setStagedMap({}); setStagedMaster({}); setSelected(null); onClose(); }}
-              className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">Cancel</button>
+            <button onClick={() => {
+              if (stagedPoints > 0 || Object.keys(stagedMaster).length > 0) {
+                setStagedMap({}); setStagedMaster({}); setSelected(null); onClose();
+              } else {
+                onClose();
+              }
+            }}
+              className="px-4 py-1.5 rounded border border-skyrim-border text-skyrim-text hover:bg-skyrim-paper/30">{(stagedPoints > 0 || Object.keys(stagedMaster).length > 0) ? t('perks.cancel') : t('perks.leave')}</button>
             <button disabled={stagedPoints === 0 || stagedPoints > availablePoints}
               onClick={() => {
                 const expanded: string[] = [];
@@ -277,30 +349,31 @@ export default function PerkTreeModal({ open, onClose, character, onConfirm, onF
                 setSelected(null);
               }}
               className={`px-4 py-1.5 rounded font-medium ${stagedPoints > 0 && stagedPoints <= availablePoints ? 'bg-skyrim-gold text-black hover:bg-amber-400' : 'bg-gray-600/30 text-gray-500 cursor-not-allowed'}`}>
-              Confirm ({stagedPoints})
+              {t('perks.confirm')} ({stagedPoints})
             </button>
           </div>
         </div>
       </div>
 
-      {/* Refund Confirmation Modal */}
       {showRefundConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
           <div className="bg-skyrim-paper p-4 rounded border border-skyrim-border max-w-md">
-            <h4 className="font-semibold text-lg text-skyrim-gold">Refund All Perks?</h4>
-            <p className="text-sm text-skyrim-text mt-2">
-              This will reset all <span className="text-red-400 font-bold">{(character.perks || []).length}</span> unlocked perks 
-              and refund <span className="text-green-400 font-bold">{totalSpentOnPerks}</span> perk point{totalSpentOnPerks !== 1 ? 's' : ''}.
-            </p>
+            <h4 className="font-semibold text-lg text-skyrim-gold">{t('perks.refund')}?</h4>
+            <p className="text-sm text-skyrim-text mt-2" dangerouslySetInnerHTML={{
+              __html: t('perks.refundDesc', {
+                count: `<span class="text-red-400 font-bold">${(character.perks || []).length}</span>`,
+                points: `<span class="text-green-400 font-bold">${totalSpentOnPerks}</span>`
+              })
+            }} />
             <p className="text-xs text-skyrim-text/70 mt-2">
-              You can re-allocate perks later by spending perk points again.
+              {t('perks.reallocateDesc')}
             </p>
             <div className="flex gap-2 mt-4">
               <button onClick={handleRefundAll} className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-500">
-                Refund All ({totalSpentOnPerks} pts)
+                {t('perks.refund')} ({totalSpentOnPerks} pts)
               </button>
               <button onClick={() => setShowRefundConfirm(false)} className="flex-1 px-3 py-2 border border-skyrim-border text-skyrim-text rounded hover:bg-skyrim-paper/30">
-                Cancel
+                {t('perks.cancel')}
               </button>
             </div>
           </div>

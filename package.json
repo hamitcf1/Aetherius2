@@ -1,7 +1,7 @@
 {
   "name": "skyrim-aetherius",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.0.8",
   "type": "module",
   "homepage": "/skyaetherius",
   "dependencies": {
@@ -9,6 +9,7 @@
     "dotenv": "^17.2.3",
     "firebase": "^11.0.0",
     "firebase-admin": "^13.6.0",
+    "framer-motion": "^12.30.0",
     "html2canvas": "1.4.1",
     "jspdf": "2.5.1",
     "lucide-react": "^0.562.0",

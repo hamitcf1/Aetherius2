@@ -23,7 +23,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     perkCost: 1,
     type: 'damage',
     damage: 15,
-    effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2 }]
+    effects: [{ type: 'dot', stat: 'health', value: 3, duration: 2, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }]
   },
   ice_spike: {
     id: 'ice_spike',
@@ -63,9 +63,10 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     perkCost: 3,
     type: 'damage',
     damage: 45,
-    effects: [{ type: 'dot', stat: 'health', value: 6, duration: 3 }],
+    effects: [{ type: 'dot', stat: 'health', value: 6, duration: 3, name: 'Burning', description: 'Target takes X fire damage at the start of each turn.' }],
     prerequisites: { level: 12 }
   },
+
   frost_nova: {
     id: 'frost_nova',
     name: 'Frost Nova',
@@ -147,16 +148,6 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     type: 'utility',
     effects: [{ type: 'summon', name: 'Storm Atronach', duration: 4 }],
     prerequisites: { level: 25 }
-  },
-  summon_dremora: {
-    id: 'summon_dremora',
-    name: 'Conjure Dremora Lord',
-    description: 'Summons a powerful Dremora warrior from Oblivion to fight for you.',
-    cost: 100,
-    perkCost: 7,
-    type: 'utility',
-    effects: [{ type: 'summon', name: 'Dremora Lord', duration: 5 }],
-    prerequisites: { level: 30 }
   },
   summon_wolf: {
     id: 'summon_wolf',
@@ -245,7 +236,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 38,
     perkCost: 2,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 10, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 8, aoeTarget: 'all_allies' }],
     prerequisites: { level: 8 }
   },
   aeonic_surge: {
@@ -255,7 +246,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 45,
     perkCost: 3,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 18, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 14, aoeTarget: 'all_allies' }],
     prerequisites: { level: 12 }
   },
   aeonic_wave: {
@@ -265,7 +256,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 60,
     perkCost: 6,
     type: 'damage',
-    effects: [ { type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' } ],
+    effects: [{ type: 'aoe_damage', value: 26, aoeTarget: 'all_enemies' }, { type: 'aoe_heal', value: 22, aoeTarget: 'all_allies' }],
     prerequisites: { level: 18 }
   },
 
@@ -365,6 +356,8 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 0,
     perkCost: 1,
     type: 'heal',
+    // Restores magicka to the caster (bonus action). Use explicit `restore` effect so the engine applies magicka.
+    effects: [{ type: 'restore', stat: 'magicka', value: 60 }],
     prerequisites: { level: 45 }
   },
   grand_healing: {
@@ -395,7 +388,11 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 65,
     perkCost: 2,
     type: 'heal',
-    heal: 40,
+    // Heals allies and grants a temporary armor buff
+    effects: [
+      { type: 'aoe_heal', value: 40, aoeTarget: 'all_allies' },
+      { type: 'buff', stat: 'armor', value: 20, duration: 4, aoeTarget: 'all_allies' }
+    ],
     prerequisites: { level: 70 }
   },
   mass_restoration: {
@@ -405,7 +402,11 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 75,
     perkCost: 3,
     type: 'heal',
-    heal: 50,
+    // AoE heal + magicka restore
+    effects: [
+      { type: 'aoe_heal', value: 50, aoeTarget: 'all_allies' },
+      { type: 'aoe_restore', stat: 'magicka', value: 40, aoeTarget: 'all_allies' }
+    ],
     prerequisites: { level: 80 }
   },
 
@@ -426,8 +427,22 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     description: 'Conjure a spectral weapon to strike your foe.',
     cost: 30,
     perkCost: 1,
-    type: 'damage',
+    type: 'utility',
     damage: 30,
+    // Conjures a temporary weapon the player can use for physical attacks.
+    // Handled specially in the combat engine via `summon` effect with `summonType: 'weapon'`.
+    effects: [
+      {
+        type: 'summon',
+        name: 'Bound Weapon',
+        summonType: 'weapon',
+        // Duration in player turns
+        duration: 3,
+        playerTurns: 3,
+        // Template for the conjured weapon; combat will scale this by caster level/skill
+        weapon: { name: 'Bound Weapon', damage: 18 }
+      }
+    ],
     prerequisites: { level: 30 }
   },
   conjure_daedra: {
@@ -437,6 +452,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 50,
     perkCost: 2,
     type: 'utility',
+    effects: [{ type: 'summon', name: 'Daedra', duration: 4 }],
     prerequisites: { level: 50 }
   },
   summon_dremora_lord: {
@@ -446,6 +462,7 @@ const SPELL_REGISTRY: Record<string, Spell> = {
     cost: 85,
     perkCost: 3,
     type: 'utility',
+    effects: [{ type: 'summon', name: 'Dremora Lord', duration: 5 }],
     prerequisites: { level: 80 }
   },
 
@@ -556,9 +573,9 @@ export const getAllSpells = (): Spell[] => Object.values(SPELL_REGISTRY);
 export const getSpellById = (id: string): Spell | undefined => {
   // Support high-level variant suffixes like 'flames:high' or 'flames_high'
   if (!id) return undefined;
-  const parts = id.split(/[:_]/);
-  if (parts.length > 1 && (parts[1] === 'high' || parts[1] === 'empowered')) {
-    const baseId = parts[0];
+  const match = id.match(/^(.+)([:_])(high|empowered)$/);
+  if (match) {
+    const baseId = match[1];
     const base = SPELL_REGISTRY[baseId];
     if (!base) return undefined;
     // Produce an empowered variant on the fly
@@ -583,19 +600,19 @@ export const getSpellById = (id: string): Spell | undefined => {
 export const isSpellVariantUnlocked = (character: { level: number; perks?: any[] } | null | undefined, id: string): boolean => {
   if (!character) return false;
   if (!id) return false;
-  const parts = id.split(/[:_]/);
-  if (parts.length === 1) return true;
-  const variant = parts[1];
-  if (!(variant === 'high' || variant === 'empowered')) return true;
-  const baseId = parts[0];
+  const match = id.match(/^(.+)([:_])(high|empowered)$/);
+  if (!match) return true;
+  const baseId = match[1];
   const base = SPELL_REGISTRY[baseId];
   if (!base) return false;
-  // Unlock if character has explicit perk 'empower_spells'
+  // Unlock early if character has explicit perk 'empower_spells' or 'empower_magic'
   const hasPerk = Array.isArray(character.perks) && character.perks.some((p: any) => p && (p.id === 'empower_spells' || p.id === 'empower_magic'));
   if (hasPerk) return true;
-  // Otherwise require a sufficiently higher level (base prereq + 5)
-  const req = (base.prerequisites?.level || 1) + 5;
-  return (character.level || 0) >= req;
+  // Otherwise require the base prerequisite level + 5 (empowered variants are meant to unlock later)
+  // For spells without an explicit prerequisite, treat base requirement as level 1.
+  const baseReq = base.prerequisites?.level ?? 1;
+  const minReq = baseReq + 5;
+  return (character.level || 0) >= minReq;
 };
 
 export const getLearnedSpellIds = (characterId: string): string[] => {

@@ -73,4 +73,42 @@ describe('Level up available button', () => {
     const avail = (window as any).availableLevelUps();
     expect(avail['char1']).toBeDefined();
   });
+
+  it('persists available level ups across a soft reload', async () => {
+    // Set up localStorage and start a fresh app instance, then trigger a level up and cancel it
+    if (!localStorage || typeof (localStorage as any).getItem !== 'function') {
+      (global as any).localStorage = {
+        store: {} as Record<string,string>,
+        getItem(key: string) { return (this as any).store[key] ?? null; },
+        setItem(key: string, value: string) { (this as any).store[key] = String(value); },
+        removeItem(key: string) { delete (this as any).store[key]; }
+      } as any;
+    }
+
+    localStorage.setItem(`aetherius:lastCharacter:testuid`, 'char1');
+
+    const { unmount, rerender } = render(<LocalizationProvider><App /></LocalizationProvider>);
+    await waitFor(() => expect((window as any).app).toBeDefined(), { timeout: 5000 });
+    const app = (window as any).app;
+
+    await waitFor(() => expect(screen.queryAllByText('Hero').length > 0).toBeTruthy(), { timeout: 2000 });
+    const heroElems = screen.queryAllByText('Hero');
+    let heroElem = heroElems.find(e => e.closest('button') && e.closest('button')!.closest('.grid'));
+    if (!heroElem) heroElem = heroElems[heroElems.length - 1];
+    heroElem!.closest('button') && (heroElem!.closest('button') as HTMLButtonElement).click();
+
+    // Trigger and cancel level up as before
+    app.handleGameUpdate({ xpChange: 1000 });
+    await waitFor(() => expect(screen.queryAllByText(/LEVEL UP/i).length > 0).toBeTruthy(), { timeout: 3000 });
+    (window as any).cancelLevelUp();
+
+    // Unmount and mount a fresh App (simulating a soft reload)
+    unmount();
+    render(<LocalizationProvider><App /></LocalizationProvider>);
+
+    // Wait for app to initialize and the UI badge to render
+    await waitFor(() => expect(screen.queryByTitle('Level up available')).toBeTruthy(), { timeout: 4000 });
+    const availAfter = (window as any).availableLevelUps();
+    expect(availAfter['char1']).toBeDefined();
+  });
 });

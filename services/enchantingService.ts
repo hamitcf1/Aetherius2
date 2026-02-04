@@ -704,22 +704,38 @@ export function removeSoulGem(state: EnchantingState, gemId: string): Enchanting
 export function disenchantItem(
   state: EnchantingState,
   item: InventoryItem,
-  enchantmentId: string
+  enchantmentId?: string
 ): { state: EnchantingState; success: boolean; message: string; xpGained: number } {
-  const enchantment = ENCHANTMENTS[enchantmentId];
+  // If caller didn't provide an enchantment id, try to use the item's first enchantment (robust fallback)
+  const effectiveEnchantmentId = enchantmentId || (item.enchantments && item.enchantments.length ? item.enchantments[0].id : undefined);
+  if (!effectiveEnchantmentId) {
+    return { state, success: false, message: 'No enchantment specified for disenchanting.', xpGained: 0 };
+  }
+
+  const enchantment = ENCHANTMENTS[effectiveEnchantmentId];
   if (!enchantment) {
     return { state, success: false, message: 'Unknown enchantment.', xpGained: 0 };
   }
 
   // Check if already learned
-  const alreadyLearned = state.learnedEnchantments.find(e => e.enchantmentId === enchantmentId);
+  const alreadyLearned = state.learnedEnchantments.find(e => e.enchantmentId === effectiveEnchantmentId);
   if (alreadyLearned) {
-    return { state, success: false, message: `You already know ${enchantment.name}.`, xpGained: 0 };
+    // Allow disenchanting even if already known: destroy item, give reduced XP but do not re-learn
+    const xpGained = 10; // small consolation XP
+    return {
+      state: {
+        ...state,
+        totalItemsDisenchanted: state.totalItemsDisenchanted + 1,
+      },
+      success: true,
+      message: `You already know ${enchantment.name}. The ${item.name} was destroyed.`,
+      xpGained,
+    };
   }
 
   // Learn the enchantment
   const newLearned: LearnedEnchantment = {
-    enchantmentId,
+    enchantmentId: effectiveEnchantmentId!,
     learnedAt: Date.now(),
     timesUsed: 0,
     itemsDisenchanted: 1,
@@ -753,11 +769,11 @@ export function calculateEnchantmentMagnitude(
 
   const gemPower = SOUL_GEM_SIZES[soulGemSize].capacity;
   const soulPower = Math.min(soulLevel, gemPower);
-  
+
   // Base formula: baseMagnitude * (1 + skill/100) * (soulPower/5) * scalingFactor
   const skillMultiplier = 1 + (enchantingSkill / 100);
   const soulMultiplier = soulPower / 5;
-  
+
   return Math.floor(enchantment.baseMagnitude * skillMultiplier * soulMultiplier * enchantment.scalingFactor);
 }
 
@@ -770,10 +786,10 @@ export function enchantItem(
   enchantmentId: string,
   soulGemId: string,
   newItemName?: string
-): { 
-  state: EnchantingState; 
-  success: boolean; 
-  message: string; 
+): {
+  state: EnchantingState;
+  success: boolean;
+  message: string;
   enchantedItem?: InventoryItem;
   xpGained: number;
 } {
@@ -802,7 +818,7 @@ export function enchantItem(
   if (enchantment.type === 'weapon' && itemType !== 'weapon') {
     return { state, success: false, message: 'This enchantment can only be applied to weapons.', xpGained: 0 };
   }
-  if (enchantment.type === 'armor' && itemType !== 'armor' && itemType !== 'jewelry') {
+  if ((enchantment.type === 'armor' || enchantment.type === 'jewelry') && itemType !== 'apparel') {
     return { state, success: false, message: 'This enchantment can only be applied to armor or jewelry.', xpGained: 0 };
   }
 
@@ -923,12 +939,12 @@ export function findBestSoulGemForCreature(
   creatureType: string
 ): SoulGem | null {
   const soulLevel = CREATURE_SOUL_LEVELS[creatureType.toLowerCase()] || 1;
-  
+
   // Find smallest empty gem that can hold this soul
   const suitableGems = state.soulGems
     .filter(g => !g.filled && g.capacity >= soulLevel)
     .sort((a, b) => a.capacity - b.capacity);
-  
+
   return suitableGems[0] || null;
 }
 
@@ -948,5 +964,59 @@ export function soulGemToInventoryItem(gem: SoulGem): InventoryItem {
     weight: gem.size === 'azura_star' ? 0 : 0.5,
     effects: gem.filled ? [`Soul Level: ${gem.soulLevel}`] : [],
     quantity: 1,
+    characterId: '', // Placeholder, should be set by addItem
+    equipped: false,
+  };
+}
+
+/**
+ * Generate an enchanted loot entry for a base item (used by loot/shop special generation).
+ * Returns a partial loot entry with an `enchantment` field containing id/name/magnitude/effect.
+ */
+export function generateLootEnchantment(baseName: string, itemType: string, enemyLevel: number = 1): { enchantmentId: string; enchantmentName: string; magnitude: number; effect: string } | null {
+  // Only weapons, armor, and jewelry may be enchanted
+  if (!['weapon', 'armor', 'jewelry', 'apparel'].includes(itemType)) return null;
+
+  // Exclude non-combat or crafting-focused enchantments
+  const EXCLUDED = new Set(['soul_trap', 'waterbreathing', 'muffle', 'fortify_carry_weight']);
+
+  // Find applicable enchantments for this item type (combat-only)
+  const candidates = Object.values(ENCHANTMENTS).filter(e => {
+    if (EXCLUDED.has(e.id)) return false;
+    if (itemType === 'weapon') return e.type === 'weapon';
+    // Apparel/jewelry map to armor-type enchantments
+    return e.type === 'armor' || e.type === 'jewelry' || (e.type === 'armor' && itemType === 'apparel');
+  });
+
+  if (candidates.length === 0) return null;
+
+  // Choose a random enchantment weighted by rarity (rarer enchantments less likely)
+  const rarityWeight: Record<string, number> = {
+    common: 10,
+    uncommon: 6,
+    rare: 3,
+    epic: 1.5,
+    legendary: 0.8
+  };
+
+  // Weighted pick
+  const total = candidates.reduce((s, c) => s + (rarityWeight[c.rarity] || 1), 0);
+  let r = Math.random() * total;
+  let picked = candidates[0];
+  for (const c of candidates) {
+    r -= (rarityWeight[c.rarity] || 1);
+    if (r <= 0) { picked = c; break; }
+  }
+
+  // Magnitude scales with enemyLevel and a small random factor
+  const levelMultiplier = 1 + Math.min(5, Math.max(0, (enemyLevel - 1) / 10));
+  const randomFactor = 0.85 + Math.random() * 0.35; // 0.85 - 1.2
+  const magnitude = Math.max(1, Math.floor(picked.baseMagnitude * picked.scalingFactor * levelMultiplier * randomFactor));
+
+  return {
+    enchantmentId: picked.id,
+    enchantmentName: picked.name,
+    magnitude,
+    effect: picked.effect
   };
 }

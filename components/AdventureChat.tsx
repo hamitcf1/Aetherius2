@@ -745,7 +745,7 @@ Only include fields that changed. The narrative field is always required.`;
 // Builds the enhanced system prompt with simulation context and quest line
 const buildSimulationSystemPrompt = (simulationContext: string, character?: Character): string => {
   let prompt = SYSTEM_PROMPT;
-  
+
   // Add quest line prompt for the character's archetype
   if (character) {
     const questLinePrompt = generateQuestLinePrompt(character);
@@ -753,7 +753,7 @@ const buildSimulationSystemPrompt = (simulationContext: string, character?: Char
       prompt += '\n' + questLinePrompt;
     }
   }
-  
+
   if (simulationContext && simulationContext.trim() !== '') {
     prompt += `
 
@@ -769,7 +769,7 @@ IMPORTANT: The above simulation state shows:
 
 Maintain consistency with this state. Do not contradict it.`;
   }
-  
+
   return prompt;
 };
 
@@ -807,7 +807,7 @@ const VoiceStyleSelector: React.FC<{
         <span className="flex-1 text-left truncate">{current?.label || 'Default (Auto)'}</span>
         <ChevronDown size={12} className={`text-skyrim-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      
+
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-full bg-skyrim-paper border border-skyrim-border rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
           <button
@@ -862,25 +862,25 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [localFontSize, setLocalFontSize] = useState<ChatFontSize>(chatFontSize);
   const [localFontWeight, setLocalFontWeight] = useState<ChatFontWeight>(chatFontWeight);
   const [toastMessages, setToastMessages] = useState<{ id: string; message: string; type: string }[]>([]);
-    // Show toast notification for new quest
-    useEffect(() => {
-      if (!messages.length) return;
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg.role === 'gm' && lastMsg.updates?.newQuests?.length) {
-        lastMsg.updates.newQuests.forEach((q: any) => {
-          setToastMessages((prev) => [
-            ...prev,
-            { id: Math.random().toString(36).substring(2, 11), message: `New Quest Started: ${q.title}`, type: 'success' }
-          ]);
-        });
-      }
-    }, [messages]);
-    // Remove toast after 5s
-    useEffect(() => {
-      if (!toastMessages.length) return;
-      const timers = toastMessages.map(t => setTimeout(() => setToastMessages(msgs => msgs.filter(m => m.id !== t.id)), 5000));
-      return () => { timers.forEach(clearTimeout); };
-    }, [toastMessages]);
+  // Show toast notification for new quest
+  useEffect(() => {
+    if (!messages.length) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role === 'gm' && lastMsg.updates?.newQuests?.length) {
+      lastMsg.updates.newQuests.forEach((q: any) => {
+        setToastMessages((prev) => [
+          ...prev,
+          { id: Math.random().toString(36).substring(2, 11), message: `New Quest Started: ${q.title}`, type: 'success' }
+        ]);
+      });
+    }
+  }, [messages]);
+  // Remove toast after 5s
+  useEffect(() => {
+    if (!toastMessages.length) return;
+    const timers = toastMessages.map(t => setTimeout(() => setToastMessages(msgs => msgs.filter(m => m.id !== t.id)), 5000));
+    return () => { timers.forEach(clearTimeout); };
+  }, [toastMessages]);
 
   // Sync font settings from props
   useEffect(() => {
@@ -897,8 +897,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     }
   };
 
-    // ToastNotification import (assume already exists)
-    // import { ToastNotification } from './ToastNotification';
+  // ToastNotification import (assume already exists)
+  // import { ToastNotification } from './ToastNotification';
   const [autoApply, setAutoApply] = useState(true);
   const [showModelTip, setShowModelTip] = useState(true);
   const [showSimulationPanel, setShowSimulationPanel] = useState(false);
@@ -908,7 +908,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [localInventory, setLocalInventory] = useState<InventoryItem[]>(inventory || []);
   const [simulationWarnings, setSimulationWarnings] = useState<string[]>([]);
   const [rateLimitStats, setRateLimitStats] = useState(getRateLimitStats());
-  
+
   // TTS (Text-to-Speech) state - persisted
   const [ttsEnabled, setTtsEnabled] = useState(() => {
     const stored = localStorage.getItem('aetherius:ttsEnabled');
@@ -917,12 +917,12 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsSpeaking, setTtsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
-  
+
   // Persist TTS enabled state
   useEffect(() => {
     localStorage.setItem('aetherius:ttsEnabled', ttsEnabled ? 'true' : 'false');
   }, [ttsEnabled]);
-  
+
   // Subscribe to TTS state changes
   useEffect(() => {
     const unsubscribe = subscribeTTS((state) => {
@@ -934,12 +934,12 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       cleanupTTS();
     };
   }, []);
-  
+
   // Lockpicking state
   const [showLockpicking, setShowLockpicking] = useState(false);
   const [lockpickingDifficulty, setLockpickingDifficulty] = useState<LockDifficulty>('novice');
   const [lockpickingName, setLockpickingName] = useState('Lock');
-  
+
   // Map state
   const [showMap, setShowMap] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<string>('Riverwood');
@@ -964,13 +964,13 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
   const hasEstablishedState = Boolean(
     character &&
-      (
-        (story?.length || 0) > 0 ||
-        (journal?.length || 0) > 0 ||
-        (quests?.length || 0) > 0 ||
-        (inventory?.length || 0) > 0 ||
-        Boolean((character.identity || '').trim())
-      )
+    (
+      (story?.length || 0) > 0 ||
+      (journal?.length || 0) > 0 ||
+      (quests?.length || 0) > 0 ||
+      (inventory?.length || 0) > 0 ||
+      Boolean((character.identity || '').trim())
+    )
   );
 
   // Rate limit stats refresh
@@ -991,10 +991,10 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
     const manager = getSimulationManager(character.id, userId || null);
     simulationManagerRef.current = manager;
-    
+
     // Set character on transaction ledger
     getTransactionLedger().setCharacter(character.id);
-    
+
     // Load simulation state
     manager.load().catch(e => {
       console.warn('Failed to load simulation state:', e);
@@ -1089,7 +1089,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     return localInventory.filter(item => {
       if (item.equipped) return false;
       if (!slotConfig.allowedTypes.includes(item.type)) return false;
-      
+
       // Enforce explicit slot rules for hands/main/offhand
       if (slot === 'offhand') {
         return canEquipInOffhand(item);
@@ -1110,7 +1110,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   // ============================================================================
   // LOCKPICKING SYSTEM
   // ============================================================================
-  
+
   // Count lockpicks in inventory
   const lockpickCount = localInventory
     .filter(i => i.name.toLowerCase().includes('lockpick'))
@@ -1132,7 +1132,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       setMessages(prev => [...prev, noPicksMessage]);
       return;
     }
-    
+
     setLockpickingDifficulty(difficulty);
     setLockpickingName(lockName || `${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} Lock`);
     setShowLockpicking(true);
@@ -1151,7 +1151,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       }
     };
     setMessages(prev => [...prev, successMessage]);
-    
+
     // Apply XP if auto-apply is on
     if (autoApply && successMessage.updates) {
       onUpdateState(successMessage.updates);
@@ -1161,7 +1161,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   // Handle lockpicking failure
   const handleLockpickFailure = useCallback((lockpicksBroken: number) => {
     setShowLockpicking(false);
-    
+
     // Remove broken lockpicks from inventory
     if (lockpicksBroken > 0) {
       const lockpickItem = localInventory.find(i => i.name.toLowerCase().includes('lockpick'));
@@ -1171,11 +1171,11 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         });
       }
     }
-    
+
     const failMessage: ChatMessage = {
       id: Math.random().toString(36).substring(2, 11),
       role: 'gm',
-      content: lockpicksBroken > 0 
+      content: lockpicksBroken > 0
         ? `*Snap!* ${lockpicksBroken > 1 ? `${lockpicksBroken} lockpicks break` : 'Your lockpick breaks'} in the lock. The mechanism remains stubbornly closed.`
         : `You step back from the lock, unable to open it this time.`,
       timestamp: Date.now()
@@ -1206,7 +1206,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   // ============================================================================
   // MAP & LOCATION TRACKING
   // ============================================================================
-  
+
   // Extract current location from recent story/messages
   useEffect(() => {
     // Try to find location from recent messages or story chapters
@@ -1214,13 +1214,13 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       ...messages.slice(-5).map(m => m.content),
       ...story.slice(-3).map(s => s.content)
     ].join(' ');
-    
+
     // Look for location patterns
     const locationPatterns = [
       /(?:arrive[ds]? (?:at|in)|enter[s]?|reach[es]?|approach[es]?|(?:you are|you're) (?:in|at)|inside|within)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
       /(?:in|at|near|outside|inside)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:tavern|inn|city|town|village|hold|keep|temple|barrow|cave|mine|camp)/gi,
     ];
-    
+
     for (const pattern of locationPatterns) {
       const matches = [...recentContent.matchAll(pattern)];
       for (const match of matches.reverse()) {
@@ -1231,7 +1231,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         }
       }
     }
-    
+
     // Check for direct city/town mentions
     const knownLocations = ['Whiterun', 'Solitude', 'Windhelm', 'Riften', 'Markarth', 'Falkreath', 'Morthal', 'Dawnstar', 'Winterhold', 'Riverwood', 'Rorikstead', 'Ivarstead', 'Helgen', 'Dragon Bridge'];
     for (const loc of knownLocations) {
@@ -1246,14 +1246,14 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   const visitedLocations = React.useMemo(() => {
     const visited = new Set<string>();
     const allContent = [...story.map(s => s.content), ...journal.map(j => j.content)].join(' ');
-    
+
     const knownLocations = ['Whiterun', 'Solitude', 'Windhelm', 'Riften', 'Markarth', 'Falkreath', 'Morthal', 'Dawnstar', 'Winterhold', 'Riverwood', 'Rorikstead', 'Ivarstead', 'Helgen', 'Dragon Bridge', 'High Hrothgar', 'Bleak Falls Barrow'];
     for (const loc of knownLocations) {
       if (allContent.toLowerCase().includes(loc.toLowerCase())) {
         visited.add(loc);
       }
     }
-    
+
     return Array.from(visited);
   }, [story, journal]);
 
@@ -1350,25 +1350,25 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
   // Use escalating XP requirements from leveling system
   const buildContext = () => {
     if (!character) return '';
-    
+
     // Get simulation context if available
     const simulationContext = simulationManagerRef.current?.buildContext() || '';
-    
+
     // Calculate XP progress toward next level using new leveling system
     const currentXP = character.experience || 0;
     const xpProgressData = getXPProgress(currentXP, character.level || 1);
     const xpForNextLevel = getXPForNextLevel(character.level || 1);
-    
+
     // Categorize food and drink items in inventory
     const foodItems = inventory.filter(i => i.type === 'food' && (i.quantity || 0) > 0);
     const drinkItems = inventory.filter(i => (i.type === 'drink' || i.type === 'potion') && (i.quantity || 0) > 0);
-    const restItems = inventory.filter(i => 
-      i.name.toLowerCase().includes('bedroll') || 
-      i.name.toLowerCase().includes('tent') || 
+    const restItems = inventory.filter(i =>
+      i.name.toLowerCase().includes('bedroll') ||
+      i.name.toLowerCase().includes('tent') ||
       i.name.toLowerCase().includes('camping') ||
       i.name.toLowerCase().includes('sleeping bag')
     );
-    
+
     return JSON.stringify({
       character: {
         name: character.name,
@@ -1435,8 +1435,8 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     // Check if this is a rest action by looking at content and updates
     const contentLower = content.toLowerCase();
     const isRestAction = (
-      contentLower.includes('rest') || 
-      contentLower.includes('sleep') || 
+      contentLower.includes('rest') ||
+      contentLower.includes('sleep') ||
       contentLower.includes('camp') ||
       contentLower.includes('bed down') ||
       contentLower.includes('lie down') ||
@@ -1456,13 +1456,13 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     }
 
     // Check for camping gear
-    const hasCampingGear = inventory.some(i => 
+    const hasCampingGear = inventory.some(i =>
       (i.quantity || 0) > 0 &&
-      ((i.name || '').toLowerCase().includes('camping kit') || 
-       (i.name || '').toLowerCase().includes('tent'))
+      ((i.name || '').toLowerCase().includes('camping kit') ||
+        (i.name || '').toLowerCase().includes('tent'))
     );
-    
-    const hasBedroll = inventory.some(i => 
+
+    const hasBedroll = inventory.some(i =>
       (i.quantity || 0) > 0 &&
       (i.name || '').toLowerCase().includes('bedroll')
     );
@@ -1470,7 +1470,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     // Calculate proper fatigue reduction based on rest type and equipment
     const hours = Math.max(1, Math.round(result.timeAdvanceMinutes / 60));
     let fatigueReduction = 15; // outside (poor rest)
-    
+
     if (restType === 'camp') {
       if (hasCampingGear) fatigueReduction = 40;
       else if (hasBedroll) fatigueReduction = 30;
@@ -1478,19 +1478,19 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     } else if (restType === 'inn') {
       fatigueReduction = 50;
     }
-    
+
     // Scale by hours (base is 8 hours)
     const scaledReduction = Math.round(fatigueReduction * (hours / 8));
-    
+
     // Apply proper fatigue reduction
     const processedResult = { ...result };
     if (!processedResult.needsChange) {
       processedResult.needsChange = {};
     }
     processedResult.needsChange.fatigue = -Math.abs(scaledReduction); // Ensure negative for reduction
-    
+
     console.log(`[Adventure Rest] Applied ${restType} rest logic: ${scaledReduction} fatigue reduction over ${hours} hours`);
-    
+
     return processedResult;
   };
 
@@ -1507,12 +1507,12 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
 
     const itemsLine = inventory.length
       ? `Notable gear: ${formatList(
-          inventory
-            .filter(i => (i.quantity || 0) > 0)
-            .slice(0, 8)
-            .map(i => `${i.name}${i.quantity > 1 ? ` x${i.quantity}` : ''}`),
-          6
-        )}.`
+        inventory
+          .filter(i => (i.quantity || 0) > 0)
+          .slice(0, 8)
+          .map(i => `${i.name}${i.quantity > 1 ? ` x${i.quantity}` : ''}`),
+        6
+      )}.`
       : '';
 
     const identityLine = character.identity ? snippet(character.identity, 180) : '';
@@ -1550,7 +1550,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         setInput('');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Check rate limiting
     if (isRateLimited()) {
@@ -1619,24 +1619,24 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
       const context = `${simulationContext}\n\nADVENTURE_CONTEXT_JSON:\n${JSON.stringify(adventureContext, null, 2)}`;
       const systemPrompt = getSystemPrompt(); // Use dynamic system prompt with simulation context
       const result = await generateAdventureResponse(trimmed, context, systemPrompt, { model, language });
-      
+
       // Process simulation state updates if present
       if (result.simulationUpdate && simulationManagerRef.current) {
         const { warnings, appliedChanges } = processAISimulationUpdate(
           simulationManagerRef.current,
           result.simulationUpdate
         );
-        
+
         if (warnings.length > 0) {
           setSimulationWarnings(warnings);
           console.warn('Simulation warnings:', warnings);
         }
-        
+
         if (appliedChanges.length > 0) {
           console.log('Simulation changes applied:', appliedChanges);
         }
       }
-      
+
       // Sanitize narrative text to remove any explicit mechanical deltas (defense-in-depth)
       const sanitizeMechanicalNarrative = (text: string) => {
         if (!text || typeof text !== 'string') return text;
@@ -1834,26 +1834,26 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         // 1. Explicitly marked as preview by AI, OR
         // 2. Has choices AND has previewCost in choices (showing options, not executing)
         // If player just executed a choice (has goldChange but choices are for NEXT action), apply it
-        const hasPreviewCosts = Array.isArray(processedResult.choices) && 
+        const hasPreviewCosts = Array.isArray(processedResult.choices) &&
           processedResult.choices.some((c: any) => c?.previewCost?.gold);
         const isPreviewResponse = processedResult.isPreview || hasPreviewCosts;
-        
+
         const { filteredUpdate, wasFiltered, reason } = filterDuplicateTransactions({
           ...processedResult,
           isPreview: isPreviewResponse
         });
-        
+
         if (wasFiltered) {
           console.log(`[Transaction] Gold change filtered: ${reason} (would have been ${processedResult.goldChange})`);
         }
-        
+
         // If transaction was applied, record it
         if (!wasFiltered && processedResult.goldChange && processedResult.transactionId) {
           getTransactionLedger().recordTransaction(processedResult.transactionId, {
             goldAmount: processedResult.goldChange
           });
         }
-        
+
         onUpdateState(filteredUpdate as GameStateUpdate);
       }
     } catch (error) {
@@ -1947,12 +1947,12 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
     if (updates.statUpdates && Object.keys(updates.statUpdates).length) toApply.statUpdates = updates.statUpdates;
     if (typeof updates.timeAdvanceMinutes === 'number' && updates.timeAdvanceMinutes !== 0) toApply.timeAdvanceMinutes = updates.timeAdvanceMinutes;
     if (updates.needsChange && Object.keys(updates.needsChange).length) toApply.needsChange = updates.needsChange;
-    
+
     // Handle current location update
     if (updates.currentLocation) {
       setCurrentLocation(updates.currentLocation);
     }
-    
+
     // Handle discovered locations - add to map
     if (updates.discoveredLocations?.length) {
       setDiscoveredLocations(prev => {
@@ -1963,7 +1963,7 @@ export const AdventureChat: React.FC<AdventureChatProps> = ({
         return [...prev, ...newLocations];
       });
     }
-    
+
     if (Object.keys(toApply).length > 0) {
       onUpdateState(toApply);
     }
@@ -2019,8 +2019,8 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
           if (userId && character) {
             void import('../services/firestore')
-            .then(m => m.saveAdventureMessage(userId, character.id, gmMessage))
-            .catch(e => console.warn('Failed to save combat GM message to Firestore', e));
+              .then(m => m.saveAdventureMessage(userId, character.id, gmMessage))
+              .catch(e => console.warn('Failed to save combat GM message to Firestore', e));
           }
         } catch (e) {
           // Fallback to the terse message if AI fails
@@ -2050,7 +2050,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
     const presentNPCs = (Object.values(state.npcs) as NPC[]).filter(npc => npc.isPresent);
     const allFacts = simulationManagerRef.current.getAllFacts();
     const scene = state.currentScene;
-    
+
     return {
       npcCount: presentNPCs.length,
       npcs: presentNPCs.map(npc => ({
@@ -2113,24 +2113,24 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
     const baseYear = 201;
     const startMonth = 7; // Last Seed (August, 0-indexed)
     const startDay = 17;
-    
+
     // Calculate starting point in days from year start
     let daysFromYearStart = startDay - 1;
     for (let i = 0; i < startMonth; i++) {
       daysFromYearStart += TAMRIEL_MONTHS[i].days;
     }
-    
+
     // Add player's elapsed days
     let currentDays = daysFromYearStart + (totalDays - 1);
     let year = baseYear;
-    
+
     // Handle year overflow
     const daysInYear = TAMRIEL_MONTHS.reduce((sum, m) => sum + m.days, 0);
     while (currentDays >= daysInYear) {
       currentDays -= daysInYear;
       year++;
     }
-    
+
     // Find month and day
     let monthIndex = 0;
     while (currentDays >= TAMRIEL_MONTHS[monthIndex].days) {
@@ -2138,10 +2138,10 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
       monthIndex++;
       if (monthIndex >= 12) monthIndex = 0;
     }
-    
+
     const dayOfMonth = currentDays + 1;
     const dayName = TAMRIEL_DAYS[(totalDays - 1) % 7];
-    
+
     return {
       dayName,
       dayOfMonth,
@@ -2168,7 +2168,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
     const time = character?.time || { day: 1, hour: 8, minute: 0 };
     const { period, icon, bgClass } = getTimeOfDay(time.hour);
     const tamrielDate = getTamrielDate(time.day);
-    
+
     return (
       <div className={`flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-2 rounded-lg border border-skyrim-border ${bgClass}`}>
         {/* Time of day */}
@@ -2176,17 +2176,17 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           {icon}
           <span className="text-sm font-medium text-gray-200">{period}</span>
         </div>
-        
+
         <div className="hidden sm:block h-4 w-px bg-skyrim-gold/30" />
-        
+
         {/* Clock */}
         <div className="flex items-center gap-2 text-sm">
           <Clock size={14} className="text-skyrim-text" />
           <span className="text-skyrim-text font-mono">{formatTime(time.hour, time.minute)}</span>
         </div>
-        
+
         <div className="hidden sm:block h-4 w-px bg-skyrim-gold/30" />
-        
+
         {/* Tamrielic Date */}
         <div className="text-xs sm:text-sm text-center sm:text-left">
           <span className="text-skyrim-gold">{tamrielDate.dayName}</span>
@@ -2199,12 +2199,14 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
     );
   };
 
+  const { t } = useLocalization();
+
   if (!character) {
     return (
       <div className="h-full flex items-center justify-center px-2 sm:px-4">
         <div className="text-center py-20 text-gray-500">
           <Swords size={48} className="mx-auto mb-4 opacity-50" />
-          <p>Select a character to begin your adventure.</p>
+          <p>{t('adventure.welcome')}</p>
         </div>
       </div>
     );
@@ -2225,7 +2227,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
       <div className="flex-shrink-0 py-3 sm:py-4 bg-skyrim-paper border-y-4 border-skyrim-border text-center">
         <h1 className="text-2xl sm:text-3xl font-serif text-skyrim-gold mb-1 flex items-center justify-center gap-2">
           <Swords size={24} />
-          Adventure
+          {t('adventure.title')}
         </h1>
         {/* Time Display */}
         <TimeDisplay />
@@ -2252,7 +2254,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             <span className="text-blue-400 text-lg">💡</span>
             <div className="flex-1">
               <p className="text-blue-200 text-xs">
-                <strong>Tip:</strong> For the best adventure experience, use <strong>Gemma 2 27B</strong>. Change it in the Actions menu.
+                {t('adventure.modelTip')}
               </p>
             </div>
           </div>
@@ -2265,36 +2267,36 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           <button
             onClick={() => setShowQuestModal(v => !v)}
             className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
-            title="Show Quests"
+            title={t('adventure.quests')}
           >
-            <Flag size={12} /> Quests
+            <Flag size={12} /> {t('adventure.quests')}
           </button>
-                {/* Minimal Quest Modal */}
-                <MinimalQuestModal quests={quests} open={showQuestModal} onClose={() => setShowQuestModal(false)} />
+          {/* Minimal Quest Modal */}
+          <MinimalQuestModal quests={quests} open={showQuestModal} onClose={() => setShowQuestModal(false)} />
 
-                {/* Toast Notification for new quest */}
-                {toastMessages.length > 0 && (
-                  <div style={{ position: 'fixed', bottom: 32, right: 32, zIndex: 9999 }}>
-                    {/* Use your ToastNotification component here if available */}
-                    {toastMessages.map(t => (
-                      <div key={t.id} style={{ background: '#2ecc40', color: '#fff', borderRadius: 8, padding: '12px 20px', marginBottom: 8, minWidth: 240, maxWidth: 400, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontWeight: 500, fontSize: 16, opacity: 0.95 }}>
-                        {t.message}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          {/* Toast Notification for new quest */}
+          {toastMessages.length > 0 && (
+            <div style={{ position: 'fixed', bottom: 32, right: 32, zIndex: 9999 }}>
+              {/* Use your ToastNotification component here if available */}
+              {toastMessages.map(t => (
+                <div key={t.id} style={{ background: '#2ecc40', color: '#fff', borderRadius: 8, padding: '12px 20px', marginBottom: 8, minWidth: 240, maxWidth: 400, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', fontWeight: 500, fontSize: 16, opacity: 0.95 }}>
+                  {t.message}
+                </div>
+              ))}
+            </div>
+          )}
           <button
             onClick={startNewAdventure}
             className="px-2 py-1.5 bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/50 rounded hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors flex items-center gap-1.5 text-xs"
           >
-            <RefreshCw size={12} /> New
+            <RefreshCw size={12} /> {t('adventure.new')}
           </button>
           <button
             onClick={clearChat}
             disabled={messages.length === 0}
             className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-red-400 hover:border-red-400 transition-colors flex items-center gap-1.5 text-xs disabled:opacity-50"
           >
-            <Trash2 size={12} /> Clear
+            <Trash2 size={12} /> {t('adventure.clear')}
           </button>
         </div>
         <div className="flex gap-1.5">
@@ -2302,14 +2304,14 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             onClick={() => setShowSimulationPanel(!showSimulationPanel)}
             className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
           >
-            <Users size={12} /> State {showSimulationPanel ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            <Users size={12} /> {t('adventure.state')} {showSimulationPanel ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
           </button>
           <button
             onClick={() => setShowEquipment(true)}
             className="px-2 py-1.5 text-skyrim-text border border-skyrim-border rounded hover:text-skyrim-gold hover:border-skyrim-gold transition-colors flex items-center gap-1.5 text-xs"
-            title="Open Equipment"
+            title={t('adventure.equipment.title')}
           >
-            <User size={12} /> Equip
+            <User size={12} /> {t('adventure.equip')}
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -2326,7 +2328,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
           <div className="flex items-start gap-2">
             <AlertTriangle size={14} className="text-yellow-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-yellow-200 text-xs font-semibold mb-1">Warnings:</p>
+              <p className="text-yellow-200 text-xs font-semibold mb-1">{t('adventure.warnings')}</p>
               <ul className="text-yellow-200/80 text-xs space-y-0.5">
                 {simulationWarnings.map((warning, idx) => (
                   <li key={idx}>• {warning}</li>
@@ -2347,36 +2349,36 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
       {showSimulationPanel && (
         <div className="mb-4 p-4 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
           <h3 className="text-skyrim-gold font-semibold mb-3 flex items-center gap-2">
-            <Users size={16} /> Simulation State
+            <Users size={16} /> {t('adventure.simulation.title')}
           </h3>
           {(() => {
             const summary = getSimulationSummary();
-            if (!summary) return <p className="text-gray-500 text-sm">No simulation data available.</p>;
-            
+            if (!summary) return <p className="text-gray-500 text-sm">{t('adventure.simulation.noData')}</p>;
+
             return (
               <div className="space-y-3 text-sm">
                 {/* Current Scene */}
                 {summary.scene && (
                   <div className="bg-skyrim-paper/30 p-2 rounded">
-                    <p className="text-skyrim-text text-xs uppercase mb-1">Current Scene</p>
+                    <p className="text-skyrim-text text-xs uppercase mb-1">{t('adventure.simulation.currentScene')}</p>
                     <p className="text-skyrim-text">
                       <span className="text-skyrim-gold">{summary.scene.type}</span> at {summary.scene.location}
                     </p>
                     <p className="text-skyrim-text text-xs">
-                      Phase: {summary.scene.phase} | Attempts: {summary.scene.attempts}
+                      {t('adventure.simulation.phase')}: {summary.scene.phase} | {t('adventure.simulation.attempts')}: {summary.scene.attempts}
                     </p>
                     {summary.scene.resolvedTopics.length > 0 && (
                       <p className="text-green-400/80 text-xs mt-1">
-                        ✓ Resolved: {summary.scene.resolvedTopics.join(', ')}
+                        ✓ {t('adventure.simulation.resolved')}: {summary.scene.resolvedTopics.join(', ')}
                       </p>
                     )}
                   </div>
                 )}
-                
+
                 {/* Present NPCs */}
                 {summary.npcs.length > 0 && (
                   <div className="bg-skyrim-paper/30 p-2 rounded">
-                    <p className="text-skyrim-text text-xs uppercase mb-1">Present NPCs ({summary.npcCount})</p>
+                    <p className="text-skyrim-text text-xs uppercase mb-1">{t('adventure.simulation.presentNPCs')} ({summary.npcCount})</p>
                     <div className="space-y-1">
                       {summary.npcs.map((npc, idx) => (
                         <div key={idx} className="flex justify-between items-center">
@@ -2384,13 +2386,12 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                             <span className="text-skyrim-gold">{npc.name}</span>
                             <span className="text-gray-500 text-xs ml-1">({npc.role})</span>
                           </span>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            npc.disposition === 'hostile' ? 'bg-red-900/50 text-red-400' :
+                          <span className={`text-xs px-2 py-0.5 rounded ${npc.disposition === 'hostile' ? 'bg-red-900/50 text-red-400' :
                             npc.disposition === 'wary' ? 'bg-yellow-900/50 text-yellow-400' :
-                            npc.disposition === 'friendly' ? 'bg-green-900/50 text-green-400' :
-                            npc.disposition === 'allied' ? 'bg-blue-900/50 text-blue-400' :
-                            'bg-skyrim-dark/50 text-skyrim-text'
-                          }`}>
+                              npc.disposition === 'friendly' ? 'bg-green-900/50 text-green-400' :
+                                npc.disposition === 'allied' ? 'bg-blue-900/50 text-blue-400' :
+                                  'bg-skyrim-dark/50 text-skyrim-text'
+                            }`}>
                             {npc.disposition} ({npc.tension}%)
                           </span>
                         </div>
@@ -2398,17 +2399,17 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                     </div>
                   </div>
                 )}
-                
+
                 {/* Established Facts */}
                 {summary.factCount > 0 && (
                   <div className="bg-skyrim-paper/30 p-2 rounded">
-                    <p className="text-skyrim-text text-xs uppercase mb-1">Established Facts ({summary.factCount})</p>
+                    <p className="text-skyrim-text text-xs uppercase mb-1">{t('adventure.simulation.establishedFacts')} ({summary.factCount})</p>
                     <div className="space-y-1">
                       {Object.entries(summary.facts).slice(0, 5).map(([key, fact]) => (
                         <p key={key} className="text-xs text-skyrim-text">
                           <span className="text-skyrim-gold">{key}:</span> {fact.value}
                           {fact.disclosedTo.length > 0 && (
-                            <span className="text-gray-500 ml-1">(known by {fact.disclosedTo.length})</span>
+                            <span className="text-gray-500 ml-1">({t('adventure.simulation.knownBy')} {fact.disclosedTo.length})</span>
                           )}
                         </p>
                       ))}
@@ -2418,19 +2419,19 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                     </div>
                   </div>
                 )}
-                
+
                 {/* Pending Consequences */}
                 {summary.pendingConsequences > 0 && (
                   <div className="bg-red-900/20 border border-red-900/30 p-2 rounded">
                     <p className="text-red-400 text-xs">
-                      ⚠ {summary.pendingConsequences} pending consequence(s)
+                      ⚠ {summary.pendingConsequences} {t('adventure.simulation.pending')}
                     </p>
                   </div>
                 )}
-                
+
                 {/* Empty state */}
                 {summary.npcs.length === 0 && summary.factCount === 0 && !summary.scene && (
-                  <p className="text-gray-500 text-sm">No active simulation state. Start an adventure to begin tracking.</p>
+                  <p className="text-gray-500 text-sm">{t('adventure.simulation.noActive')}</p>
                 )}
               </div>
             );
@@ -2443,9 +2444,9 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <div className="fixed inset-0 bg-skyrim-dark/60 backdrop-lite flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg shadow-cheap p-6 w-full max-w-4xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-serif text-skyrim-gold">Equipment</h3>
+              <h3 className="text-xl font-serif text-skyrim-gold">{t('adventure.equipment.title')}</h3>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowEquipment(false)} className="px-3 py-1 bg-gray-600 text-white rounded">Close</button>
+                <button onClick={() => setShowEquipment(false)} className="px-3 py-1 bg-gray-600 text-white rounded">{t('adventure.equipment.close')}</button>
               </div>
             </div>
 
@@ -2460,7 +2461,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
               <div className="space-y-3">
                 <div className="bg-skyrim-paper/30 p-3 rounded border border-skyrim-border">
-                  <p className="text-skyrim-text text-sm mb-2">Inventory</p>
+                  <p className="text-skyrim-text text-sm mb-2">{t('adventure.equipment.inventory')}</p>
                   <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-2">
                     {localInventory.map(item => (
                       <div key={item.id} className="flex items-center justify-between p-2 bg-skyrim-paper/40 rounded border border-skyrim-border">
@@ -2475,11 +2476,11 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                         </div>
                         <div className="flex items-center gap-2">
                           {item.equipped ? (
-                            <button onClick={() => unequipItem(item)} className="px-3 py-1 bg-red-700/60 text-white rounded text-xs">Unequip</button>
+                            <button onClick={() => unequipItem(item)} className="px-3 py-1 bg-red-700/60 text-white rounded text-xs">{t('adventure.equipment.unequip')}</button>
                           ) : (
                             <>
-                              <button onClick={() => equipItem(item)} className="px-3 py-1 bg-green-700/60 text-white rounded text-xs">Equip</button>
-                              <button onClick={() => { const slot = getDefaultSlotForItem(item); if (slot) { setSelectedSlot(slot); setEquipModalOpen(true); } }} className="px-2 py-1 bg-gray-700 text-white rounded text-xs">Slot…</button>
+                              <button onClick={() => equipItem(item)} className="px-3 py-1 bg-green-700/60 text-white rounded text-xs">{t('adventure.equipment.equip')}</button>
+                              <button onClick={() => { const slot = getDefaultSlotForItem(item); if (slot) { setSelectedSlot(slot); setEquipModalOpen(true); } }} className="px-2 py-1 bg-gray-700 text-white rounded text-xs">{t('adventure.equipment.slot')}</button>
                             </>
                           )}
                         </div>
@@ -2494,7 +2495,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
             {equipModalOpen && selectedSlot && (
               <div className="fixed inset-0 bg-skyrim-dark/50 backdrop-blur-sm flex items-center justify-center z-60 p-4">
                 <div className="bg-skyrim-paper border-2 border-skyrim-gold rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
-                  <h4 className="text-lg font-serif text-skyrim-gold mb-3">Select item for {selectedSlot}</h4>
+                  <h4 className="text-lg font-serif text-skyrim-gold mb-3">{t('adventure.equipment.selectFor')} {selectedSlot}</h4>
                   {getEquippableItemsForSlot(selectedSlot).length > 0 ? (
                     <div className="space-y-2">
                       {getEquippableItemsForSlot(selectedSlot).map(it => (
@@ -2513,11 +2514,11 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500 italic text-center py-4">No suitable items for this slot</p>
+                    <p className="text-gray-500 italic text-center py-4">{t('adventure.equipment.noItems')}</p>
                   )}
 
                   <div className="mt-4">
-                    <button onClick={() => { setEquipModalOpen(false); setSelectedSlot(null); }} className="w-full py-2 bg-gray-600 text-white rounded">Cancel</button>
+                    <button onClick={() => { setEquipModalOpen(false); setSelectedSlot(null); }} className="w-full py-2 bg-gray-600 text-white rounded">{t('adventure.equipment.cancel')}</button>
                   </div>
                 </div>
               </div>
@@ -2531,9 +2532,9 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
         <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
           <div className="flex items-center gap-2 mb-3">
             <Settings size={14} className="text-skyrim-gold" />
-            <span className="text-xs text-skyrim-gold font-semibold uppercase">Chat Settings</span>
+            <span className="text-xs text-skyrim-gold font-semibold uppercase">{t('adventure.settings.title')}</span>
           </div>
-          
+
           {/* Auto-apply toggle */}
           <label className="flex items-center gap-2 cursor-pointer mb-3 pb-3 border-b border-skyrim-border/50">
             <input
@@ -2542,9 +2543,9 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               onChange={() => setAutoApply(!autoApply)}
               className="accent-skyrim-gold w-4 h-4"
             />
-            <span className="text-xs text-skyrim-text">Auto-apply game changes (items, quests, gold)</span>
+            <span className="text-xs text-skyrim-text">{t('adventure.settings.autoApply')}</span>
           </label>
-          
+
           {/* Rate Limit Bar toggle */}
           <label className="flex items-center gap-2 cursor-pointer mb-3 pb-3 border-b border-skyrim-border/50">
             <input
@@ -2553,30 +2554,28 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               onChange={() => setShowRateLimit(!showRateLimit)}
               className="accent-skyrim-gold w-4 h-4"
             />
-            <span className="text-xs text-skyrim-text">Show rate limit bar</span>
+            <span className="text-xs text-skyrim-text">{t('adventure.settings.showRateLimit')}</span>
           </label>
-          
+
           {/* Text & Voice Settings Row */}
           <div className="flex flex-wrap gap-2 mb-3">
             <button
               onClick={() => setShowTextSettings(!showTextSettings)}
-              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
-                showTextSettings 
-                  ? 'bg-skyrim-gold text-skyrim-dark' 
-                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-              }`}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${showTextSettings
+                ? 'bg-skyrim-gold text-skyrim-dark'
+                : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                }`}
             >
-              <Type size={14} /> Text Settings
+              <Type size={14} /> {t('adventure.settings.textSettings')}
             </button>
             <button
               onClick={() => setShowVoiceSettings(!showVoiceSettings)}
-              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
-                showVoiceSettings 
-                  ? 'bg-skyrim-gold text-skyrim-dark' 
-                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-              }`}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${showVoiceSettings
+                ? 'bg-skyrim-gold text-skyrim-dark'
+                : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                }`}
             >
-              <Volume2 size={14} /> Voice Settings
+              <Volume2 size={14} /> {t('adventure.settings.voiceSettings')}
             </button>
             <button
               onClick={() => {
@@ -2586,17 +2585,16 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                   setSpeakingMessageId(null);
                 }
               }}
-              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${
-                ttsEnabled 
-                  ? 'bg-green-700 text-white' 
-                  : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-              }`}
+              className={`flex-1 min-w-[100px] px-3 py-2 rounded text-xs font-medium transition-colors flex items-center justify-center gap-2 ${ttsEnabled
+                ? 'bg-green-700 text-white'
+                : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                }`}
             >
               {ttsEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-              {ttsEnabled ? 'Voice On' : 'Voice Off'}
+              {ttsEnabled ? t('adventure.settings.voiceOn') : t('adventure.settings.voiceOff')}
             </button>
           </div>
-          
+
           {/* Reset All Settings Button */}
           <div className="mt-3 pt-3 border-t border-skyrim-border/50">
             <button
@@ -2612,7 +2610,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }}
               className="w-full px-3 py-2 rounded text-xs font-medium bg-red-900/40 text-red-200 border border-red-800 hover:bg-red-900/60 transition-colors flex items-center justify-center gap-2"
             >
-              <RefreshCw size={14} /> Reset All Settings to Defaults
+              <RefreshCw size={14} /> {t('adventure.settings.resetAll')}
             </button>
           </div>
         </div>
@@ -2620,7 +2618,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
       {/* Voice Settings Panel */}
       {showVoiceSettings && (
-        <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
+        <div className="flex-shrink-0 mb-2 p-3 glass-panel border-zinc-700/50 rounded animate-in fade-in">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Volume2 size={14} className="text-skyrim-gold" />
@@ -2633,13 +2631,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }}
               className="text-[10px] px-2 py-1 rounded bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold"
             >
-              Reset to Default
+              {t('adventure.settings.reset')}
             </button>
           </div>
-          
+
           {/* Gender Selection */}
           <div className="mb-3">
-            <label className="text-xs text-skyrim-text block mb-1.5">Voice Gender</label>
+            <label className="text-xs text-skyrim-text block mb-1.5">{t('adventure.settings.voiceGender')}</label>
             <div className="flex gap-1.5">
               {(['male', 'female'] as const).map(gender => (
                 <button
@@ -2649,22 +2647,21 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                     setVoiceSettings(newSettings);
                     saveVoiceSettings(newSettings);
                   }}
-                  className={`flex-1 px-3 py-1.5 rounded text-xs transition-colors ${
-                    voiceSettings.gender === gender
-                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-                  }`}
+                  className={`flex-1 px-3 py-1.5 rounded text-xs transition-colors ${voiceSettings.gender === gender
+                    ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                    : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                    }`}
                 >
                   {gender.charAt(0).toUpperCase() + gender.slice(1)}
                 </button>
               ))}
             </div>
           </div>
-          
+
           {/* Voice Selection */}
           {voiceSettings.gender && (
             <div className="mb-3">
-              <label className="text-xs text-skyrim-text block mb-1.5">Voice Style</label>
+              <label className="text-xs text-skyrim-text block mb-1.5">{t('adventure.settings.voiceStyle')}</label>
               <VoiceStyleSelector
                 gender={voiceSettings.gender}
                 currentVoice={voiceSettings.voiceName || ''}
@@ -2677,11 +2674,11 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               />
             </div>
           )}
-          
+
           {/* Pitch Slider */}
           <div className="mb-3">
             <label className="text-xs text-skyrim-text block mb-1.5">
-              Pitch: {voiceSettings.pitch ?? 0} semitones
+              {t('adventure.settings.pitch')}: {voiceSettings.pitch ?? 0} semitones
             </label>
             <input
               type="range"
@@ -2698,15 +2695,15 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               className="w-full accent-skyrim-gold"
             />
             <div className="flex justify-between text-[10px] text-skyrim-text/60">
-              <span>Lower</span>
-              <span>Higher</span>
+              <span>{t('adventure.settings.lower')}</span>
+              <span>{t('adventure.settings.higher')}</span>
             </div>
           </div>
-          
+
           {/* Speaking Rate Slider */}
           <div className="mb-3">
             <label className="text-xs text-skyrim-text block mb-1.5">
-              Speed: {((voiceSettings.speakingRate ?? 1.0) * 100).toFixed(0)}%
+              {t('adventure.settings.speed')}: {((voiceSettings.speakingRate ?? 1.0) * 100).toFixed(0)}%
             </label>
             <input
               type="range"
@@ -2723,13 +2720,13 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               className="w-full accent-skyrim-gold"
             />
             <div className="flex justify-between text-[10px] text-skyrim-text/60">
-              <span>Slower</span>
-              <span>Faster</span>
+              <span>{t('adventure.settings.slower')}</span>
+              <span>{t('adventure.settings.faster')}</span>
             </div>
           </div>
-          
+
           <p className="text-[10px] text-skyrim-text/60 mt-2">
-            Note: Voice changes take effect on the next message. Custom voices count against your daily quota.
+            {t('adventure.settings.voiceNote')}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -2747,7 +2744,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }}
               className="px-3 py-2 bg-skyrim-gold text-skyrim-dark rounded font-bold text-sm hover:bg-skyrim-goldHover transition-colors"
             >
-              Test Voice
+              {t('adventure.settings.testVoice')}
             </button>
             <button
               onClick={async () => {
@@ -2763,7 +2760,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
               }}
               className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
             >
-              Test NPC
+              {t('adventure.settings.testNPC')}
             </button>
             {/* Sample playback (cached) */}
             <div className="flex items-center gap-2">
@@ -2788,7 +2785,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 }}
                 className="px-3 py-2 bg-skyrim-paper/60 text-skyrim-text rounded font-medium text-sm border border-skyrim-border hover:border-skyrim-gold transition-colors"
               >
-                Play Sample
+                {t('adventure.settings.playSample')}
               </button>
             </div>
           </div>
@@ -2797,12 +2794,12 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
 
       {/* Text Settings Panel */}
       {showTextSettings && (
-        <div className="flex-shrink-0 mb-2 p-3 bg-skyrim-paper/40 border border-skyrim-border rounded animate-in fade-in">
+        <div className="flex-shrink-0 mb-2 p-3 glass-panel border-zinc-700/50 rounded animate-in fade-in">
           <div className="flex items-center gap-2 mb-3">
             <Type size={14} className="text-skyrim-gold" />
-            <span className="text-xs text-skyrim-gold font-semibold uppercase">Text Settings</span>
+            <span className="text-xs text-skyrim-gold font-semibold uppercase">{t('adventure.settings.textSettings')}</span>
           </div>
-          
+
           {/* Font Size */}
           <div className="mb-3">
             <label className="text-xs text-skyrim-text block mb-1.5">Font Size</label>
@@ -2811,18 +2808,17 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 <button
                   key={size}
                   onClick={() => updateFontSettings(size, localFontWeight)}
-                  className={`px-3 py-1.5 rounded text-xs transition-colors ${
-                    localFontSize === size
-                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-                  }`}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors ${localFontSize === size
+                    ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                    : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                    }`}
                 >
                   {size.charAt(0).toUpperCase() + size.slice(1)}
                 </button>
               ))}
             </div>
           </div>
-          
+
           {/* Font Weight */}
           <div>
             <label className="text-xs text-skyrim-text block mb-1.5">Font Weight</label>
@@ -2831,44 +2827,43 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 <button
                   key={weight}
                   onClick={() => updateFontSettings(localFontSize, weight)}
-                  className={`px-3 py-1.5 rounded text-xs transition-colors ${
-                    localFontWeight === weight
-                      ? 'bg-skyrim-gold text-skyrim-dark font-bold'
-                      : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
-                  }`}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors ${localFontWeight === weight
+                    ? 'bg-skyrim-gold text-skyrim-dark font-bold'
+                    : 'bg-skyrim-paper/60 text-skyrim-text border border-skyrim-border hover:border-skyrim-gold'
+                    }`}
                 >
                   {weight.charAt(0).toUpperCase() + weight.slice(1)}
                 </button>
               ))}
             </div>
           </div>
-          
+
           {/* Preview */}
           <div className="mt-3 pt-3 border-t border-skyrim-border/50">
-            <span className="text-[10px] text-gray-500 block mb-1">Preview:</span>
+            <span className="text-[10px] text-gray-500 block mb-1">{t('adventure.settings.preview')}:</span>
             <p className={`text-gray-200 ${FONT_SIZE_CLASSES[localFontSize]} ${FONT_WEIGHT_CLASSES[localFontWeight]}`}>
-              The wind howls through the mountain pass as you approach the ancient ruins...
+              {t('adventure.settings.previewText')}
             </p>
           </div>
         </div>
       )}
 
       {/* Chat Messages - flex-1 to fill available space */}
-      <div 
+      <div
         ref={chatContainerRef}
-        className="flex-1 min-h-0 bg-skyrim-paper/30 border border-skyrim-border rounded-lg overflow-y-auto scroll-smooth"
+        className="flex-1 min-h-0 glass-panel border-zinc-700/50 rounded-lg overflow-y-auto scroll-smooth"
       >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-500">
             <Scroll size={40} className="mb-3 opacity-50" />
             <p className="text-center text-sm mb-3">
-              {hasEstablishedState ? 'Continue where you left off...' : 'Your adventure awaits...'}
+              {hasEstablishedState ? t('adventure.empty.continue') : t('adventure.empty.start')}
             </p>
             <button
               onClick={startNewAdventure}
               className="px-3 py-1.5 bg-skyrim-gold text-skyrim-dark font-bold rounded text-sm hover:bg-skyrim-goldHover transition-colors"
             >
-              {hasEstablishedState ? 'Continue Adventure' : 'Begin Your Journey'}
+              {hasEstablishedState ? t('adventure.empty.continueBtn') : t('adventure.empty.startBtn')}
             </button>
           </div>
         ) : (
@@ -2878,22 +2873,20 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 key={msg.id}
                 className={`flex gap-2 ${msg.role === 'player' ? 'flex-row-reverse' : ''}`}
               >
-                <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
-                  msg.role === 'player' 
-                    ? 'bg-blue-900/50 text-blue-400 border border-blue-700' 
-                    : 'bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/50'
-                }`}>
+                <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${msg.role === 'player'
+                  ? 'bg-blue-900/50 text-blue-400 border border-blue-700'
+                  : 'bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/50'
+                  }`}>
                   {msg.role === 'player' ? <User size={14} /> : <Swords size={14} />}
                 </div>
                 <div className={`flex-1 max-w-[90%] sm:max-w-[85%] ${msg.role === 'player' ? 'text-right' : ''}`}>
-                  <div className={`inline-block p-2 sm:p-3 rounded-lg ${
-                    msg.role === 'player'
-                      ? 'bg-blue-900/30 border border-blue-800 text-gray-200'
-                      : 'bg-skyrim-paper/60 border border-skyrim-border text-gray-200'
-                  }`}>
+                  <div className={`inline-block p-2 sm:p-3 rounded-lg ${msg.role === 'player'
+                    ? 'bg-cyan-950/40 border border-cyan-800/50 text-cyan-50 shadow-md backdrop-blur-sm'
+                    : 'bg-zinc-900/60 border border-zinc-700/50 text-gray-200 backdrop-blur-sm shadow-md'
+                    }`}>
                     {/* Using sans-serif font for better readability with configurable size/weight */}
                     <p className={`whitespace-pre-wrap ${FONT_SIZE_CLASSES[localFontSize]} ${FONT_WEIGHT_CLASSES[localFontWeight]}`}>{msg.content}</p>
-                    
+
                     {/* TTS controls for GM messages */}
                     {msg.role === 'gm' && ttsEnabled && (
                       <div className="mt-2 pt-2 border-t border-skyrim-border/30 flex items-center gap-2">
@@ -2936,10 +2929,10 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                               speak(msg.content, role, { enabled: true, autoPlay: true, volume: 0.8 });
                             }}
                             className="p-1.5 rounded bg-skyrim-paper/60 text-skyrim-text hover:bg-skyrim-gold/20 hover:text-skyrim-gold transition-colors flex items-center gap-1"
-                            title="Listen to this message"
+                            title={t('adventure.actions.listen')}
                           >
                             <Volume2 size={12} />
-                            <span className="text-xs">Listen</span>
+                            <span className="text-xs">{t('adventure.actions.listen')}</span>
                           </button>
                         )}
                       </div>
@@ -2956,7 +2949,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                             <button
                               onClick={() => sendPlayerText(playerText)}
                               disabled={loading}
-                              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/40 rounded hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors text-xs sm:text-sm font-sans disabled:opacity-50 flex items-center gap-1 sm:gap-2"
+                              className="px-2 sm:px-3 py-1.5 sm:py-2 bg-amber-950/40 text-amber-200 border border-amber-700/50 rounded hover:bg-amber-900/60 hover:text-amber-100 transition-all text-xs sm:text-sm font-serif disabled:opacity-50 flex items-center gap-1 sm:gap-2 shadow-sm hover:shadow-gold hover:scale-[1.02]"
                             >
                               <span className="truncate max-w-[150px] sm:max-w-none">{c?.label || 'Choose'}</span>
                               {/* Show preview cost badge if present */}
@@ -2968,7 +2961,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                             </button>
                             {/* Hover tooltip showing what will be typed */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900/95 border border-skyrim-gold/50 rounded shadow-cheap text-xs text-gray-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 max-w-[250px]">
-                              <div className="text-skyrim-text text-[10px] mb-1">You will say:</div>
+                              <div className="text-skyrim-text text-[10px] mb-1">{t('adventure.actions.youWillSay')}</div>
                               <div className="text-skyrim-gold italic truncate">"{playerText}"</div>
                               {/* Tooltip arrow */}
                               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900/95"></div>
@@ -2978,7 +2971,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                       })}
                     </div>
                   )}
-                  
+
                   {/* Game state changes indicator */}
                   {msg.role === 'gm' && msg.updates && (
                     <>
@@ -2988,121 +2981,113 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                           <div className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-900/30 border border-indigo-700/50 text-indigo-300">
                             <Clock size={12} />
                             <span>
-                              {msg.updates.timeAdvanceMinutes >= 60 
-                                ? `${Math.floor(msg.updates.timeAdvanceMinutes / 60)}h ${msg.updates.timeAdvanceMinutes % 60}m passed`
-                                : `${msg.updates.timeAdvanceMinutes} min passed`
+                              {msg.updates.timeAdvanceMinutes >= 60
+                                ? `${Math.floor(msg.updates.timeAdvanceMinutes / 60)}h ${msg.updates.timeAdvanceMinutes % 60}m`
+                                : `${msg.updates.timeAdvanceMinutes} ${t('adventure.updates.minPassed')}`
                               }
                             </span>
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Inline item changes (always show) */}
-                      {(msg.updates.removedItems?.length || msg.updates.newItems?.length || 
+                      {(msg.updates.removedItems?.length || msg.updates.newItems?.length ||
                         (typeof msg.updates.goldChange === 'number' && msg.updates.goldChange !== 0) ||
                         (typeof msg.updates.xpChange === 'number' && msg.updates.xpChange !== 0) ||
                         (msg.updates.needsChange && Object.keys(msg.updates.needsChange).length > 0)) && (
-                        <div className="mt-1 flex flex-wrap gap-2 text-xs font-sans">
-                          {msg.updates.removedItems?.map((item, idx) => (
-                            <span key={`removed-${idx}`} className="text-red-400 bg-red-900/20 px-2 py-0.5 rounded border border-red-900/30">
-                              -{item.quantity} {item.name}
-                            </span>
-                          ))}
-                          {msg.updates.newItems?.map((item, idx) => (
-                            <span key={`added-${idx}`} className="text-green-400 bg-green-900/20 px-2 py-0.5 rounded border border-green-900/30">
-                              +{item.quantity} {item.name}
-                            </span>
-                          ))}
-                          {typeof msg.updates.goldChange === 'number' && msg.updates.goldChange !== 0 && (
-                            <span className={`px-2 py-0.5 rounded border ${
-                              msg.updates.goldChange > 0 
-                                ? 'text-yellow-400 bg-yellow-900/20 border-yellow-900/30' 
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs font-sans">
+                            {msg.updates.removedItems?.map((item, idx) => (
+                              <span key={`removed-${idx}`} className="text-red-400 bg-red-900/20 px-2 py-0.5 rounded border border-red-900/30">
+                                -{item.quantity} {item.name}
+                              </span>
+                            ))}
+                            {msg.updates.newItems?.map((item, idx) => (
+                              <span key={`added-${idx}`} className="text-green-400 bg-green-900/20 px-2 py-0.5 rounded border border-green-900/30">
+                                +{item.quantity} {item.name}
+                              </span>
+                            ))}
+                            {typeof msg.updates.goldChange === 'number' && msg.updates.goldChange !== 0 && (
+                              <span className={`px-2 py-0.5 rounded border ${msg.updates.goldChange > 0
+                                ? 'text-yellow-400 bg-yellow-900/20 border-yellow-900/30'
                                 : 'text-orange-400 bg-orange-900/20 border-orange-900/30'
-                            }`}>
-                              {msg.updates.goldChange > 0 ? '+' : ''}{msg.updates.goldChange} gold
-                            </span>
-                          )}
-                          {typeof msg.updates.xpChange === 'number' && msg.updates.xpChange !== 0 && (
-                            <span className={`px-2 py-0.5 rounded border ${
-                              msg.updates.xpChange > 0 
-                                ? 'text-purple-400 bg-purple-900/20 border-purple-900/30' 
+                                }`}>
+                                {msg.updates.goldChange > 0 ? '+' : ''}{msg.updates.goldChange} gold
+                              </span>
+                            )}
+                            {typeof msg.updates.xpChange === 'number' && msg.updates.xpChange !== 0 && (
+                              <span className={`px-2 py-0.5 rounded border ${msg.updates.xpChange > 0
+                                ? 'text-purple-400 bg-purple-900/20 border-purple-900/30'
                                 : 'text-skyrim-text bg-gray-900/20 border-skyrim-border/30'
-                            }`}>
-                              {msg.updates.xpChange > 0 ? '+' : ''}{msg.updates.xpChange} XP ✨
-                            </span>
-                          )}
-                          {/* Vitals changes (damage/healing) */}
-                          {msg.updates.vitalsChange && (
-                            <>
-                              {typeof msg.updates.vitalsChange.currentHealth === 'number' && msg.updates.vitalsChange.currentHealth !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.vitalsChange.currentHealth > 0 
-                                    ? 'text-green-400 bg-green-900/20 border-green-900/30' 
+                                }`}>
+                                {msg.updates.xpChange > 0 ? '+' : ''}{msg.updates.xpChange} XP ✨
+                              </span>
+                            )}
+                            {/* Vitals changes (damage/healing) */}
+                            {msg.updates.vitalsChange && (
+                              <>
+                                {typeof msg.updates.vitalsChange.currentHealth === 'number' && msg.updates.vitalsChange.currentHealth !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.vitalsChange.currentHealth > 0
+                                    ? 'text-green-400 bg-green-900/20 border-green-900/30'
                                     : 'text-red-400 bg-red-900/20 border-red-900/30'
-                                }`}>
-                                  {msg.updates.vitalsChange.currentHealth > 0 ? '💚 +' : '💔 '}{msg.updates.vitalsChange.currentHealth} HP
-                                </span>
-                              )}
-                              {typeof msg.updates.vitalsChange.currentMagicka === 'number' && msg.updates.vitalsChange.currentMagicka !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.vitalsChange.currentMagicka > 0 
-                                    ? 'text-blue-400 bg-blue-900/20 border-blue-900/30' 
+                                    }`}>
+                                    {msg.updates.vitalsChange.currentHealth > 0 ? '💚 +' : '💔 '}{msg.updates.vitalsChange.currentHealth} HP
+                                  </span>
+                                )}
+                                {typeof msg.updates.vitalsChange.currentMagicka === 'number' && msg.updates.vitalsChange.currentMagicka !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.vitalsChange.currentMagicka > 0
+                                    ? 'text-blue-400 bg-blue-900/20 border-blue-900/30'
                                     : 'text-purple-400 bg-purple-900/20 border-purple-900/30'
-                                }`}>
-                                  {msg.updates.vitalsChange.currentMagicka > 0 ? '🔵 +' : '🔮 '}{msg.updates.vitalsChange.currentMagicka} MP
-                                </span>
-                              )}
-                              {typeof msg.updates.vitalsChange.currentStamina === 'number' && msg.updates.vitalsChange.currentStamina !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.vitalsChange.currentStamina > 0 
-                                    ? 'text-green-400 bg-green-900/20 border-green-900/30' 
+                                    }`}>
+                                    {msg.updates.vitalsChange.currentMagicka > 0 ? '🔵 +' : '🔮 '}{msg.updates.vitalsChange.currentMagicka} MP
+                                  </span>
+                                )}
+                                {typeof msg.updates.vitalsChange.currentStamina === 'number' && msg.updates.vitalsChange.currentStamina !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.vitalsChange.currentStamina > 0
+                                    ? 'text-green-400 bg-green-900/20 border-green-900/30'
                                     : 'text-yellow-400 bg-yellow-900/20 border-yellow-900/30'
-                                }`}>
-                                  {msg.updates.vitalsChange.currentStamina > 0 ? '⚡ +' : '💨 '}{msg.updates.vitalsChange.currentStamina} SP
-                                </span>
-                              )}
-                            </>
-                          )}
-                          {/* Survival needs changes */}
-                          {msg.updates.needsChange && (
-                            <>
-                              {typeof msg.updates.needsChange.hunger === 'number' && msg.updates.needsChange.hunger !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.needsChange.hunger < 0 
-                                    ? 'text-green-400 bg-green-900/20 border-green-900/30' 
+                                    }`}>
+                                    {msg.updates.vitalsChange.currentStamina > 0 ? '⚡ +' : '💨 '}{msg.updates.vitalsChange.currentStamina} SP
+                                  </span>
+                                )}
+                              </>
+                            )}
+                            {/* Survival needs changes */}
+                            {msg.updates.needsChange && (
+                              <>
+                                {typeof msg.updates.needsChange.hunger === 'number' && msg.updates.needsChange.hunger !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.needsChange.hunger < 0
+                                    ? 'text-green-400 bg-green-900/20 border-green-900/30'
                                     : 'text-orange-400 bg-orange-900/20 border-orange-900/30'
-                                }`}>
-                                  {msg.updates.needsChange.hunger < 0 ? '🍖 ' : ''}{msg.updates.needsChange.hunger > 0 ? '+' : ''}{msg.updates.needsChange.hunger} hunger
-                                </span>
-                              )}
-                              {typeof msg.updates.needsChange.thirst === 'number' && msg.updates.needsChange.thirst !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.needsChange.thirst < 0 
-                                    ? 'text-blue-400 bg-blue-900/20 border-blue-900/30' 
+                                    }`}>
+                                    {msg.updates.needsChange.hunger < 0 ? '🍖 ' : ''}{msg.updates.needsChange.hunger > 0 ? '+' : ''}{msg.updates.needsChange.hunger} hunger
+                                  </span>
+                                )}
+                                {typeof msg.updates.needsChange.thirst === 'number' && msg.updates.needsChange.thirst !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.needsChange.thirst < 0
+                                    ? 'text-blue-400 bg-blue-900/20 border-blue-900/30'
                                     : 'text-orange-400 bg-orange-900/20 border-orange-900/30'
-                                }`}>
-                                  {msg.updates.needsChange.thirst < 0 ? '💧 ' : ''}{msg.updates.needsChange.thirst > 0 ? '+' : ''}{msg.updates.needsChange.thirst} thirst
-                                </span>
-                              )}
-                              {typeof msg.updates.needsChange.fatigue === 'number' && msg.updates.needsChange.fatigue !== 0 && (
-                                <span className={`px-2 py-0.5 rounded border ${
-                                  msg.updates.needsChange.fatigue < 0 
-                                    ? 'text-cyan-400 bg-cyan-900/20 border-cyan-900/30' 
+                                    }`}>
+                                    {msg.updates.needsChange.thirst < 0 ? '💧 ' : ''}{msg.updates.needsChange.thirst > 0 ? '+' : ''}{msg.updates.needsChange.thirst} thirst
+                                  </span>
+                                )}
+                                {typeof msg.updates.needsChange.fatigue === 'number' && msg.updates.needsChange.fatigue !== 0 && (
+                                  <span className={`px-2 py-0.5 rounded border ${msg.updates.needsChange.fatigue < 0
+                                    ? 'text-cyan-400 bg-cyan-900/20 border-cyan-900/30'
                                     : 'text-orange-400 bg-orange-900/20 border-orange-900/30'
-                                }`}>
-                                  {msg.updates.needsChange.fatigue < 0 ? '😴 ' : ''}{msg.updates.needsChange.fatigue > 0 ? '+' : ''}{msg.updates.needsChange.fatigue} fatigue
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                      
+                                    }`}>
+                                    {msg.updates.needsChange.fatigue < 0 ? '😴 ' : ''}{msg.updates.needsChange.fatigue > 0 ? '+' : ''}{msg.updates.needsChange.fatigue} fatigue
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+
                       {/* Full update panel (only when not auto-apply) */}
                       {!autoApply && (
                         <div className="mt-2 p-2 bg-skyrim-paper/40 rounded border border-skyrim-border/50 text-xs">
                           {msg.updates.newQuests?.length ? (
-                            <div className="text-skyrim-gold">+ {msg.updates.newQuests.length} quest(s) started</div>
+                            <div className="text-skyrim-gold">+ {msg.updates.newQuests.length} {t('adventure.updates.questStarted')}</div>
                           ) : null}
                           {typeof msg.updates.timeAdvanceMinutes === 'number' && msg.updates.timeAdvanceMinutes !== 0 ? (
                             <div className="text-skyrim-text">⏳ {msg.updates.timeAdvanceMinutes > 0 ? '+' : ''}{msg.updates.timeAdvanceMinutes} min</div>
@@ -3111,7 +3096,7 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                             onClick={() => applyUpdates(msg.updates!)}
                             className="mt-1 px-2 py-1 bg-skyrim-gold/20 text-skyrim-gold border border-skyrim-gold/50 rounded text-xs hover:bg-skyrim-gold hover:text-skyrim-dark transition-colors"
                           >
-                            Apply Changes
+                            {t('adventure.updates.apply')}
                           </button>
                         </div>
                       )}
@@ -3120,31 +3105,31 @@ GAMEPLAY ENFORCEMENT (CRITICAL):
                 </div>
               </div>
             ))}
-            
+
             {/* Thinking bubble while AI is processing */}
             {loading && <ThinkingBubble />}
-            
+
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
       {/* Input Area - fixed at bottom */}
-      <div className="flex-shrink-0 mt-2 bg-skyrim-paper/60 border border-skyrim-border rounded-lg p-2">
+      <div className="flex-shrink-0 mt-2 glass-panel border-zinc-700/50 rounded-lg p-2 shadow-lg">
         <div className="flex gap-2">
           <AdventureInput
             ref={inputRef}
             value={input}
             onChange={setInput}
             onSend={handleSend}
-            placeholder="What do you do? (Enter to send)"
+            placeholder={t('adventure.inputPlaceholder')}
             disabled={loading || messages.length === 0 || pauseChat}
             rows={1}
           />
           <button
             onClick={handleSend}
             disabled={loading || !input.trim() || messages.length === 0}
-            className="px-3 bg-skyrim-gold hover:bg-skyrim-goldHover disabled:opacity-50 disabled:cursor-not-allowed text-skyrim-dark font-bold rounded flex items-center justify-center transition-colors"
+            className="px-4 btn-premium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[3rem]"
           >
             {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
           </button>

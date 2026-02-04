@@ -327,16 +327,6 @@ export const DISEASES: Record<DiseaseType, Disease> = {
 // ========== CURE ITEMS ==========
 
 export const CURE_ITEMS: Record<string, CureItem> = {
-  cure_disease_potion: {
-    id: 'cure_disease_potion',
-    name: 'Cure Disease Potion',
-    description: 'Cures all diseases upon consumption.',
-    curesAll: true,
-    preventsContraction: false,
-    duration: 0,
-    value: 79,
-    rarity: 'uncommon',
-  },
   hawk_feathers: {
     id: 'hawk_feathers',
     name: 'Hawk Feathers',
