@@ -293,26 +293,34 @@ const EnemyCard: React.FC<{
       data-testid={`enemy-card-${enemy.id}`}
       onClick={isDead ? undefined : onClick}
       className={`
-        p-3 transition-shadow duration-300
+        p-3 transition-all duration-300 relative
         ${isDead
           ? 'opacity-50 cursor-not-allowed grayscale'
           : isTarget
-            ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.2)]'
-            : 'cursor-pointer'
+            ? 'ring-2 ring-blue-400 border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]'
+            : 'cursor-pointer hover:border-amber-500/50'
         }
         ${isHighlighted ? 'ring-2 ring-amber-300 animate-pulse-gold' : ''}
         ${isCurrentTurn ? 'ring-1 ring-amber-400 shadow-md shadow-amber-400/20' : ''}
       `}
     >
+      {/* Target indicator - shown as a header banner inside the card */}
+      {isTarget && !isDead && (
+        <div className="bg-blue-600 -mx-3 -mt-3 mb-2 px-3 py-1.5 text-center text-white text-xs font-bold uppercase tracking-wider rounded-t-lg flex items-center justify-center gap-2">
+          <span className="animate-pulse">🎯</span>
+          <span>TARGETED</span>
+          <span className="animate-pulse">🎯</span>
+        </div>
+      )}
       {/* Boss indicator */}
       {enemy.isBoss && (
-        <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-purple-600 rounded text-xs font-bold">
+        <div className="absolute top-1 right-1 px-2 py-0.5 bg-purple-600 rounded text-xs font-bold text-white">
           BOSS
         </div>
       )}
 
       {/* Turn indicator arrow (SKY-55) */}
-      {isCurrentTurn && !isDead && (
+      {isCurrentTurn && !isDead && !isTarget && (
         <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-400 animate-pulse text-lg">
           ▶
         </div>
@@ -543,11 +551,11 @@ const ActionButton = React.memo<ActionButtonProps>(({ ability, disabled, cooldow
         </span>
       </div>
 
-      <div className="flex gap-3 text-sm sm:text-xs items-center">
+      <div className="flex gap-2 text-sm sm:text-xs items-center flex-wrap">
         {ability.damage > 0 && (
-          <span className="text-red-400">⚔ {ability.damage}</span>
+          <span className="text-red-200 bg-red-900/50 px-2 py-0.5 rounded font-semibold">⚔ {ability.damage}</span>
         )}
-        <span className={`${ability.type === 'magic' ? 'text-blue-400' : 'text-green-400'}`} style={accentColor && !isDisabled ? { color: accentColor } : undefined}>
+        <span className={`px-2 py-0.5 rounded font-semibold ${ability.type === 'magic' ? 'text-blue-200 bg-blue-900/50' : 'text-green-200 bg-green-900/50'}`}>
           {ability.type === 'magic' ? '💧' : '⚡'} {ability.cost}
         </span>
       </div>
@@ -2418,9 +2426,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               }
             }}
           >
-            <h3 className="text-lg font-bold text-amber-100 mb-3">
+            <h3 className="text-xl font-bold text-white mb-3">
               {getEasterEggName(character.name)}
-              <span className="ml-2 text-xs text-stone-400">• Lv.{character.level}</span>
+              <span className="ml-2 text-sm text-stone-300">• Lv.{character.level}</span>
             </h3>
             <div className="space-y-3">
               <HealthBar
@@ -2445,10 +2453,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
 
             <div className="mt-4 pt-3 border-t border-stone-700 grid grid-cols-2 gap-2 text-xs">
-              <div className="text-stone-400">⚔ {t('combat.damage')}: <span className="text-amber-200">{playerStats.weaponDamage}</span></div>
-              <div className="text-stone-400">🛡 {t('combat.armor')}: <span className="text-amber-200">{playerStats.armor}</span></div>
-              <div className="text-stone-400">💫 {t('combat.crit')}: <span className="text-amber-200">{playerStats.critChance}%</span></div>
-              <div className="text-stone-400">💨 {t('combat.dodge')}: <span className="text-amber-200">{playerStats.dodgeChance}%</span></div>
+              <div className="text-stone-300">⚔ {t('combat.damage')}: <span className="text-amber-100 font-bold">{playerStats.weaponDamage}</span></div>
+              <div className="text-stone-300">🛡 {t('combat.armor')}: <span className="text-amber-100 font-bold">{playerStats.armor}</span></div>
+              <div className="text-stone-300">💫 {t('combat.crit')}: <span className="text-amber-100 font-bold">{playerStats.critChance}%</span></div>
+              <div className="text-stone-300">💨 {t('combat.dodge')}: <span className="text-amber-100 font-bold">{playerStats.dodgeChance}%</span></div>
             </div>
 
             {/* Player status effects */}
@@ -2469,7 +2477,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             })()}
 
             <div className="mt-4 bg-stone-900/60 rounded-lg p-4 border border-stone-700 max-h-[360px] overflow-y-auto">
-              <h4 className="text-sm font-semibold text-stone-300 mb-2">{t('combat.actions')}</h4>
+              <h4 className="text-sm font-bold text-amber-100 mb-2 uppercase tracking-wide">{t('combat.actions')}</h4>
 
               {(() => {
                 const playerStun = (combatState.playerActiveEffects || []).find((pe: any) => pe.effect && pe.effect.type === 'stun' && pe.turnsRemaining > 0);
@@ -2483,14 +2491,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
               {/* Main / Bonus action indicators (enhanced visuals) */}
               <div className="space-y-2 mb-3">
                 <div
-                  className="relative w-full p-2 rounded bg-green-900/40 border border-green-700/50 text-green-200"
+                  className="relative w-full p-2 rounded bg-green-900/60 border border-green-500/50 text-green-100 font-semibold"
                   title="Primary action — Attack, Spell, or Power. Use once per turn."
                 >
                   ⚔️ {t('combat.mainAction')}{combatState.playerMainActionUsed ? ` ${t('combat.used')}` : ` ${t('combat.available')}`}
                 </div>
 
                 <div
-                  className="relative w-full p-2 rounded bg-purple-900/40 border border-purple-700/50 text-purple-200"
+                  className="relative w-full p-2 rounded bg-purple-900/60 border border-purple-500/50 text-purple-100 font-semibold"
                   title="Bonus action — Potions, Defend, or Summons. Use once per turn."
                 >
                   ✨ {t('combat.bonusAction')}{combatState.playerBonusActionUsed ? ` ${t('combat.used')}` : ` ${t('combat.available')}`}
@@ -2572,8 +2580,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
           {/* Allies (companions) */}
           {combatState.allies && combatState.allies.length > 0 && (
-            <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700 mb-3">
-              <h3 className="text-sm font-bold text-stone-400 mb-2">{t('combat.allies')}</h3>
+            <div className="bg-stone-900/40 rounded-lg p-4 border border-sky-700/50 mb-3">
+              <h3 className="text-base font-bold text-sky-200 mb-2 tracking-wide uppercase flex items-center gap-2">
+                <span className="w-2 h-2 bg-sky-400 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.6)]"></span>
+                {t('combat.allies')}
+              </h3>
               <div className="grid grid-cols-2 gap-2">
                 {combatState.allies.map(ally => {
                   const pending = (combatState.pendingSummons || []).find((s: any) => s.companionId === ally.id);
@@ -2636,8 +2647,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           )}
 
           {/* Enemies */}
-          <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700 flex flex-col min-h-0">
-            <h3 className="text-sm font-bold text-stone-400 mb-3">{t('combat.enemies')}</h3>
+          <div className="bg-stone-900/40 rounded-lg p-4 border border-red-800/50 flex flex-col min-h-0">
+            <h3 className="text-base font-bold text-red-200 mb-3 tracking-wide uppercase flex items-center gap-2">
+              <span className="w-2 h-2 bg-red-400 rounded-full shadow-[0_0_8px_rgba(248,113,113,0.6)]"></span>
+              {t('combat.enemies')}
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {combatState.enemies.map(enemy => (
                 <div key={enemy.id} className="p-1">
@@ -2645,6 +2659,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                     enemy={enemy}
                     isTarget={selectedTarget === enemy.id}
                     isHighlighted={recentlyHighlighted === enemy.id}
+                    isCurrentTurn={combatState.currentTurnActor === enemy.id}
                     onClick={() => {
                       if (pendingTargeting && pendingTargeting.allow === 'allies') {
                         if (showToast) showToast('This ability cannot target enemies.', 'warning');
@@ -2662,39 +2677,49 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         </div>
 
         {/* Right side - Abilities & Inventory */}
-        <div className="hidden lg:flex flex-col gap-2 w-[320px] min-w-[320px] max-h-[calc(100vh-140px)] overflow-y-auto">
-          {/* Abilities */}
-          <div className="bg-stone-900/60 rounded-lg p-3 border border-amber-900/30 flex flex-col">
+        <div className="hidden lg:flex flex-col gap-3 w-[320px] min-w-[320px] max-h-[calc(100vh-140px)]">
+          {/* Abilities Section - with fixed header and scrollable list */}
+          <div className="bg-stone-900/60 rounded-lg border border-amber-700/40 flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Fixed Header & Tabs */}
+            <div className="p-3 pb-0 shrink-0">
+              <h3 className="text-base font-bold text-amber-100 mb-2 tracking-wide uppercase flex items-center gap-2">
+                <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                {t('combat.abilities', { type: t(`combat.${activeAbilityTab.toLowerCase()}`) })}
+              </h3>
 
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              {(!awaitingCompanionAction && !pendingTargeting) ? (
-                <div className="flex gap-1 bg-stone-900/80 p-1 rounded border border-stone-700">
-                  <button
-                    onClick={() => setActiveAbilityTab('Physical')}
-                    className={`flex-1 py-3 text-center text-xs font-bold tracking-widest uppercase border-b-2 transition-colors ${activeAbilityTab === 'Physical' ? 'border-amber-500 text-amber-200 bg-amber-900/20' : 'border-transparent text-stone-500'}`}
-                  >
-                    {t('combat.physical')}
-                  </button>
-                  <button
-                    onClick={() => setActiveAbilityTab('Magical')}
-                    className={`flex-1 py-3 text-center text-xs font-bold tracking-widest uppercase border-b-2 transition-colors ${activeAbilityTab === 'Magical' ? 'border-blue-500 text-blue-200 bg-blue-900/20' : 'border-transparent text-stone-500'}`}
-                  >
-                    {t('combat.magical')}
-                  </button>
+              <div className="flex items-center justify-between mb-3">
+                {(!awaitingCompanionAction && !pendingTargeting) ? (
+                  <div className="flex gap-1 bg-stone-800/90 p-1 rounded-lg border border-stone-600/50">
+                    <button
+                      onClick={() => setActiveAbilityTab('Physical')}
+                      className={`flex-1 py-2 px-4 text-center text-sm font-bold tracking-wide uppercase rounded transition-all duration-200 ${activeAbilityTab === 'Physical'
+                        ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
+                        : 'text-stone-300 hover:text-white hover:bg-stone-700/50'}`}
+                    >
+                      ⚔️ {t('combat.physical')}
+                    </button>
+                    <button
+                      onClick={() => setActiveAbilityTab('Magical')}
+                      className={`flex-1 py-2 px-4 text-center text-sm font-bold tracking-wide uppercase rounded transition-all duration-200 ${activeAbilityTab === 'Magical'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                        : 'text-stone-300 hover:text-white hover:bg-stone-700/50'}`}
+                    >
+                      ✨ {t('combat.magical')}
+                    </button>
+                  </div>
+                ) : (
+                  <h3 className="text-base font-bold text-amber-100">
+                    {awaitingCompanionAction ? t('combat.companionTurn') : t('combat.selectTarget')}
+                  </h3>
+                )}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-3 py-1.5 text-xs font-bold rounded bg-emerald-700 hover:bg-emerald-600 border border-emerald-500 text-white shadow-md transition-all active:scale-95">{t('combat.equipBtn')}</button>
                 </div>
-              ) : (
-                <h3 className="text-sm font-bold text-stone-400">
-                  {awaitingCompanionAction ? t('combat.companionTurn') : t('combat.selectTarget')}
-                </h3>
-              )}
-              <div className="flex items-center gap-2">
-                <button onClick={() => setEquipModalOpen(true)} data-sfx="button_click" className="px-2 py-1 text-xs rounded bg-blue-800 hover:bg-blue-700 border border-blue-600">{t('combat.equipment')}</button>
               </div>
             </div>
 
-            {/* Abilities list (existing) */}
-
-            <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+            {/* Scrollable Abilities List */}
+            <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-2 custom-scrollbar">
               {awaitingCompanionAction && combatState.allies && combatState.allies.length > 0 ? (
                 (() => {
                   const allyActor = combatState.allies.find(a => a.id === combatState.currentTurnActor);
@@ -3112,9 +3137,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
             </div>
           </div>
 
-          {/* Items */}
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-green-900/30">
-            <h3 className="text-sm font-bold text-stone-400 mb-3">{t('combat.inventory')}</h3>
+          {/* Inventory Section */}
+          <div className="bg-stone-900/60 rounded-lg p-4 border border-green-700/40">
+            <h3 className="text-base font-bold text-green-300 mb-3 tracking-wide uppercase flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              {t('combat.inventory')}
+            </h3>
             <div className="space-y-2">
               {getUsableItems().length > 0 ? (
                 <>
@@ -3205,8 +3233,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         <div className="hidden lg:flex flex-col gap-2 w-[280px] min-w-[280px] max-h-[calc(100vh-140px)]">
           {/* Combat Log */}
           <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700 flex flex-col h-[55%] min-h-[200px]">
-            <div className="flex items-center justify-between p-2 border-b border-stone-700 shrink-0">
-              <h3 className="text-sm font-bold text-stone-400">{t('combat.combatLog')}</h3>
+            <div className="flex items-center justify-between p-2 border-b border-stone-700 shrink-0 bg-stone-800/40">
+              <h3 className="text-sm font-bold text-stone-200">{t('combat.combatLog')}</h3>
               <button
                 onClick={() => setAutoScroll(s => !s)}
                 aria-pressed={autoScroll}
@@ -3232,8 +3260,8 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           : 'bg-red-900/20 border-l-2 border-red-500'
                       }`}
                   >
-                    <span className="text-[10px] text-stone-500 mr-1">T{entry.turn}</span>
-                    <span className="text-stone-300">{entry.narrative}</span>
+                    <span className="text-[10px] text-stone-400 mr-2 font-mono">T{entry.turn}</span>
+                    <span className="text-white leading-relaxed">{entry.narrative}</span>
                     {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && !lastInvalidTargetRef.current && entry.turn !== suppressRollForTurn && (
                       <span className="text-[10px] text-stone-400 ml-1">• {entry.nat}</span>
                     )}
@@ -3248,7 +3276,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
           {/* Turn Order */}
           <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700 flex flex-col h-[45%] min-h-[150px]">
-            <h3 className="text-sm font-bold text-stone-400 mb-2 shrink-0">Turn Order</h3>
+            {/* Header provided by TurnList component internally */}
             <div className="flex-1 overflow-y-auto">
               <TurnList
                 turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
