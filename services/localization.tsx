@@ -427,7 +427,24 @@ export interface TranslationKeys {
     victory: string;
     defeat: string;
     enemyAppears: string;
+    confirm: string;
+    abilities: string;
+    equipBtn: string;
+    chooseTargetFor: string;
+    cannotTargetAllies: string;
+    hideActions: string;
+    showActions: string;
+    combatLog: string;
+    invalidTarget: string;
+    autoScrollOn: string;
+    autoScrollOff: string;
+    companionAbilities: string;
+    selectSelfOrAlly: string;
+    selectItem: string;
+    itemBonusAction: string;
+    summonBonusAction: string;
   };
+
 
   loot: {
     title: string;
@@ -542,7 +559,16 @@ export interface TranslationKeys {
     favorites: string;
   };
 
+  item: {
+    food: string;
+    drink: string;
+    healthPotion: string;
+    magickaPotion: string;
+    staminaPotion: string;
+  };
+
   sort: {
+
     name: string;
     type: string;
     rarity: string;
@@ -1232,7 +1258,24 @@ const EN_TRANSLATIONS: TranslationKeys = {
     victory: 'Victory!',
     defeat: 'Defeat...',
     enemyAppears: 'A {{enemy}} appears!',
+    confirm: 'Confirm',
+    abilities: '{{type}} ABILITIES',
+    equipBtn: 'Equipment',
+    chooseTargetFor: 'Choose target for {{abilityName}}',
+    cannotTargetAllies: 'This ability cannot target allies.',
+    hideActions: 'Hide Actions',
+    showActions: 'Show Actions',
+    combatLog: 'Combat Log',
+    invalidTarget: 'Invalid target selected.',
+    autoScrollOn: 'Auto-scroll ON',
+    autoScrollOff: 'Auto-scroll OFF',
+    companionAbilities: 'Companion Abilities',
+    selectSelfOrAlly: 'Select self or an ally.',
+    selectItem: 'Select an item to use.',
+    itemBonusAction: 'Uses bonus action',
+    summonBonusAction: 'Conjuration spells use the Bonus action.',
   },
+
   loot: {
     title: 'Loot Phase',
     instruction: 'Select items to loot from defeated enemies, or skip looting entirely.',
@@ -1339,7 +1382,15 @@ const EN_TRANSLATIONS: TranslationKeys = {
     misc: 'Misc',
     favorites: 'Favorites',
   },
+  item: {
+    food: 'Food',
+    drink: 'Drink',
+    healthPotion: 'Health Potion',
+    magickaPotion: 'Magicka Potion',
+    staminaPotion: 'Stamina Potion',
+  },
   sort: {
+
     name: 'Name (A-Z)',
     type: 'Type',
     rarity: 'Rarity',
@@ -2324,7 +2375,24 @@ const TR_TRANSLATIONS: TranslationKeys = {
     victory: 'Zafer!',
     defeat: 'Yenilgi...',
     enemyAppears: 'Bir {{enemy}} belirdi!',
+    confirm: 'Onayla',
+    abilities: '{{type}} YETENEKLERİ',
+    equipBtn: 'Ekipman',
+    chooseTargetFor: '{{abilityName}} için hedef seç',
+    cannotTargetAllies: 'Bu yetenek dostları hedefleyemez.',
+    hideActions: 'Eylemleri Gizle',
+    showActions: 'Eylemleri Göster',
+    combatLog: 'Savaş Günlüğü',
+    invalidTarget: 'Geçersiz hedef seçildi.',
+    autoScrollOn: 'Oto-kaydırma AÇIK',
+    autoScrollOff: 'Oto-kaydırma KAPALI',
+    companionAbilities: 'Yoldaş Yetenekleri',
+    selectSelfOrAlly: 'Kendini veya bir dostu seç.',
+    selectItem: 'Kullanmak için eşya seç.',
+    itemBonusAction: 'Bonus eylem kullanır',
+    summonBonusAction: 'Çağırma büyüleri Bonus eylemi kullanır.',
   },
+
   loot: {
     title: 'Yağma Aşaması',
     instruction: 'Yenilen düşmanlardan ganimet topla veya yağmayı atla.',
@@ -2431,7 +2499,15 @@ const TR_TRANSLATIONS: TranslationKeys = {
     misc: 'Diğer',
     favorites: 'Favoriler',
   },
+  item: {
+    food: 'Yiyecek',
+    drink: 'İçecek',
+    healthPotion: 'Can İksiri',
+    magickaPotion: 'Büyü İksiri',
+    staminaPotion: 'Dayanıklılık İksiri',
+  },
   sort: {
+
     name: 'İsim (A-Z)',
     type: 'Tür',
     rarity: 'Nadirlik',

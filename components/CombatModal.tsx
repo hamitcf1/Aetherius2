@@ -2388,17 +2388,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
 
 
-      {/* Main combat area - Arena Layout (Grid Areas) */}
-      <div
-        className="flex-1 min-h-0 overflow-hidden grid gap-4 p-2 sm:p-4 w-full h-[calc(100vh-80px)] lg:grid-cols-2 lg:grid-rows-[1.5fr_0.8fr_1.2fr]"
-        style={{
-          gridTemplateAreas: `
-            "arena arena"
-            "logs logs"
-            "pstats actions"
-          `
-        }}
-      >
+      {/* Main combat area - Simplified Layout */}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row gap-2 p-2 sm:p-3 w-full">
+
         {/* Mobile Turn List (scrolls with content) */}
         <div className="lg:hidden w-full">
           <TurnList
@@ -2411,8 +2403,9 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           />
         </div>
 
-        {/* Desktop: Left side - Player stats (hidden on mobile, shown in compact bar above) */}
-        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0 h-full" style={{ gridArea: 'pstats' }}>
+        {/* Desktop: Left Column - Player stats + Quick Actions */}
+        <div className="hidden lg:flex flex-col gap-2 w-[280px] min-w-[280px] max-h-[calc(100vh-140px)] overflow-y-auto">
+
           <div
             ref={playerRef}
             className={`rounded-lg p-4 border border-amber-900/30 ${recentlyHighlighted === 'player' ? 'ring-4 ring-amber-300/40 animate-pulse' : ''} ${selectedTarget === 'player' ? 'ring-2 ring-green-400/50' : ''} ${pendingTargeting ? 'cursor-pointer hover:ring-2 hover:ring-green-400/30' : ''}`}
@@ -2571,21 +2564,12 @@ export const CombatModal: React.FC<CombatModalProps> = ({
 
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto max-h-full">
-              <TurnList
-                turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
-                currentTurnActor={combatState.currentTurnActor}
-                player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
-                enemies={combatState.enemies}
-                allies={combatState.allies || []}
-                className="h-full"
-              />
-            </div>
           </div>
         </div>
 
-        {/* Center - Allies and Enemies (Mapped to 'arena') */}
-        <div className="w-full flex flex-col gap-4 min-h-0 lg:pl-4 shadow-none" style={{ gridArea: 'arena' }}>
+        {/* Center - Allies and Enemies */}
+        <div className="flex-1 flex flex-col gap-2 min-h-0 max-h-[calc(100vh-140px)] overflow-y-auto">
+
           {/* Allies (companions) */}
           {combatState.allies && combatState.allies.length > 0 && (
             <div className="bg-stone-900/40 rounded-lg p-4 border border-stone-700 mb-3">
@@ -2677,10 +2661,11 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           </div>
         </div>
 
-        {/* Right side - Abilities & Inventory (Mapped to 'actions') */}
-        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0" style={{ gridArea: 'actions' }}>
+        {/* Right side - Abilities & Inventory */}
+        <div className="hidden lg:flex flex-col gap-2 w-[320px] min-w-[320px] max-h-[calc(100vh-140px)] overflow-y-auto">
           {/* Abilities */}
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-amber-900/30 flex flex-col min-h-[44vh]">
+          <div className="bg-stone-900/60 rounded-lg p-3 border border-amber-900/30 flex flex-col">
+
             <div className="flex items-center justify-between mb-3 shrink-0">
               {(!awaitingCompanionAction && !pendingTargeting) ? (
                 <div className="flex gap-1 bg-stone-900/80 p-1 rounded border border-stone-700">
@@ -3216,22 +3201,21 @@ export const CombatModal: React.FC<CombatModalProps> = ({
           <div className="hidden lg:block" aria-hidden="true" />
         </div>
 
-        {/* Column 4 - Combat Log (Mapped to 'logs') */}
-        <div className="hidden lg:flex flex-col gap-4 w-full min-h-0" style={{ gridArea: 'logs' }}>
-          <div className="bg-stone-900/60 rounded-lg p-4 border border-stone-700 h-full flex flex-col min-h-0">
-            <div className="flex items-center justify-between p-3 border-b border-stone-700">
+        {/* Right Column - Combat Log + Turn Order */}
+        <div className="hidden lg:flex flex-col gap-2 w-[280px] min-w-[280px] max-h-[calc(100vh-140px)]">
+          {/* Combat Log */}
+          <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700 flex flex-col h-[55%] min-h-[200px]">
+            <div className="flex items-center justify-between p-2 border-b border-stone-700 shrink-0">
               <h3 className="text-sm font-bold text-stone-400">{t('combat.combatLog')}</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setAutoScroll(s => !s)}
-                  aria-pressed={autoScroll}
-                  title={autoScroll ? t('combat.autoScrollOn') : t('combat.autoScrollOff')}
-                  className={`px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none ${autoScroll ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}>
-                  {t('combat.autoScroll', { state: autoScroll ? t('common.on') : t('common.off') })}
-                </button>
-              </div>
+              <button
+                onClick={() => setAutoScroll(s => !s)}
+                aria-pressed={autoScroll}
+                title={autoScroll ? t('combat.autoScrollOn') : t('combat.autoScrollOff')}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors focus:outline-none ${autoScroll ? 'bg-green-700 text-green-100 border border-green-600' : 'bg-stone-800 text-stone-300 border border-stone-600'}`}>
+                {autoScroll ? 'ON' : 'OFF'}
+              </button>
             </div>
-            <div ref={logRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
+            <div ref={logRef} className="flex-1 overflow-y-auto p-2 space-y-2 scroll-smooth">
               {combatState.combatLog.map((entry, i) => {
                 const isAlly = !!(combatState.allies && combatState.allies.find(a => a.name === entry.actor));
                 const key = entry.id || `log-${entry.turn}-${entry.actor}-${entry.timestamp || i}`;
@@ -3239,7 +3223,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                   <div
                     key={key}
                     data-testid={`combat-log-entry`}
-                    className={`text-sm p-2 rounded ${entry.actor === 'player'
+                    className={`text-xs p-1.5 rounded ${entry.actor === 'player'
                       ? 'bg-green-900/20 border-l-2 border-green-500'
                       : entry.actor === 'system'
                         ? 'bg-amber-900/20 border-l-2 border-amber-500'
@@ -3248,21 +3232,37 @@ export const CombatModal: React.FC<CombatModalProps> = ({
                           : 'bg-red-900/20 border-l-2 border-red-500'
                       }`}
                   >
-                    <span className="text-xs text-stone-500 mr-2">T{entry.turn}</span>
+                    <span className="text-[10px] text-stone-500 mr-1">T{entry.turn}</span>
                     <span className="text-stone-300">{entry.narrative}</span>
                     {entry.nat !== undefined && !(suppressRollLabelUntil && Date.now() < suppressRollLabelUntil) && !lastInvalidTargetRef.current && entry.turn !== suppressRollForTurn && (
-                      <span className="text-xs text-stone-400 ml-2">• {t('combat.roll')}: {entry.nat}{entry.rollTier ? ` • ${entry.rollTier}` : ''}</span>
+                      <span className="text-[10px] text-stone-400 ml-1">• {entry.nat}</span>
                     )}
                     {entry.auto && (
-                      <span className="ml-2 inline-block text-[10px] bg-sky-700 text-sky-100 px-2 py-0.5 rounded">{t('common.auto')}</span>
+                      <span className="ml-1 inline-block text-[9px] bg-sky-700 text-sky-100 px-1 py-0.5 rounded">{t('common.auto')}</span>
                     )}
                   </div>
                 );
               })}
             </div>
           </div>
+
+          {/* Turn Order */}
+          <div className="bg-stone-900/60 rounded-lg p-2 border border-stone-700 flex flex-col h-[45%] min-h-[150px]">
+            <h3 className="text-sm font-bold text-stone-400 mb-2 shrink-0">Turn Order</h3>
+            <div className="flex-1 overflow-y-auto">
+              <TurnList
+                turnOrder={combatState.turnOrder || ['player', ...combatState.enemies.map(e => e.id)]}
+                currentTurnActor={combatState.currentTurnActor}
+                player={{ name: getEasterEggName(character.name), currentHealth: playerStats.currentHealth, maxHealth: playerStats.maxHealth }}
+                enemies={combatState.enemies}
+                allies={combatState.allies || []}
+                className="h-full"
+              />
+            </div>
+          </div>
         </div>
       </div>
+
 
       {/* Mobile: Inline action panel (replacing fixed bottom bar) */}
       <div className="lg:hidden block bg-stone-900/95 border-t border-amber-900/30">
