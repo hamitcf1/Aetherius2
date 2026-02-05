@@ -1323,6 +1323,13 @@ const App: React.FC = () => {
     achievementLoadKeyRef.current = loadKey;
     setAchievementsLoaded(false);
 
+    // Reset state immediately to prevent leaking previous character's data while loading
+    setAchievementState({
+      unlockedAchievements: {},
+      notifiedAchievements: new Set(),
+      stats: getDefaultAchievementStats()
+    });
+
     let cancelled = false;
     const localKey = `aetherius:achievements:${currentUser.uid}:${currentCharacterId}`;
 

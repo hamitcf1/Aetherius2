@@ -329,7 +329,7 @@ const EnemyCard: React.FC<{
       {/* Enemy name and type */}
       <div className="mb-2">
         <div className="flex items-center gap-2">
-          <h4 data-testid={`enemy-name-${enemy.id}`} className={`font-bold ${isDead ? 'text-stone-500 line-through' : 'text-amber-100'}`}>
+          <h4 data-testid={`enemy-name-${enemy.id}`} className={`font-bold ${isDead ? 'text-stone-400 line-through' : 'text-amber-100'}`}>
             {enemy.name}
           </h4>
           {/* Companion auto-control badge - clickable to toggle (SKY-55) */}
@@ -358,7 +358,7 @@ const EnemyCard: React.FC<{
             </>
           )}
         </div>
-        <span className="text-xs text-stone-400 capitalize">{enemy.type} • Lv.{enemy.level}</span>
+        <span className="text-xs text-stone-300 capitalize">{enemy.type} • Lv.{enemy.level}</span>
       </div>
 
       {/* Health bar */}
@@ -370,7 +370,7 @@ const EnemyCard: React.FC<{
             style={{ width: `${healthPercent}%` }}
           />
         </div>
-        <div className="text-xs text-stone-400 mt-1 text-right">
+        <div className="text-xs text-stone-300 mt-1 text-right">
           {enemy.currentHealth}/{enemy.maxHealth} HP
         </div>
       </div>
@@ -546,7 +546,7 @@ const ActionButton = React.memo<ActionButtonProps>(({ ability, disabled, cooldow
       <div className="flex items-center gap-2 mb-1">
         <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: accentColor }} />
         <span className="text-lg">{getTypeIcon()}</span>
-        <span className={`font-bold ${isDisabled ? 'text-stone-500' : 'text-amber-100'}`} style={accentColor && !isDisabled ? { color: accentColor } : undefined}>
+        <span className={`font-bold ${isDisabled ? 'text-stone-400' : 'text-amber-100'}`} style={accentColor && !isDisabled ? { color: accentColor } : undefined}>
           {ability.name}
         </span>
       </div>
