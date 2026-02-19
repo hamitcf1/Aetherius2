@@ -6,6 +6,10 @@ import {
   DynamicEvent, DynamicEventState, EventNotificationData, getLevelTier, getGameTimeInHours, isEventExpired, DEFAULT_DYNAMIC_EVENT_STATE
 } from './types';
 import { CharacterSheet } from './components/CharacterSheet';
+import LandingPage from './components/landing/LandingPage';
+import PrivacyPage from './components/pages/PrivacyPage';
+import TermsPage from './components/pages/TermsPage';
+
 import GameSidebar, { ActionButton } from './components/GameSidebar';
 import { AppContext } from './AppContext';
 import { QuestLog } from './components/QuestLog';
@@ -543,6 +547,30 @@ const App: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginUsername, setLoginUsername] = useState('');
   const [resetEmailSent, setResetEmailSent] = useState(false);
+
+  // Routing State for Non-Authenticated Pages
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handleLocationChange = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  const handleNavigate = (path: string) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
+    window.scrollTo(0, 0);
+  };
+
+  // Sync authMode when navigating directly to /register or /login
+  useEffect(() => {
+    if (currentPath === '/register') {
+      setAuthMode('register');
+    } else if (currentPath === '/login') {
+      setAuthMode('login');
+    }
+  }, [currentPath]);
 
   // Global State (in-memory)
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -2874,6 +2902,21 @@ const App: React.FC = () => {
 
   // Login/Register Screen
   if (!currentUser) {
+    if (currentPath === '/' || currentPath === '' || currentPath === '/home') {
+      return (
+        <LandingPage
+          onNavigate={handleNavigate}
+          onEnterApp={() => handleNavigate('/login')}
+        />
+      );
+    }
+    if (currentPath === '/privacy') {
+      return <PrivacyPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/terms') {
+      return <TermsPage onBack={() => handleNavigate('/')} />;
+    }
+
     return (
       <div className="min-h-screen bg-black/90 flex items-center justify-center p-4">
         <div className="glass-panel rounded-xl shadow-2xl p-8 max-w-md w-full border border-zinc-700/50">
