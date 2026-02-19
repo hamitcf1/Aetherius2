@@ -881,7 +881,7 @@ const EN_TRANSLATIONS: TranslationKeys = {
     guestLogin: 'Continue as Guest',
     logout: 'Logout',
     offlineMode: 'Offline Mode',
-    googleLogin: 'Sign in with Google',
+    googleLogin: "Sign in with Google",
   },
   sidebar: {
     crafting: 'Crafting',
@@ -1999,7 +1999,7 @@ const TR_TRANSLATIONS: TranslationKeys = {
     guestLogin: 'Misafir Olarak Devam Et',
     logout: 'Çıkış Yap',
     offlineMode: 'Çevrimdışı Mod',
-    googleLogin: 'Google ile Giriş Yap',
+    googleLogin: "Google ile Giriş Yap",
   },
   sidebar: {
     crafting: 'Zanaat',
@@ -3187,14 +3187,19 @@ export const LocalizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-      if (saved && (saved === 'en' || saved === 'tr')) {
-        return saved as Language;
-      }
-    } catch (e) { }
-    return 'en'; // Default to English
+      if (saved === 'en' || saved === 'tr') return saved as Language;
+
+      // Handle regional codes like en-US
+      if (saved?.startsWith('en')) return 'en';
+      if (saved?.startsWith('tr')) return 'tr';
+
+      return 'en';
+    } catch (e) {
+      return 'en';
+    }
   });
 
-  // Save language preference
+  // Persist language
   useEffect(() => {
     try {
       localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
