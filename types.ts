@@ -1,8 +1,14 @@
 
+export type SubscriptionTier = 'novice' | 'apprentice' | 'master';
+
 export interface UserProfile {
   id: string;
   username: string;
   created: number;
+  subscriptionTier?: SubscriptionTier;
+  subscriptionStatus?: 'active' | 'inactive' | 'past_due' | 'canceled';
+  subscriptionId?: string;
+  email?: string;
 }
 
 export interface Stats {

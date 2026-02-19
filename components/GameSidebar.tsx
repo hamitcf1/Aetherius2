@@ -75,6 +75,7 @@ const GameSidebar: React.FC = () => {
     openHousing,
     openAIScribe,
     openBugReport,
+    openSubscription,
   } = useAppContext();
 
   // Check for mobile on mount and resize
@@ -165,6 +166,14 @@ const GameSidebar: React.FC = () => {
       icon: <Trophy size={16} className="text-amber-400" />,
       items: [
         { id: 'achievements', label: t('sidebar.achievements'), icon: '🏆', onClick: openAchievements, color: 'amber' },
+      ],
+    },
+    {
+      id: 'premium',
+      title: 'Premium',
+      icon: <Sparkles size={16} className="text-yellow-400" />,
+      items: [
+        { id: 'subscription', label: 'Subscription', icon: '💎', onClick: () => openSubscription?.(), color: 'yellow' },
       ],
     },
   ];

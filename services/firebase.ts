@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  createUserWithEmailAndPassword, 
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signInAnonymously,
   signOut,
   onAuthStateChanged,
@@ -44,6 +46,11 @@ export const registerUser = (email: string, password: string) => {
 
 export const loginUser = (email: string, password: string) => {
   return signInWithEmailAndPassword(auth, email, password);
+};
+
+export const signInWithGoogle = () => {
+  const provider = new GoogleAuthProvider();
+  return signInWithPopup(auth, provider);
 };
 
 export const logoutUser = () => {
