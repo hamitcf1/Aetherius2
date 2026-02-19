@@ -182,6 +182,7 @@ import StandingStonesModal from './components/StandingStonesModal';
 import BountyModal from './components/BountyModal';
 import { useLocalization } from './services/localization';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { InformationPage } from './components/pages/InformationPage';
 // Dynamic Events System
 import {
   initializeEventState,
@@ -686,6 +687,17 @@ const App: React.FC = () => {
   // Bug Report modal
   const [bugReportOpen, setBugReportOpen] = useState(false);
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
+
+  // Handle pending subscription from landing page after login
+  useEffect(() => {
+    if (currentUser && !isAnonymous) {
+      const pendingPlan = sessionStorage.getItem('aetherius:pendingPlan');
+      if (pendingPlan) {
+        sessionStorage.removeItem('aetherius:pendingPlan');
+        setSubscriptionModalOpen(true);
+      }
+    }
+  }, [currentUser, isAnonymous]);
 
   // Tick down status effect durations every second and remove expired effects
   React.useEffect(() => {
@@ -2932,6 +2944,28 @@ const App: React.FC = () => {
     }
     if (currentPath === '/terms') {
       return <TermsPage onBack={() => handleNavigate('/')} />;
+    }
+
+    const infoPages: Record<string, { title: string; description: string }> = {
+      '/features': { title: 'Product Features', description: 'Explore the powerful tools and features of Aetherius.' },
+      '/download': { title: 'Download Aetherius', description: 'Get the application on your preferred platform.' },
+      '/changelog': { title: 'Changelog', description: 'Track the latest updates, fixes, and improvements.' },
+      '/docs': { title: 'Documentation', description: 'Learn how to master Aetherius with our comprehensive guides.' },
+      '/api': { title: 'API Reference', description: 'Integrate with Aetherius using our robust API.' },
+      '/community': { title: 'Community', description: 'Join fellow adventurers and share your experiences.' },
+      '/help': { title: 'Help Center', description: 'Find answers to common questions and get support.' },
+      '/cookie-policy': { title: 'Cookie Policy', description: 'Understand how we use cookies to improve your experience.' },
+    };
+
+    if (infoPages[currentPath]) {
+      const page = infoPages[currentPath];
+      return (
+        <InformationPage
+          title={page.title}
+          description={page.description}
+          onBack={() => handleNavigate('/')}
+        />
+      );
     }
 
     return (

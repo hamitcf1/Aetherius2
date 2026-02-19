@@ -126,6 +126,7 @@ export interface TranslationKeys {
     guestLogin: string;
     logout: string;
     offlineMode: string;
+    googleLogin: string;
   };
 
   // Sidebar Sections & Items
@@ -880,6 +881,7 @@ const EN_TRANSLATIONS: TranslationKeys = {
     guestLogin: 'Continue as Guest',
     logout: 'Logout',
     offlineMode: 'Offline Mode',
+    googleLogin: 'Sign in with Google',
   },
   sidebar: {
     crafting: 'Crafting',
@@ -1997,6 +1999,7 @@ const TR_TRANSLATIONS: TranslationKeys = {
     guestLogin: 'Misafir Olarak Devam Et',
     logout: 'Çıkış Yap',
     offlineMode: 'Çevrimdışı Mod',
+    googleLogin: 'Google ile Giriş Yap',
   },
   sidebar: {
     crafting: 'Zanaat',

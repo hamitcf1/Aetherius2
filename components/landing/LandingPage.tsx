@@ -28,7 +28,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp, onNavigate }) => 
                 <FeaturesSection />
             </div>
 
-            <PricingSection />
+            <PricingSection onLogin={onEnterApp} />
 
             <Footer onNavigate={onNavigate} />
         </div>

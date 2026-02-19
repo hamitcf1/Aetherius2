@@ -20,20 +20,23 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     <div>
                         <h4 className="font-semibold text-white mb-4">Product</h4>
                         <ul className="space-y-2 text-sm text-gray-400">
-                            <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-blue-400 transition-colors">Features</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Pricing</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Download</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Changelog</button></li>
+                            <li><button onClick={() => onNavigate('/features')} className="hover:text-blue-400 transition-colors">Features</button></li>
+                            <li><button onClick={() => {
+                                const el = document.getElementById('pricing');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }} className="hover:text-blue-400 transition-colors">Pricing</button></li>
+                            <li><button onClick={() => onNavigate('/download')} className="hover:text-blue-400 transition-colors">Download</button></li>
+                            <li><button onClick={() => onNavigate('/changelog')} className="hover:text-blue-400 transition-colors">Changelog</button></li>
                         </ul>
                     </div>
 
                     <div>
                         <h4 className="font-semibold text-white mb-4">Resources</h4>
                         <ul className="space-y-2 text-sm text-gray-400">
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Documentation</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">API Reference</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Community</button></li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Help Center</button></li>
+                            <li><button onClick={() => onNavigate('/docs')} className="hover:text-blue-400 transition-colors">Documentation</button></li>
+                            <li><button onClick={() => onNavigate('/api')} className="hover:text-blue-400 transition-colors">API Reference</button></li>
+                            <li><button onClick={() => onNavigate('/community')} className="hover:text-blue-400 transition-colors">Community</button></li>
+                            <li><button onClick={() => onNavigate('/help')} className="hover:text-blue-400 transition-colors">Help Center</button></li>
                         </ul>
                     </div>
 
@@ -56,7 +59,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                                     Terms of Service
                                 </button>
                             </li>
-                            <li><button onClick={() => { }} className="hover:text-blue-400 transition-colors">Cookie Policy</button></li>
+                            <li><button onClick={() => onNavigate('/cookie-policy')} className="hover:text-blue-400 transition-colors">Cookie Policy</button></li>
                         </ul>
                     </div>
                 </div>
@@ -67,13 +70,26 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                     </p>
 
                     <div className="flex items-center gap-4">
-                        <a href="#" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                        <a
+                            href="https://github.com/hamitcf/Aetherius"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        >
                             <Github size={18} />
                         </a>
-                        <a href="#" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                        <a
+                            href="https://twitter.com/hamitcf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        >
                             <Twitter size={18} />
                         </a>
-                        <a href="#" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                        <a
+                            href="mailto:contact@hamitcf.info"
+                            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        >
                             <MessageCircle size={18} />
                         </a>
                     </div>

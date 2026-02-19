@@ -1,12 +1,9 @@
 import { loadStripe } from '@stripe/stripe-js';
 
-// Make sure to add VITE_STRIPE_PUBLISHABLE_KEY to your .env file
+// Load Stripe for future use (e.g. Elements), but for basic redirects we'll use the session URL
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 export const createCheckoutSession = async (priceId: string, userId: string, userEmail?: string) => {
-    const stripe = await stripePromise;
-    if (!stripe) throw new Error('Stripe failed to initialize');
-
     try {
         const response = await fetch('/api/create-checkout-session', {
             method: 'POST',
@@ -22,18 +19,29 @@ export const createCheckoutSession = async (priceId: string, userId: string, use
             }),
         });
 
-        const session = await response.json();
-        if (session.error) {
-            throw new Error(session.error);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server responded with ${response.status}`);
         }
 
-        // Redirect to Stripe Checkout
-        const result = await stripe.redirectToCheckout({
-            sessionId: session.sessionId,
-        });
+        const session = await response.json();
 
-        if (result.error) {
-            throw new Error(result.error.message);
+        if (session.url) {
+            // Modern and most reliable way: redirect directly to the session URL
+            window.location.href = session.url;
+        } else {
+            // Fallback for older Stripe API responses if necessary, 
+            // but our backend should always return a URL
+            const stripe = await stripePromise;
+            if (!stripe) throw new Error('Stripe failed to initialize');
+
+            const result = await (stripe as any).redirectToCheckout({
+                sessionId: session.sessionId || session.id,
+            });
+
+            if (result.error) {
+                throw new Error(result.error.message);
+            }
         }
     } catch (error: any) {
         console.error('Checkout error:', error);

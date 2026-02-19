@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Star } from 'lucide-react';
 
-const PricingSection: React.FC = () => {
+interface PricingSectionProps {
+    onLogin?: () => void;
+}
+
+const PricingSection: React.FC<PricingSectionProps> = ({ onLogin }) => {
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
     const plans = [
         {
+            id: 'novice',
             name: "Novice",
             price: "0",
             description: "Essential tools for the casual adventurer.",
@@ -19,6 +24,7 @@ const PricingSection: React.FC = () => {
             highlight: false
         },
         {
+            id: 'adept',
             name: "Adept",
             price: billingCycle === 'monthly' ? "4.99" : "49.99",
             description: "Advanced features for the dedicated player.",
@@ -32,6 +38,7 @@ const PricingSection: React.FC = () => {
             highlight: true
         },
         {
+            id: 'master',
             name: "Master",
             price: billingCycle === 'monthly' ? "9.99" : "99.99",
             description: "Complete mastery over your Skyrim experience.",
@@ -46,6 +53,17 @@ const PricingSection: React.FC = () => {
             highlight: false
         }
     ];
+
+    const handleAction = (planId: string) => {
+        if (onLogin) {
+            // In a real app, we might save the plan selection in sessionStorage
+            // to automatically open the Stripe checkout after login.
+            if (planId !== 'novice') {
+                sessionStorage.setItem('aetherius:pendingPlan', planId);
+            }
+            onLogin();
+        }
+    };
 
     return (
         <section className="py-24 relative z-10" id="pricing">
@@ -86,8 +104,8 @@ const PricingSection: React.FC = () => {
                             viewport={{ once: true }}
                             transition={{ delay: index * 0.1 }}
                             className={`relative p-8 rounded-2xl border backdrop-blur-sm flex flex-col ${plan.highlight
-                                    ? 'bg-blue-900/10 border-blue-500/50 shadow-2xl shadow-blue-500/10 scale-105 z-10'
-                                    : 'bg-white/5 border-white/10 hover:border-white/20'
+                                ? 'bg-blue-900/10 border-blue-500/50 shadow-2xl shadow-blue-500/10 scale-105 z-10'
+                                : 'bg-white/5 border-white/10 hover:border-white/20'
                                 }`}
                         >
                             {plan.highlight && (
@@ -118,10 +136,12 @@ const PricingSection: React.FC = () => {
                                 ))}
                             </ul>
 
-                            <button className={`w-full py-3 rounded-xl font-semibold transition-all ${plan.highlight
+                            <button
+                                onClick={() => handleAction(plan.id)}
+                                className={`w-full py-3 rounded-xl font-semibold transition-all ${plan.highlight
                                     ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25'
                                     : 'bg-white/10 hover:bg-white/15 text-white'
-                                }`}>
+                                    }`}>
                                 {index === 0 ? 'Start Free' : 'Subscribe Now'}
                             </button>
                         </motion.div>

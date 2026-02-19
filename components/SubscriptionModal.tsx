@@ -14,26 +14,26 @@ const TIERS = [
     {
         id: 'price_novice', // Replace with actual Stripe Price ID
         name: 'Novice',
-        price: '$4.99',
+        price: '$0.00',
         features: ['No Ads', 'Access to Standard AI', 'Basic Cloud Saves'],
         color: 'text-gray-400',
         borderColor: 'border-gray-500',
         bg: 'bg-gray-900'
     },
     {
-        id: 'price_apprentice', // Replace with actual Stripe Price ID
-        name: 'Apprentice',
-        price: '$9.99',
+        id: 'price_adept', // Replace with actual Stripe Price ID
+        name: 'Adept',
+        price: '$4.99',
         features: ['All Novice Features', 'Advanced AI Models', 'Priority Support', 'Exclusive Cosmetics'],
-        color: 'text-skyrim-gold',
-        borderColor: 'border-skyrim-gold',
-        bg: 'bg-yellow-900/20'
+        color: 'text-blue-400',
+        borderColor: 'border-blue-500',
+        bg: 'bg-blue-900/20'
     },
     {
         id: 'price_master', // Replace with actual Stripe Price ID
         name: 'Master',
-        price: '$19.99',
-        features: ['All Apprentice Features', 'GPT-4 Access', 'Unlimited Cloud Storage', 'Early Access Features', 'Custom AI Personality'],
+        price: '$9.99',
+        features: ['All Adept Features', 'GPT-4 Access', 'Unlimited Cloud Storage', 'Early Access Features', 'Custom AI Personality'],
         color: 'text-purple-400',
         borderColor: 'border-purple-500',
         bg: 'bg-purple-900/20'
@@ -108,8 +108,8 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
                                     onClick={() => handleSubscribe(tier.id)}
                                     disabled={!!loading || currentTier === tier.name.toLowerCase()}
                                     className={`w-full py-2 px-4 rounded font-bold transition-all ${currentTier === tier.name.toLowerCase()
-                                            ? 'bg-green-900/50 text-green-400 cursor-default'
-                                            : 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed'
+                                        ? 'bg-green-900/50 text-green-400 cursor-default'
+                                        : 'bg-skyrim-gold text-skyrim-dark hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed'
                                         }`}
                                 >
                                     {loading === tier.id ? 'Loading...' : currentTier === tier.name.toLowerCase() ? 'Active' : 'Subscribe'}
