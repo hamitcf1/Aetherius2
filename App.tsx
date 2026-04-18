@@ -9,6 +9,12 @@ import { CharacterSheet } from './components/CharacterSheet';
 import LandingPage from './components/landing/LandingPage';
 import PrivacyPage from './components/pages/PrivacyPage';
 import TermsPage from './components/pages/TermsPage';
+import { FeaturesPage } from './components/landing/pages/FeaturesPage';
+import { DownloadPage } from './components/landing/pages/DownloadPage';
+import { ChangelogPage } from './components/landing/pages/ChangelogPage';
+import { CommunityPage } from './components/landing/pages/CommunityPage';
+import { SystemStatusPage } from './components/landing/pages/SystemStatusPage';
+import { BlogPage } from './components/landing/pages/BlogPage';
 
 import GameSidebar, { ActionButton } from './components/GameSidebar';
 import { AppContext } from './AppContext';
@@ -2946,13 +2952,28 @@ const App: React.FC = () => {
       return <TermsPage onBack={() => handleNavigate('/')} />;
     }
 
+    if (currentPath === '/features') {
+      return <FeaturesPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/download') {
+      return <DownloadPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/changelog') {
+      return <ChangelogPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/community') {
+      return <CommunityPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/status') {
+      return <SystemStatusPage onBack={() => handleNavigate('/')} />;
+    }
+    if (currentPath === '/blog') {
+      return <BlogPage onBack={() => handleNavigate('/')} />;
+    }
+
     const infoPages: Record<string, { title: string; description: string }> = {
-      '/features': { title: 'Product Features', description: 'Explore the powerful tools and features of Aetherius.' },
-      '/download': { title: 'Download Aetherius', description: 'Get the application on your preferred platform.' },
-      '/changelog': { title: 'Changelog', description: 'Track the latest updates, fixes, and improvements.' },
       '/docs': { title: 'Documentation', description: 'Learn how to master Aetherius with our comprehensive guides.' },
       '/api': { title: 'API Reference', description: 'Integrate with Aetherius using our robust API.' },
-      '/community': { title: 'Community', description: 'Join fellow adventurers and share your experiences.' },
       '/help': { title: 'Help Center', description: 'Find answers to common questions and get support.' },
       '/cookie-policy': { title: 'Cookie Policy', description: 'Understand how we use cookies to improve your experience.' },
     };

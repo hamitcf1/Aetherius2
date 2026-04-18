@@ -1,4 +1,5 @@
 import React from 'react';
+import Navbar from './Navbar';
 import HeroSection from './HeroSection';
 import FeaturesSection from './FeaturesSection';
 import PricingSection from './PricingSection';
@@ -22,6 +23,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp, onNavigate }) => 
 
     return (
         <div className="min-h-screen bg-black text-white selection:bg-blue-500/30">
+            <Navbar onEnterApp={onEnterApp} onNavigate={onNavigate} />
+            
             <HeroSection onGetStarted={onEnterApp} onViewFeatures={scrollToFeatures} />
 
             <div id="features">
