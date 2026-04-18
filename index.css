@@ -1,3 +1,14 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cinzel", serif;
+  --font-sans: "Lato", sans-serif;
+
+  --color-skyrim-dark: var(--skyrim-dark);
+  --color-skyrim-paper: var(--skyrim-paper);
+  --color-skyrim-border: var(--skyrim-border);
+  --color-skyrim-gold: var(--skyrim-gold);
+  --color-skyrim-gold-hover: var(--skyrim-gold-hover);
+  --color-skyrim-text: var(--skyrim-text);
+  --color-skyrim-accent: var(--skyrim-accent);
+}
