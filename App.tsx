@@ -549,6 +549,7 @@ const App: React.FC = () => {
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const isAnonymous = currentUser?.isAnonymous || false;
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
